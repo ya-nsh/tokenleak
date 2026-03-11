@@ -9,3 +9,6 @@ export {
 } from './models';
 
 export type { ModelPricing } from './models';
+
+export type { IProvider } from './provider';
+export { ProviderRegistry } from './registry';
