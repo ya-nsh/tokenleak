@@ -1,57 +1,56 @@
-import { spawn } from 'node:child_process';
-import { platform } from 'node:os';
+/**
+ * Open a file in the default application using platform-specific commands.
+ */
+
+const PLATFORM_COMMANDS: Record<string, string> = {
+  darwin: 'open',
+  linux: 'xdg-open',
+  win32: 'start',
+};
 
 /**
- * Open a URL in the default browser.
- *
- * Uses `open` on macOS and `xdg-open` on Linux.
- *
- * @param url - The URL to open
- * @throws Error if the open command fails or the platform is unsupported
+ * Returns the open command for the current platform.
+ * Throws if the platform is unsupported.
  */
-export async function openInBrowser(url: string): Promise<void> {
-  const os = platform();
-  let command: string;
-
-  switch (os) {
-    case 'darwin':
-      command = 'open';
-      break;
-    case 'linux':
-      command = 'xdg-open';
-      break;
-    default:
-      throw new Error(`Browser open not supported on platform: ${os}`);
+export function getOpenCommand(
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const command = PLATFORM_COMMANDS[platform];
+  if (!command) {
+    throw new Error(
+      `Opening files is not supported on platform "${platform}". Supported: macOS, Linux, Windows.`,
+    );
   }
+  return command;
+}
 
-  return new Promise<void>((resolve, reject) => {
-    const proc = spawn(command, [url], {
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
-    let stderr = '';
+/**
+ * Open a file in the default application.
+ *
+ * Uses `open` on macOS, `xdg-open` on Linux, and `start` on Windows.
+ * Throws if the command fails or the platform is unsupported.
+ */
+export async function openFile(
+  filePath: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+  const cmd = getOpenCommand(platform);
 
-    proc.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
+  // On Windows, `start` is a shell builtin so we need cmd.exe
+  const spawnArgs =
+    platform === 'win32' ? ['cmd', '/c', 'start', '', filePath] : [cmd, filePath];
 
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(
-            `Failed to open browser (exit code ${code}): ${stderr.trim()}`,
-          ),
-        );
-      }
-    });
-
-    proc.on('error', (err) => {
-      reject(
-        new Error(
-          `Failed to run "${command}": ${err.message}`,
-        ),
-      );
-    });
+  const proc = Bun.spawn(spawnArgs, {
+    stdout: 'ignore',
+    stderr: 'pipe',
   });
+
+  const exitCode = await proc.exited;
+
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    throw new Error(
+      `Failed to open "${filePath}" with "${cmd}": exit code ${exitCode}: ${stderr.trim()}`,
+    );
+  }
 }

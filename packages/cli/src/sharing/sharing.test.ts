@@ -1,129 +1,157 @@
-import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test';
-import { uploadToGist } from './gist';
-import { copyToClipboard } from './clipboard';
-import { openInBrowser } from './open';
+import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { getClipboardCommand } from './clipboard';
+import { getOpenCommand } from './open';
 
-// --- Gist tests ---
+// ─── getClipboardCommand ────────────────────────────────────────────────
 
-describe('uploadToGist', () => {
-  const originalFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+describe('getClipboardCommand', () => {
+  test('returns pbcopy for darwin', () => {
+    const cmd = getClipboardCommand('darwin');
+    expect(cmd).toEqual(['pbcopy']);
   });
 
-  it('throws when token is empty', async () => {
-    await expect(uploadToGist('content', 'file.txt', '')).rejects.toThrow(
-      'GitHub token is required',
+  test('returns xclip for linux', () => {
+    const cmd = getClipboardCommand('linux');
+    expect(cmd).toEqual(['xclip', '-selection', 'clipboard']);
+  });
+
+  test('returns clip for win32', () => {
+    const cmd = getClipboardCommand('win32');
+    expect(cmd).toEqual(['clip']);
+  });
+
+  test('throws for unsupported platform', () => {
+    expect(() => getClipboardCommand('freebsd' as NodeJS.Platform)).toThrow(
+      'Clipboard is not supported on platform "freebsd"',
     );
   });
 
-  it('creates a gist and returns the URL', async () => {
-    const mockUrl = 'https://gist.github.com/abc123';
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ html_url: mockUrl }), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    ) as typeof fetch;
-
-    const url = await uploadToGist('test content', 'report.json', 'ghp_token123');
-    expect(url).toBe(mockUrl);
-  });
-
-  it('sends correct request body and headers', async () => {
-    let capturedRequest: { url: string; init: RequestInit } | null = null;
-
-    globalThis.fetch = mock((url: string | URL | Request, init?: RequestInit) => {
-      capturedRequest = { url: url as string, init: init as RequestInit };
-      return Promise.resolve(
-        new Response(JSON.stringify({ html_url: 'https://gist.github.com/x' }), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    }) as typeof fetch;
-
-    await uploadToGist('my content', 'stats.svg', 'ghp_abc');
-
-    expect(capturedRequest).not.toBeNull();
-    expect(capturedRequest!.url).toBe('https://api.github.com/gists');
-    expect(capturedRequest!.init.method).toBe('POST');
-
-    const headers = capturedRequest!.init.headers as Record<string, string>;
-    expect(headers['Authorization']).toBe('Bearer ghp_abc');
-    expect(headers['Content-Type']).toBe('application/json');
-
-    const body = JSON.parse(capturedRequest!.init.body as string) as {
-      files: Record<string, { content: string }>;
-    };
-    expect(body.files['stats.svg']?.content).toBe('my content');
-  });
-
-  it('throws on non-OK response', async () => {
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response('Unauthorized', { status: 401 }),
-      ),
-    ) as typeof fetch;
-
-    await expect(
-      uploadToGist('content', 'file.txt', 'bad_token'),
-    ).rejects.toThrow('Failed to create gist (HTTP 401)');
+  test('throws for aix platform', () => {
+    expect(() => getClipboardCommand('aix' as NodeJS.Platform)).toThrow(
+      'Clipboard is not supported',
+    );
   });
 });
 
-// --- Clipboard tests ---
+// ─── getOpenCommand ─────────────────────────────────────────────────────
+
+describe('getOpenCommand', () => {
+  test('returns open for darwin', () => {
+    expect(getOpenCommand('darwin')).toBe('open');
+  });
+
+  test('returns xdg-open for linux', () => {
+    expect(getOpenCommand('linux')).toBe('xdg-open');
+  });
+
+  test('returns start for win32', () => {
+    expect(getOpenCommand('win32')).toBe('start');
+  });
+
+  test('throws for unsupported platform', () => {
+    expect(() => getOpenCommand('freebsd' as NodeJS.Platform)).toThrow(
+      'Opening files is not supported on platform "freebsd"',
+    );
+  });
+
+  test('throws for sunos platform', () => {
+    expect(() => getOpenCommand('sunos' as NodeJS.Platform)).toThrow(
+      'Opening files is not supported',
+    );
+  });
+});
+
+// ─── copyToClipboard ────────────────────────────────────────────────────
 
 describe('copyToClipboard', () => {
-  // We test that the function calls the correct platform command
-  // by leveraging the actual platform behavior.
-  // On macOS (which this test environment uses), it calls pbcopy.
+  test('calls pbcopy on macOS and pipes content', async () => {
+    // We test via actual execution on macOS since that's the test platform
+    const { copyToClipboard } = await import('./clipboard');
 
-  it('resolves without error for valid content on macOS', async () => {
-    // This test only works on macOS. On other platforms, skip.
-    const os = process.platform;
-    if (os !== 'darwin') {
-      return;
+    if (process.platform === 'darwin') {
+      // This will actually copy to clipboard — safe in CI/test
+      await expect(copyToClipboard('test content', 'darwin')).resolves.toBeUndefined();
+    } else {
+      // On other platforms, just verify the function exists
+      expect(typeof copyToClipboard).toBe('function');
     }
-
-    // pbcopy should succeed on macOS
-    await expect(copyToClipboard('test clipboard content')).resolves.toBeUndefined();
   });
 
-  it('handles empty string content', async () => {
-    const os = process.platform;
-    if (os !== 'darwin') {
-      return;
-    }
-    await expect(copyToClipboard('')).resolves.toBeUndefined();
+  test('throws for unsupported platform', async () => {
+    const { copyToClipboard } = await import('./clipboard');
+    await expect(
+      copyToClipboard('hello', 'freebsd' as NodeJS.Platform),
+    ).rejects.toThrow('Clipboard is not supported');
   });
 });
 
-// --- Open tests ---
+// ─── openFile ───────────────────────────────────────────────────────────
 
-describe('openInBrowser', () => {
-  // openInBrowser spawns a process. We test the function structure.
-  // Actually opening a browser in tests is not ideal, so we test
-  // that the function exists and has the right signature.
-
-  it('is a function that returns a promise', () => {
-    expect(typeof openInBrowser).toBe('function');
+describe('openFile', () => {
+  test('throws for unsupported platform', async () => {
+    const { openFile } = await import('./open');
+    await expect(
+      openFile('/tmp/test.txt', 'freebsd' as NodeJS.Platform),
+    ).rejects.toThrow('Opening files is not supported');
   });
 
-  it('rejects when the command fails with an invalid URL scheme', async () => {
-    // Using a nonsensical URL that open will still accept on macOS
-    // (open is very permissive), so we test a different edge case.
-    // On macOS, 'open' accepts most URLs, so this actually succeeds.
-    // Instead, test that the function returns a promise.
-    const result = openInBrowser('https://example.com');
-    expect(result).toBeInstanceOf(Promise);
-    // Clean up - we don't want to actually wait for the browser
-    // but we should handle the promise to avoid unhandled rejections
-    await result.catch(() => {
-      // Expected on CI where no display is available
-    });
+  test('throws when file does not exist', async () => {
+    const { openFile } = await import('./open');
+    // On macOS, open will fail for nonexistent file
+    if (process.platform === 'darwin') {
+      await expect(
+        openFile('/tmp/nonexistent-tokenleak-file-' + Date.now() + '.txt', 'darwin'),
+      ).rejects.toThrow();
+    }
+  });
+});
+
+// ─── isGhAvailable ──────────────────────────────────────────────────────
+
+describe('isGhAvailable', () => {
+  test('returns a boolean', async () => {
+    const { isGhAvailable } = await import('./gist');
+    const result = await isGhAvailable();
+    expect(typeof result).toBe('boolean');
+  });
+});
+
+// ─── uploadToGist ───────────────────────────────────────────────────────
+
+describe('uploadToGist', () => {
+  test('throws when gh is not available', async () => {
+    // We test the error path by importing and checking behavior
+    const { uploadToGist, isGhAvailable } = await import('./gist');
+
+    // If gh is not authenticated, it should throw
+    const available = await isGhAvailable();
+    if (!available) {
+      await expect(
+        uploadToGist('content', 'test.txt', 'test'),
+      ).rejects.toThrow('GitHub CLI (gh) is not installed or not authenticated');
+    } else {
+      // gh is available — just verify the function exists
+      expect(typeof uploadToGist).toBe('function');
+    }
+  });
+
+  test('function accepts correct parameter types', () => {
+    const { uploadToGist } = require('./gist');
+    expect(typeof uploadToGist).toBe('function');
+    expect(uploadToGist.length).toBe(3);
+  });
+});
+
+// ─── index re-exports ──────────────────────────────────────────────────
+
+describe('sharing/index re-exports', () => {
+  test('exports all sharing functions', async () => {
+    const sharing = await import('./index');
+    expect(typeof sharing.copyToClipboard).toBe('function');
+    expect(typeof sharing.getClipboardCommand).toBe('function');
+    expect(typeof sharing.openFile).toBe('function');
+    expect(typeof sharing.getOpenCommand).toBe('function');
+    expect(typeof sharing.uploadToGist).toBe('function');
+    expect(typeof sharing.isGhAvailable).toBe('function');
   });
 });

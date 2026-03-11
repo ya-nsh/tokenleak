@@ -1,55 +1,87 @@
-const GITHUB_API_URL = 'https://api.github.com/gists';
+/**
+ * Upload content to a GitHub Gist using the `gh` CLI.
+ */
 
-interface GistResponse {
-  html_url: string;
+/**
+ * Check whether the `gh` CLI is available and authenticated.
+ * Returns true if `gh auth status` exits successfully.
+ */
+export async function isGhAvailable(): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(['gh', 'auth', 'status'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const exitCode = await proc.exited;
+    return exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Upload content to a GitHub Gist via the GitHub API.
+ * Upload content to a GitHub Gist.
  *
- * @param content - The file content to upload
- * @param filename - The filename for the gist
- * @param token - GitHub personal access token with gist scope
+ * Creates a temporary file, uploads it via `gh gist create`, and returns
+ * the URL of the created gist.
+ *
+ * @param content - The content to upload
+ * @param filename - The filename for the gist (e.g., "tokenleak.json")
+ * @param description - A short description for the gist
  * @returns The URL of the created gist
- * @throws Error if token is missing or the API request fails
+ * @throws If `gh` CLI is not available or the upload fails
  */
 export async function uploadToGist(
   content: string,
   filename: string,
-  token: string,
+  description: string,
 ): Promise<string> {
-  if (!token) {
+  const available = await isGhAvailable();
+  if (!available) {
     throw new Error(
-      'GitHub token is required to create a gist. Set GITHUB_TOKEN environment variable.',
+      'GitHub CLI (gh) is not installed or not authenticated. ' +
+        'Install it from https://cli.github.com and run `gh auth login`.',
     );
   }
 
-  const body = JSON.stringify({
-    description: 'Tokenleak usage report',
-    public: false,
-    files: {
-      [filename]: { content },
-    },
-  });
+  // Write content to a temp file
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { writeFileSync, unlinkSync } = await import('node:fs');
 
-  const response = await fetch(GITHUB_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    body,
-  });
+  const tmpPath = join(tmpdir(), `tokenleak-gist-${Date.now()}-${filename}`);
+  writeFileSync(tmpPath, content, 'utf-8');
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Failed to create gist (HTTP ${response.status}): ${text}`,
+  try {
+    const proc = Bun.spawn(
+      ['gh', 'gist', 'create', tmpPath, '--desc', description, '--public'],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
     );
-  }
 
-  const data = (await response.json()) as GistResponse;
-  return data.html_url;
+    const exitCode = await proc.exited;
+    const stdout = (await new Response(proc.stdout).text()).trim();
+    const stderr = (await new Response(proc.stderr).text()).trim();
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to create gist: ${stderr || 'unknown error'} (exit code ${exitCode})`,
+      );
+    }
+
+    // gh gist create prints the URL to stdout
+    if (!stdout.startsWith('http')) {
+      throw new Error(`Unexpected gh output: ${stdout}`);
+    }
+
+    return stdout;
+  } finally {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
