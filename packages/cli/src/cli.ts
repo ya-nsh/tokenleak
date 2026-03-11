@@ -7,11 +7,15 @@ import {
   SCHEMA_VERSION,
   aggregate,
   mergeProviderData,
+  buildCompareOutput,
+  parseCompareRange,
+  computePreviousPeriod,
 } from '@tokenleak/core';
 import type {
   DateRange,
   RenderOptions,
   TokenleakOutput,
+  CompareOutput,
   ProviderData,
 } from '@tokenleak/core';
 import {
@@ -20,6 +24,7 @@ import {
   CodexProvider,
   OpenCodeProvider,
 } from '@tokenleak/registry';
+import type { IProvider } from '@tokenleak/registry';
 import { JsonRenderer } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
@@ -201,6 +206,65 @@ function getRenderer(format: string): IRenderer {
   }
 }
 
+/**
+ * Load provider data for a date range and aggregate.
+ * Shared helper for normal and compare modes.
+ */
+async function loadAndAggregate(
+  range: DateRange,
+  providers: IProvider[],
+): Promise<{ data: ProviderData[]; stats: ReturnType<typeof aggregate> }> {
+  const results = await Promise.all(
+    providers.map(async (p) => {
+      try {
+        return await p.load(range);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const data = results.filter((r): r is ProviderData => r !== null);
+  const merged = data.length > 0 ? mergeProviderData(data) : [];
+  const stats = aggregate(merged, range.until);
+  return { data, stats };
+}
+
+/**
+ * Run compare mode: load data for two periods, compute deltas.
+ * If compareStr is a range "YYYY-MM-DD..YYYY-MM-DD", use it as the previous period.
+ * If compareStr is "auto" or "true", compute the previous period automatically.
+ */
+async function runCompare(
+  compareStr: string,
+  currentRange: DateRange,
+  _registry: ProviderRegistry,
+  available: IProvider[],
+): Promise<CompareOutput> {
+  let previousRange: DateRange;
+
+  if (compareStr === 'auto' || compareStr === 'true' || compareStr === '') {
+    previousRange = computePreviousPeriod(currentRange);
+  } else {
+    const parsed = parseCompareRange(compareStr);
+    if (!parsed) {
+      throw new TokenleakError(
+        `Invalid --compare format: "${compareStr}". Use YYYY-MM-DD..YYYY-MM-DD or "auto".`,
+      );
+    }
+    previousRange = parsed;
+  }
+
+  const [currentResult, previousResult] = await Promise.all([
+    loadAndAggregate(currentRange, available),
+    loadAndAggregate(previousRange, available),
+  ]);
+
+  return buildCompareOutput(
+    { range: currentRange, stats: currentResult.stats },
+    { range: previousRange, stats: previousResult.stats },
+  );
+}
+
 /** Main execution function, exported for testing. */
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
@@ -235,6 +299,23 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   if (available.length === 0) {
     throw new TokenleakError('No provider data found');
+  }
+
+  // Handle --compare mode
+  if (config.compare) {
+    const compareOutput = await runCompare(
+      config.compare,
+      dateRange,
+      registry,
+      available,
+    );
+    const rendered = JSON.stringify(compareOutput, null, 2);
+    if (config.output) {
+      writeFileSync(config.output, rendered);
+    } else {
+      process.stdout.write(rendered + '\n');
+    }
+    return;
   }
 
   // Load data from available providers

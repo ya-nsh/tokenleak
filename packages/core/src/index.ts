@@ -34,4 +34,8 @@ export {
   aggregate,
   mergeProviderData,
   compareRanges,
+  computeDeltas,
+  buildCompareOutput,
+  parseCompareRange,
+  computePreviousPeriod,
 } from './aggregation';
