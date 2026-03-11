@@ -18,7 +18,8 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@tokenleak/core": "workspace:*"
+    "@tokenleak/core": "workspace:*",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tokenleak/typescript-config": "workspace:*",
