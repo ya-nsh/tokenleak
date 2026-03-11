@@ -13,7 +13,7 @@ export function rollingWindow(
     return { tokens: 0, cost: 0 };
   }
 
-  const refTime = new Date(referenceDate).getTime();
+  const refTime = new Date(referenceDate + 'T00:00:00Z').getTime();
   const ONE_DAY_MS = 86_400_000;
   const windowStart = refTime - (days - 1) * ONE_DAY_MS;
 
@@ -21,7 +21,7 @@ export function rollingWindow(
   let cost = 0;
 
   for (const entry of daily) {
-    const entryTime = new Date(entry.date).getTime();
+    const entryTime = new Date(entry.date + 'T00:00:00Z').getTime();
     if (entryTime >= windowStart && entryTime <= refTime) {
       tokens += entry.totalTokens;
       cost += entry.cost;

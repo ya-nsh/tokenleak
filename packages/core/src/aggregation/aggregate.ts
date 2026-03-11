@@ -25,10 +25,35 @@ export function aggregate(
   const models = topModels(daily);
 
   let totalTokens = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
   let totalCost = 0;
   for (const entry of daily) {
     totalTokens += entry.totalTokens;
+    totalInputTokens += entry.inputTokens;
+    totalOutputTokens += entry.outputTokens;
     totalCost += entry.cost;
+  }
+
+  // Compute most-used model in the 30-day rolling window
+  const refTime = new Date(referenceDate + 'T00:00:00Z').getTime();
+  const windowStart = refTime - 29 * 86_400_000;
+  const modelTokensMap = new Map<string, number>();
+  for (const entry of daily) {
+    const entryTime = new Date(entry.date + 'T00:00:00Z').getTime();
+    if (entryTime >= windowStart && entryTime <= refTime) {
+      for (const m of entry.models) {
+        modelTokensMap.set(m.model, (modelTokensMap.get(m.model) ?? 0) + m.totalTokens);
+      }
+    }
+  }
+  let rolling30dTopModel: string | null = null;
+  let maxModelTokens = 0;
+  for (const [model, tokens] of modelTokensMap) {
+    if (tokens > maxModelTokens) {
+      maxModelTokens = tokens;
+      rolling30dTopModel = model;
+    }
   }
 
   const activeDays = daily.length;
@@ -37,10 +62,10 @@ export function aggregate(
   let totalDays = 0;
   if (daily.length > 0) {
     const sorted = [...daily].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      (a, b) => new Date(a.date + 'T00:00:00Z').getTime() - new Date(b.date + 'T00:00:00Z').getTime(),
     );
-    const first = new Date(sorted[0]!.date).getTime();
-    const last = new Date(sorted[sorted.length - 1]!.date).getTime();
+    const first = new Date(sorted[0]!.date + 'T00:00:00Z').getTime();
+    const last = new Date(sorted[sorted.length - 1]!.date + 'T00:00:00Z').getTime();
     const ONE_DAY_MS = 86_400_000;
     totalDays = Math.round((last - first) / ONE_DAY_MS) + 1;
   }
@@ -59,10 +84,13 @@ export function aggregate(
     averageDailyCost: averages.cost,
     cacheHitRate: cache,
     totalTokens,
+    totalInputTokens,
+    totalOutputTokens,
     totalCost,
     totalDays,
     activeDays,
     dayOfWeek: dow,
     topModels: models,
+    rolling30dTopModel,
   };
 }

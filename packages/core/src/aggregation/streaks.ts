@@ -14,7 +14,7 @@ export function calculateStreaks(daily: DailyUsage[]): {
   }
 
   const sorted = [...daily].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => new Date(a.date + 'T00:00:00Z').getTime() - new Date(b.date + 'T00:00:00Z').getTime(),
   );
 
   const ONE_DAY_MS = 86_400_000;
@@ -22,8 +22,8 @@ export function calculateStreaks(daily: DailyUsage[]): {
   let currentRun = 1;
 
   for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]!.date).getTime();
-    const curr = new Date(sorted[i]!.date).getTime();
+    const prev = new Date(sorted[i - 1]!.date + 'T00:00:00Z').getTime();
+    const curr = new Date(sorted[i]!.date + 'T00:00:00Z').getTime();
     const diff = curr - prev;
 
     if (diff === ONE_DAY_MS) {
@@ -40,8 +40,8 @@ export function calculateStreaks(daily: DailyUsage[]): {
   // Current streak: count back from the last day
   let current = 1;
   for (let i = sorted.length - 1; i > 0; i--) {
-    const curr = new Date(sorted[i]!.date).getTime();
-    const prev = new Date(sorted[i - 1]!.date).getTime();
+    const curr = new Date(sorted[i]!.date + 'T00:00:00Z').getTime();
+    const prev = new Date(sorted[i - 1]!.date + 'T00:00:00Z').getTime();
 
     if (curr - prev === ONE_DAY_MS) {
       current++;

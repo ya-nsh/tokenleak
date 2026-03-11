@@ -43,11 +43,14 @@ function createZeroedStats(): AggregatedStats {
     averageDailyCost: 0,
     cacheHitRate: 0,
     totalTokens: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
     totalCost: 0,
     totalDays: 0,
     activeDays: 0,
     dayOfWeek: [],
     topModels: [],
+    rolling30dTopModel: null,
   };
 }
 
@@ -64,11 +67,14 @@ function createPopulatedStats(): AggregatedStats {
     averageDailyCost: 0.1,
     cacheHitRate: 0.42,
     totalTokens: 100000,
+    totalInputTokens: 60000,
+    totalOutputTokens: 30000,
     totalCost: 4.0,
     totalDays: 40,
     activeDays: 30,
     dayOfWeek: createDayOfWeek(),
     topModels: createTopModels(),
+    rolling30dTopModel: 'claude-3-opus',
   };
 }
 
@@ -187,11 +193,11 @@ describe('SvgRenderer', () => {
 
   it('stats text is present (streak, tokens)', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Current Streak');
-    expect(result).toContain('Longest Streak');
-    expect(result).toContain('Total Tokens');
-    expect(result).toContain('Cache Hit Rate');
-    expect(result).toContain('Statistics');
+    expect(result).toContain('CURRENT STREAK');
+    expect(result).toContain('LONGEST STREAK');
+    expect(result).toContain('TOTAL TOKENS');
+    expect(result).toContain('CACHE HIT RATE');
+    expect(result).toContain('MOST USED MODEL');
   });
 
   it('output is valid XML (properly closed tags)', async () => {
@@ -224,32 +230,24 @@ describe('SvgRenderer', () => {
     expect(result).toContain('<svg');
     expect(result).toContain('</svg>');
     expect(result).toContain('Tokenleak');
-    expect(result).toContain('Statistics');
+    expect(result).toContain('TOTAL TOKENS');
   });
 
-  it('showInsights=false omits insights panel', async () => {
-    const withInsights = await renderer.render(
-      createOutput(),
-      createRenderOptions({ showInsights: true }),
-    );
-    const withoutInsights = await renderer.render(
-      createOutput(),
-      createRenderOptions({ showInsights: false }),
-    );
-
-    expect(withInsights).toContain('Insights');
-    expect(withoutInsights).not.toContain('Insights');
-  });
-
-  it('renders day of week chart when data is present', async () => {
+  it('renders bottom stat cards with model info', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Day of Week');
-  });
-
-  it('renders top models chart when data is present', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Top Models');
+    expect(result).toContain('MOST USED MODEL');
     expect(result).toContain('claude-3-opus');
+    expect(result).toContain('RECENT USE');
+    expect(result).toContain('TOTAL COST');
+    expect(result).toContain('ACTIVE DAYS');
+    expect(result).toContain('AVG DAILY TOKENS');
+  });
+
+  it('renders header token stats', async () => {
+    const result = await renderer.render(createOutput(), createRenderOptions());
+    expect(result).toContain('INPUT TOKENS');
+    expect(result).toContain('OUTPUT TOKENS');
+    expect(result).toContain('TOTAL TOKENS');
   });
 
   it('escapes XML entities in provider names', async () => {

@@ -45,11 +45,14 @@ function createPopulatedStats(): AggregatedStats {
     averageDailyCost: 0.1,
     cacheHitRate: 0.42,
     totalTokens: 100000,
+    totalInputTokens: 60000,
+    totalOutputTokens: 30000,
     totalCost: 4.0,
     totalDays: 40,
     activeDays: 30,
     dayOfWeek: createDayOfWeek(),
     topModels: createTopModels(),
+    rolling30dTopModel: 'claude-3-opus',
   };
 }
 

@@ -45,7 +45,7 @@ function buildInsights(
   if (stats.topModels.length > 0) {
     const top = stats.topModels[0];
     if (top) {
-      const pct = top.percentage < 1 ? top.percentage * 100 : top.percentage;
+      const pct = top.percentage * 100;
       items.push({
         label: 'Top Model',
         value: `${top.model} (${pct.toFixed(1)}%)`,

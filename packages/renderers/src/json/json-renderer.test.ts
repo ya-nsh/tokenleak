@@ -21,11 +21,14 @@ function createZeroedAggregatedStats(): AggregatedStats {
     averageDailyCost: 0,
     cacheHitRate: 0,
     totalTokens: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
     totalCost: 0,
     totalDays: 0,
     activeDays: 0,
     dayOfWeek: [],
     topModels: [],
+    rolling30dTopModel: null,
   };
 }
 

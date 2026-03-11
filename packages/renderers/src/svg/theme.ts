@@ -17,24 +17,24 @@ export const DARK_THEME: SvgTheme = {
   muted: '#7d8590',
   border: '#30363d',
   cardBackground: '#161b22',
-  heatmap: ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'],
+  heatmap: ['#161b22', '#1e3a5f', '#2563eb', '#3b82f6', '#1d4ed8'],
   accent: '#58a6ff',
   accentSecondary: '#bc8cff',
-  barFill: '#58a6ff',
+  barFill: '#3b82f6',
   barBackground: '#21262d',
 };
 
 export const LIGHT_THEME: SvgTheme = {
   background: '#ffffff',
-  foreground: '#1f2328',
-  muted: '#656d76',
-  border: '#d0d7de',
-  cardBackground: '#f6f8fa',
-  heatmap: ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
-  accent: '#0969da',
-  accentSecondary: '#8250df',
-  barFill: '#0969da',
-  barBackground: '#eaeef2',
+  foreground: '#1a1a2e',
+  muted: '#8b8fa3',
+  border: '#e5e7eb',
+  cardBackground: '#f8f9fc',
+  heatmap: ['#ebedf0', '#c6d4f7', '#8da4ef', '#5b6abf', '#2f3778'],
+  accent: '#3b5bdb',
+  accentSecondary: '#7048e8',
+  barFill: '#5b6abf',
+  barBackground: '#ebedf0',
 };
 
 export function getTheme(mode: 'dark' | 'light'): SvgTheme {

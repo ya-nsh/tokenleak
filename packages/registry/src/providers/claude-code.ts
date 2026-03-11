@@ -164,7 +164,7 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
     mb.outputTokens += rec.outputTokens;
     mb.cacheReadTokens += rec.cacheReadTokens;
     mb.cacheWriteTokens += rec.cacheWriteTokens;
-    mb.totalTokens += rec.inputTokens + rec.outputTokens;
+    mb.totalTokens += rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
     mb.cost += cost;
   }
 

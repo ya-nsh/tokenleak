@@ -72,8 +72,8 @@ export function parseCompareRange(rangeStr: string): DateRange | null {
  */
 export function computePreviousPeriod(current: DateRange): DateRange {
   const ONE_DAY_MS = 86_400_000;
-  const sinceMs = new Date(current.since).getTime();
-  const untilMs = new Date(current.until).getTime();
+  const sinceMs = new Date(current.since + 'T00:00:00Z').getTime();
+  const untilMs = new Date(current.until + 'T00:00:00Z').getTime();
   const periodDays = Math.round((untilMs - sinceMs) / ONE_DAY_MS);
 
   const prevUntil = new Date(sinceMs - ONE_DAY_MS);

@@ -23,7 +23,7 @@ export function dayOfWeekBreakdown(daily: DailyUsage[]): DayOfWeekEntry[] {
   }));
 
   for (const entry of daily) {
-    const dayIndex = new Date(entry.date + 'T00:00:00').getUTCDay();
+    const dayIndex = new Date(entry.date + 'T00:00:00Z').getUTCDay();
     const bucket = buckets[dayIndex]!;
     bucket.tokens += entry.totalTokens;
     bucket.cost += entry.cost;

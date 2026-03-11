@@ -44,11 +44,14 @@ function createZeroedAggregatedStats(): AggregatedStats {
     averageDailyCost: 0,
     cacheHitRate: 0,
     totalTokens: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
     totalCost: 0,
     totalDays: 0,
     activeDays: 0,
     dayOfWeek: [],
     topModels: [],
+    rolling30dTopModel: null,
   };
 }
 
@@ -65,11 +68,14 @@ function createPopulatedStats(): AggregatedStats {
     averageDailyCost: 0.15,
     cacheHitRate: 0.42,
     totalTokens: 150000,
+    totalInputTokens: 90000,
+    totalOutputTokens: 45000,
     totalCost: 4.50,
     totalDays: 30,
     activeDays: 20,
     dayOfWeek: createDayOfWeek(),
     topModels: createTopModels(),
+    rolling30dTopModel: 'claude-3.5-sonnet',
   };
 }
 
