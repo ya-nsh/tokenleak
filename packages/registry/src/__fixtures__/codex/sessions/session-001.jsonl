@@ -1,0 +1,5 @@
+{"type":"session.start","timestamp":"2025-06-15T10:00:00Z","session_id":"sess-001"}
+{"type":"response","timestamp":"2025-06-15T10:30:00Z","model":"o4-mini-2025-04-16","usage":{"input_tokens":1200,"output_tokens":500,"total_tokens":1700}}
+{"type":"response","timestamp":"2025-06-15T14:00:00Z","model":"o4-mini-2025-04-16","usage":{"input_tokens":800,"output_tokens":300,"total_tokens":1100}}
+{"type":"response","timestamp":"2025-06-16T09:00:00Z","model":"gpt-4o","usage":{"input_tokens":2000,"output_tokens":1000,"total_tokens":3000}}
+{"type":"session.end","timestamp":"2025-06-16T09:30:00Z","session_id":"sess-001"}

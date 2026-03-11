@@ -1,0 +1,2 @@
+{"type":"response","timestamp":"2025-06-16T15:00:00Z","model":"o4-mini-2025-04-16","usage":{"input_tokens":500,"output_tokens":200,"total_tokens":700}}
+{"type":"response","timestamp":"2025-06-17T11:00:00Z","model":"o3-mini-2025-01-31","usage":{"input_tokens":3000,"output_tokens":1500,"total_tokens":4500}}
