@@ -227,11 +227,17 @@ export class ClaudeCodeProvider implements IProvider {
     const allRecords: UsageRecord[] = [];
 
     for (const file of files) {
-      for await (const record of splitJsonlRecords(file)) {
-        const usage = extractUsage(record);
-        if (usage !== null && isInRange(usage.date, range)) {
-          allRecords.push(usage);
+      try {
+        for await (const record of splitJsonlRecords(file)) {
+          const usage = extractUsage(record);
+          if (usage !== null && isInRange(usage.date, range)) {
+            allRecords.push(usage);
+          }
         }
+      } catch {
+        // Skip files that fail to parse — corrupted files shouldn't
+        // prevent loading data from other files
+        continue;
       }
     }
 

@@ -38,23 +38,24 @@ export async function* splitJsonlRecords(
   for (const line of lines) {
     lineNumber++;
 
-    if (line.trim() === '') {
+    // Skip blank lines and lines that are only whitespace/null bytes
+    if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
       continue;
     }
 
     const byteLength = new TextEncoder().encode(line).byteLength;
     if (byteLength > maxBytes) {
-      throw new Error(
-        `Oversized JSONL record in ${filePath} at line ${lineNumber}: ${byteLength} bytes exceeds limit of ${maxBytes} bytes`,
-      );
+      // Skip oversized records instead of crashing — real-world JSONL files
+      // can have corrupted entries
+      continue;
     }
 
     try {
       yield JSON.parse(line) as unknown;
     } catch {
-      throw new Error(
-        `Malformed JSON in ${filePath} at line ${lineNumber}: unable to parse`,
-      );
+      // Skip malformed JSON lines — real-world log files can have corrupted
+      // entries (null bytes, partial writes, etc.)
+      continue;
     }
   }
 }

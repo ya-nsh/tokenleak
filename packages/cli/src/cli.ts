@@ -25,7 +25,7 @@ import {
   OpenCodeProvider,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -199,9 +199,15 @@ function getRenderer(format: string): IRenderer {
   switch (format) {
     case 'json':
       return new JsonRenderer();
+    case 'svg':
+      return new SvgRenderer();
+    case 'terminal':
+      return new TerminalRenderer();
+    case 'png':
+      return new PngRenderer();
     default:
       throw new TokenleakError(
-        `Format "${format}" is not yet supported. Available formats: json`,
+        `Format "${format}" is not supported. Available formats: json, svg, png, terminal`,
       );
   }
 }

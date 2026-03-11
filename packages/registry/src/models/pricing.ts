@@ -58,14 +58,46 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
     cacheWrite: 3.75,
   },
 
-  // Claude 4 family
+  // Claude 4.5 family
+  'claude-haiku-4-5': {
+    input: 0.80,
+    output: 4.00,
+    cacheRead: 0.08,
+    cacheWrite: 1.00,
+  },
+  'claude-sonnet-4-5': {
+    input: 3.00,
+    output: 15.00,
+    cacheRead: 0.30,
+    cacheWrite: 3.75,
+  },
+  'claude-opus-4-5': {
+    input: 15.00,
+    output: 75.00,
+    cacheRead: 1.50,
+    cacheWrite: 18.75,
+  },
+
+  // Claude 4/4.6 family
   'claude-sonnet-4': {
     input: 3.00,
     output: 15.00,
     cacheRead: 0.30,
     cacheWrite: 3.75,
   },
+  'claude-sonnet-4-6': {
+    input: 3.00,
+    output: 15.00,
+    cacheRead: 0.30,
+    cacheWrite: 3.75,
+  },
   'claude-opus-4': {
+    input: 15.00,
+    output: 75.00,
+    cacheRead: 1.50,
+    cacheWrite: 18.75,
+  },
+  'claude-opus-4-6': {
     input: 15.00,
     output: 75.00,
     cacheRead: 1.50,
