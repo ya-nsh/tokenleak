@@ -1,2 +1,8 @@
-docs/
-.claude/
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+.env
+.env.*
+coverage/
+.DS_Store
