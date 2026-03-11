@@ -1,0 +1,372 @@
+#!/usr/bin/env node
+import { defineCommand, runMain } from 'citty';
+import { writeFileSync } from 'node:fs';
+import {
+  VERSION,
+  DEFAULT_DAYS,
+  SCHEMA_VERSION,
+  aggregate,
+  mergeProviderData,
+} from '@tokenleak/core';
+import type {
+  DateRange,
+  RenderOptions,
+  TokenleakOutput,
+  ProviderData,
+} from '@tokenleak/core';
+import {
+  ProviderRegistry,
+  ClaudeCodeProvider,
+  CodexProvider,
+  OpenCodeProvider,
+} from '@tokenleak/registry';
+import { JsonRenderer } from '@tokenleak/renderers';
+import type { IRenderer } from '@tokenleak/renderers';
+
+import { loadConfig } from './config.js';
+import { loadEnvOverrides } from './env.js';
+import { TokenleakError, handleError } from './errors.js';
+
+const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
+const THEME_VALUES = ['dark', 'light'] as const;
+
+/** Infer format from output file extension. */
+export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[number] | null {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'json':
+      return 'json';
+    case 'svg':
+      return 'svg';
+    case 'png':
+      return 'png';
+    default:
+      return null;
+  }
+}
+
+/** Compute the date range from CLI flags. */
+export function computeDateRange(args: {
+  since?: string;
+  until?: string;
+  days?: number;
+}): DateRange {
+  const until = args.until ?? new Date().toISOString().slice(0, 10);
+  let since: string;
+
+  if (args.since) {
+    since = args.since;
+  } else {
+    const daysBack = args.days ?? DEFAULT_DAYS;
+    const d = new Date(until);
+    d.setDate(d.getDate() - daysBack);
+    since = d.toISOString().slice(0, 10);
+  }
+
+  return { since, until };
+}
+
+/** Resolve effective config by merging config file, env vars, and CLI flags. */
+export function resolveConfig(cliArgs: Record<string, unknown>): {
+  format: typeof FORMAT_VALUES[number];
+  theme: typeof THEME_VALUES[number];
+  since?: string;
+  until?: string;
+  days: number;
+  output: string | null;
+  width: number;
+  noColor: boolean;
+  noInsights: boolean;
+  compare?: string;
+  provider?: string;
+} {
+  const fileConfig = loadConfig();
+  const envConfig = loadEnvOverrides();
+
+  type Format = typeof FORMAT_VALUES[number];
+  type Theme = typeof THEME_VALUES[number];
+
+  // Defaults
+  const merged: {
+    format: Format;
+    theme: Theme;
+    days: number;
+    output: string | null;
+    width: number;
+    noColor: boolean;
+    noInsights: boolean;
+  } = {
+    format: 'terminal',
+    theme: 'dark',
+    days: DEFAULT_DAYS,
+    output: null,
+    width: 80,
+    noColor: false,
+    noInsights: false,
+  };
+
+  // Layer: defaults < file config < env vars < CLI flags
+
+  // File config
+  if (fileConfig.format && FORMAT_VALUES.includes(fileConfig.format)) {
+    merged.format = fileConfig.format;
+  }
+  if (fileConfig.theme && THEME_VALUES.includes(fileConfig.theme)) {
+    merged.theme = fileConfig.theme;
+  }
+  if (fileConfig.days !== undefined) merged.days = fileConfig.days;
+  if (fileConfig.width !== undefined) merged.width = fileConfig.width;
+  if (fileConfig.noColor !== undefined) merged.noColor = fileConfig.noColor;
+  if (fileConfig.noInsights !== undefined) merged.noInsights = fileConfig.noInsights;
+
+  // Env overrides
+  if (envConfig.format) merged.format = envConfig.format;
+  if (envConfig.theme) merged.theme = envConfig.theme;
+  if (envConfig.days !== undefined) merged.days = envConfig.days;
+
+  // CLI flags (only override if explicitly provided)
+  const result: ReturnType<typeof resolveConfig> = { ...merged };
+
+  if (cliArgs['format'] !== undefined) {
+    result.format = cliArgs['format'] as typeof FORMAT_VALUES[number];
+  }
+  if (cliArgs['theme'] !== undefined) {
+    result.theme = cliArgs['theme'] as typeof THEME_VALUES[number];
+  }
+  if (cliArgs['since'] !== undefined) {
+    result.since = cliArgs['since'] as string;
+  }
+  if (cliArgs['until'] !== undefined) {
+    result.until = cliArgs['until'] as string;
+  }
+  if (cliArgs['days'] !== undefined) {
+    result.days = cliArgs['days'] as number;
+  }
+  if (cliArgs['output'] !== undefined) {
+    const outputPath = cliArgs['output'] as string;
+    result.output = outputPath;
+    // Infer format from output extension if format was not explicitly set
+    if (cliArgs['format'] === undefined) {
+      const inferred = inferFormatFromPath(outputPath);
+      if (inferred) {
+        result.format = inferred;
+      }
+    }
+  }
+  if (cliArgs['width'] !== undefined) {
+    result.width = cliArgs['width'] as number;
+  }
+  if (cliArgs['noColor'] !== undefined) {
+    result.noColor = cliArgs['noColor'] as boolean;
+  }
+  if (cliArgs['noInsights'] !== undefined) {
+    result.noInsights = cliArgs['noInsights'] as boolean;
+  }
+  if (cliArgs['compare'] !== undefined) {
+    result.compare = cliArgs['compare'] as string;
+  }
+  if (cliArgs['provider'] !== undefined) {
+    result.provider = cliArgs['provider'] as string;
+  }
+
+  return result;
+}
+
+/** Get a renderer for the given format. */
+function getRenderer(format: string): IRenderer {
+  switch (format) {
+    case 'json':
+      return new JsonRenderer();
+    default:
+      throw new TokenleakError(
+        `Format "${format}" is not yet supported. Available formats: json`,
+      );
+  }
+}
+
+/** Main execution function, exported for testing. */
+export async function run(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+
+  // Build date range
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+
+  // Register providers
+  const registry = new ProviderRegistry();
+  registry.register(new ClaudeCodeProvider());
+  registry.register(new CodexProvider());
+  registry.register(new OpenCodeProvider());
+
+  // Get available providers
+  let available = await registry.getAvailable();
+
+  // Filter by --provider if set
+  if (config.provider) {
+    const requested = new Set(
+      config.provider.split(',').map((s) => s.trim().toLowerCase()),
+    );
+    available = available.filter(
+      (p) =>
+        requested.has(p.name.toLowerCase()) ||
+        requested.has(p.displayName.toLowerCase()),
+    );
+  }
+
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  // Load data from available providers
+  const results = await Promise.all(
+    available.map(async (p) => {
+      try {
+        return await p.load(dateRange);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const providerDataList: ProviderData[] = results.filter(
+    (r): r is ProviderData => r !== null,
+  );
+
+  if (providerDataList.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  // Merge and aggregate
+  const mergedDaily = mergeProviderData(providerDataList);
+  const stats = aggregate(mergedDaily, dateRange.until);
+
+  const output: TokenleakOutput = {
+    schemaVersion: SCHEMA_VERSION,
+    generated: new Date().toISOString(),
+    dateRange,
+    providers: providerDataList,
+    aggregated: stats,
+  };
+
+  // Render
+  const renderer = getRenderer(config.format);
+  const renderOptions: RenderOptions = {
+    format: config.format,
+    theme: config.theme,
+    width: config.width,
+    showInsights: !config.noInsights,
+    noColor: config.noColor,
+    output: config.output,
+  };
+
+  const rendered = await renderer.render(output, renderOptions);
+
+  // Output
+  if (config.output) {
+    const data = typeof rendered === 'string' ? rendered : Buffer.from(rendered);
+    writeFileSync(config.output, data);
+  } else {
+    const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
+    process.stdout.write(text + '\n');
+  }
+}
+
+const main = defineCommand({
+  meta: {
+    name: 'tokenleak',
+    version: VERSION,
+    description:
+      'Visualise your AI coding-assistant token usage across providers',
+  },
+  args: {
+    format: {
+      type: 'string',
+      alias: 'f',
+      description: 'Output format: json, svg, png, terminal',
+    },
+    theme: {
+      type: 'string',
+      alias: 't',
+      description: 'Color theme: dark, light',
+    },
+    since: {
+      type: 'string',
+      alias: 's',
+      description: 'Start date (YYYY-MM-DD)',
+    },
+    until: {
+      type: 'string',
+      alias: 'u',
+      description: 'End date (YYYY-MM-DD), defaults to today',
+    },
+    days: {
+      type: 'string',
+      alias: 'd',
+      description: `Number of days to look back (default: ${DEFAULT_DAYS}, overridden by --since)`,
+    },
+    output: {
+      type: 'string',
+      alias: 'o',
+      description: 'Output file path',
+    },
+    width: {
+      type: 'string',
+      alias: 'w',
+      description: 'Terminal width (default: 80)',
+    },
+    noColor: {
+      type: 'boolean',
+      description: 'Disable ANSI colors',
+      default: false,
+    },
+    noInsights: {
+      type: 'boolean',
+      description: 'Hide insights panel',
+      default: false,
+    },
+    compare: {
+      type: 'string',
+      description: 'Compare two date ranges (YYYY-MM-DD..YYYY-MM-DD)',
+    },
+    provider: {
+      type: 'string',
+      alias: 'p',
+      description: 'Filter to specific provider(s), comma-separated',
+    },
+  },
+  async run({ args }) {
+    try {
+      // Convert string numeric args to numbers
+      const cliArgs: Record<string, unknown> = {};
+      if (args.format !== undefined) cliArgs['format'] = args.format;
+      if (args.theme !== undefined) cliArgs['theme'] = args.theme;
+      if (args.since !== undefined) cliArgs['since'] = args.since;
+      if (args.until !== undefined) cliArgs['until'] = args.until;
+      if (args.days !== undefined) cliArgs['days'] = Number(args.days);
+      if (args.output !== undefined) cliArgs['output'] = args.output;
+      if (args.width !== undefined) cliArgs['width'] = Number(args.width);
+      if (args.noColor) cliArgs['noColor'] = true;
+      if (args.noInsights) cliArgs['noInsights'] = true;
+      if (args.compare !== undefined) cliArgs['compare'] = args.compare;
+      if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+
+      await run(cliArgs);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  },
+});
+
+// Only run when executed directly, not when imported by tests
+const isDirectExecution =
+  typeof Bun !== 'undefined'
+    ? Bun.main === import.meta.path
+    : process.argv[1] !== undefined &&
+      import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+
+if (isDirectExecution) {
+  runMain(main);
+}

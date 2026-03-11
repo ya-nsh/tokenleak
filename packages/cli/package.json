@@ -15,7 +15,8 @@
   "dependencies": {
     "@tokenleak/core": "workspace:*",
     "@tokenleak/registry": "workspace:*",
-    "@tokenleak/renderers": "workspace:*"
+    "@tokenleak/renderers": "workspace:*",
+    "citty": "^0.2.1"
   },
   "devDependencies": {
     "@tokenleak/typescript-config": "workspace:*",
