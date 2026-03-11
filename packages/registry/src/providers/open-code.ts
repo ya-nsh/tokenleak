@@ -98,14 +98,16 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
 
       for (const [model, usage] of modelMap) {
         const cost = estimateCost(model, usage.inputTokens, usage.outputTokens, 0, 0);
-        const modelTotal = usage.inputTokens + usage.outputTokens;
+        const cacheReadTokens = 0;
+        const cacheWriteTokens = 0;
+        const modelTotal = usage.inputTokens + usage.outputTokens + cacheReadTokens + cacheWriteTokens;
 
         models.push({
           model,
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
+          cacheReadTokens,
+          cacheWriteTokens,
           totalTokens: modelTotal,
           cost,
         });

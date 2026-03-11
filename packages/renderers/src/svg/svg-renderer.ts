@@ -54,7 +54,6 @@ function renderBottomStat(
   label: string,
   value: string,
   theme: SvgTheme,
-  cardWidth: number,
 ): string {
   return group([
     text(x, y, label, {
@@ -183,7 +182,6 @@ export class SvgRenderer implements IRenderer {
         'MOST USED MODEL',
         topModelLabel,
         theme,
-        cardWidth,
       ),
     );
 
@@ -199,7 +197,6 @@ export class SvgRenderer implements IRenderer {
         'RECENT USE (LAST 30 DAYS)',
         recent30Label,
         theme,
-        cardWidth,
       ),
     );
 
@@ -211,7 +208,6 @@ export class SvgRenderer implements IRenderer {
         'LONGEST STREAK',
         `${stats.longestStreak} days`,
         theme,
-        cardWidth,
       ),
     );
 
@@ -223,7 +219,6 @@ export class SvgRenderer implements IRenderer {
         'CURRENT STREAK',
         `${stats.currentStreak} days`,
         theme,
-        cardWidth,
       ),
     );
 
@@ -241,7 +236,6 @@ export class SvgRenderer implements IRenderer {
         'TOTAL COST',
         stats.totalCost >= 100 ? `$${stats.totalCost.toFixed(0)}` : `$${stats.totalCost.toFixed(2)}`,
         theme,
-        cardWidth,
       ),
     );
 
@@ -252,7 +246,6 @@ export class SvgRenderer implements IRenderer {
         'CACHE HIT RATE',
         `${(stats.cacheHitRate * 100).toFixed(1)}%`,
         theme,
-        cardWidth,
       ),
     );
 
@@ -263,7 +256,6 @@ export class SvgRenderer implements IRenderer {
         'ACTIVE DAYS',
         `${stats.activeDays} / ${stats.totalDays}`,
         theme,
-        cardWidth,
       ),
     );
 
@@ -274,7 +266,6 @@ export class SvgRenderer implements IRenderer {
         'AVG DAILY TOKENS',
         formatNumber(stats.averageDailyTokens),
         theme,
-        cardWidth,
       ),
     );
 

@@ -199,7 +199,9 @@ export class CodexProvider implements IProvider {
           const breakdown = modelMap.get(normalizedModel)!;
           breakdown.inputTokens += inputTokens;
           breakdown.outputTokens += outputTokens;
-          breakdown.totalTokens += inputTokens + outputTokens;
+          breakdown.cacheReadTokens += cacheReadTokens;
+          breakdown.cacheWriteTokens += cacheWriteTokens;
+          breakdown.totalTokens += inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
           breakdown.cost += cost;
         }
       } catch {

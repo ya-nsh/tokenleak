@@ -9,7 +9,7 @@ import {
   FONT_SIZE_SMALL,
   FONT_FAMILY,
 } from './layout';
-import { escapeXml, rect, text, group, formatNumber } from './utils';
+import { escapeXml, text, group } from './utils';
 
 const DAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'];
 const MONTH_NAMES = [
@@ -124,7 +124,7 @@ export function renderHeatmap(
   });
 
   const totalCols = col + 1;
-  const width = DAY_LABEL_WIDTH + totalCols * CELL_SIZE + Math.max(0, totalCols - 1) * CELL_GAP;
+  const gridWidth = DAY_LABEL_WIDTH + totalCols * CELL_SIZE + Math.max(0, totalCols - 1) * CELL_GAP;
   const height = MONTH_LABEL_HEIGHT + HEATMAP_ROWS * CELL_SIZE + (HEATMAP_ROWS - 1) * CELL_GAP;
 
   // Legend: LESS [...squares...] MORE
@@ -160,6 +160,10 @@ export function renderHeatmap(
   );
 
   const totalHeight = legendY + CELL_SIZE + 8;
+
+  // Ensure width accounts for legend footprint (LESS + 5 boxes + MORE + padding)
+  const legendRightX = legendBoxStart + 5 * (CELL_SIZE + 3) + 4 + 40;
+  const width = Math.max(gridWidth, legendRightX);
 
   const svg = group([...monthLabels, ...dayLabels, ...cells, ...legendItems]);
 
