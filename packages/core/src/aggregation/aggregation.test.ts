@@ -401,6 +401,8 @@ describe('aggregate', () => {
     expect(result.currentStreak).toBe(0);
     expect(result.longestStreak).toBe(0);
     expect(result.totalTokens).toBe(0);
+    expect(result.totalInputTokens).toBe(0);
+    expect(result.totalOutputTokens).toBe(0);
     expect(result.totalCost).toBe(0);
     expect(result.totalDays).toBe(0);
     expect(result.activeDays).toBe(0);
@@ -408,6 +410,7 @@ describe('aggregate', () => {
     expect(result.cacheHitRate).toBe(0);
     expect(result.dayOfWeek).toHaveLength(7);
     expect(result.topModels).toHaveLength(0);
+    expect(result.rolling30dTopModel).toBeNull();
   });
 
   test('produces valid AggregatedStats from daily data', () => {
@@ -430,5 +433,50 @@ describe('aggregate', () => {
     expect(result.topModels.length).toBeGreaterThan(0);
     expect(result.averageDailyTokens).toBe(200);
     expect(result.averageDailyCost).toBeCloseTo(0.02);
+    expect(result.totalInputTokens).toBe(150);
+    expect(result.totalOutputTokens).toBe(150);
+    expect(result.rolling30dTopModel).toBe('claude-3-opus');
+  });
+
+  test('rolling30dTopModel returns model with most tokens in 30-day window', () => {
+    const days = [
+      makeDay('2025-01-28', 100, 0.01, {
+        models: [
+          { model: 'claude-3-opus', inputTokens: 50, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 100, cost: 0.01 },
+        ],
+      }),
+      makeDay('2025-01-29', 500, 0.05, {
+        models: [
+          { model: 'claude-3-sonnet', inputTokens: 250, outputTokens: 250, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 500, cost: 0.05 },
+        ],
+      }),
+      makeDay('2025-01-30', 200, 0.02, {
+        models: [
+          { model: 'claude-3-opus', inputTokens: 100, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 200, cost: 0.02 },
+        ],
+      }),
+    ];
+    const result = aggregate(days, '2025-01-30');
+    // sonnet has 500 tokens total vs opus 300 — sonnet wins
+    expect(result.rolling30dTopModel).toBe('claude-3-sonnet');
+  });
+
+  test('rolling30dTopModel excludes data outside 30-day window', () => {
+    const days = [
+      // 60 days before reference — outside the 30-day window
+      makeDay('2024-12-01', 9000, 0.90, {
+        models: [
+          { model: 'claude-3-haiku', inputTokens: 4500, outputTokens: 4500, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 9000, cost: 0.90 },
+        ],
+      }),
+      makeDay('2025-01-29', 100, 0.01, {
+        models: [
+          { model: 'claude-3-opus', inputTokens: 50, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 100, cost: 0.01 },
+        ],
+      }),
+    ];
+    const result = aggregate(days, '2025-01-30');
+    // haiku has more tokens overall, but it's outside the window
+    expect(result.rolling30dTopModel).toBe('claude-3-opus');
   });
 });
