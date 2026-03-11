@@ -52,7 +52,8 @@ export function renderModelChart(
     }
 
     // Value + percentage
-    const valueStr = `${formatNumber(entry.tokens)} (${entry.percentage.toFixed(1)}%)`;
+    const pct = entry.percentage < 1 ? entry.percentage * 100 : entry.percentage;
+    const valueStr = `${formatNumber(entry.tokens)} (${pct.toFixed(1)}%)`;
     children.push(
       text(BAR_LABEL_WIDTH + barAreaWidth + 8, y + BAR_HEIGHT - 4, valueStr, {
         fill: theme.foreground,

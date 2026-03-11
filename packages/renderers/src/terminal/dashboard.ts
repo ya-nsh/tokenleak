@@ -133,7 +133,7 @@ function renderTopModels(stats: AggregatedStats, width: number, noColor: boolean
   const lines: string[] = [];
 
   for (const model of stats.topModels.slice(0, 5)) {
-    const pct = formatPercent(model.percentage / 100);
+    const pct = formatPercent(model.percentage);
     const tokens = formatTokens(model.tokens);
     const line = `  ${colorize(model.model, 'yellow', noColor)}  ${tokens}  ${pct}`;
     lines.push(line.length > width ? line.slice(0, width) : line);
