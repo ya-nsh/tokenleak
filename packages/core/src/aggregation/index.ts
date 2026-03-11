@@ -7,3 +7,4 @@ export { calculateAverages } from './averages';
 export { topModels } from './top-models';
 export { aggregate } from './aggregate';
 export { mergeProviderData } from './merge';
+export { compareRanges } from './compare';

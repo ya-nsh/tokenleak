@@ -33,4 +33,5 @@ export {
   topModels,
   aggregate,
   mergeProviderData,
+  compareRanges,
 } from './aggregation';
