@@ -13,5 +13,5 @@ export type { ModelPricing } from './models';
 export type { IProvider } from './provider';
 export { ProviderRegistry } from './registry';
 export { splitJsonlRecords } from './parsers/index';
-export { ClaudeCodeProvider } from './providers/index';
+export { ClaudeCodeProvider, CodexProvider } from './providers/index';
 export { OpenCodeProvider } from './providers/open-code';
