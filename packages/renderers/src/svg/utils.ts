@@ -69,7 +69,3 @@ export function formatCost(cost: number): string {
   return `$${cost.toFixed(4)}`;
 }
 
-/** Format a percentage (0-1 range) */
-export function formatPercent(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
-}

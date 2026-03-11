@@ -1,4 +1,4 @@
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 export type {
   DailyUsage,
@@ -39,3 +39,10 @@ export {
   parseCompareRange,
   computePreviousPeriod,
 } from './aggregation';
+
+export {
+  ONE_DAY_MS,
+  dateToUtcMs,
+  formatDateStringUtc,
+  compareDateStrings,
+} from './date-utils';

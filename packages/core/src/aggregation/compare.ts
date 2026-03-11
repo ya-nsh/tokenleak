@@ -6,6 +6,7 @@ import type {
   AggregatedStats,
 } from '../types';
 import { SCHEMA_VERSION } from '../constants';
+import { ONE_DAY_MS, dateToUtcMs, formatDateStringUtc } from '../date-utils';
 import { aggregate } from './aggregate';
 
 /**
@@ -71,17 +72,16 @@ export function parseCompareRange(rangeStr: string): DateRange | null {
  * The previous period has the same length and ends the day before the current period starts.
  */
 export function computePreviousPeriod(current: DateRange): DateRange {
-  const ONE_DAY_MS = 86_400_000;
-  const sinceMs = new Date(current.since + 'T00:00:00Z').getTime();
-  const untilMs = new Date(current.until + 'T00:00:00Z').getTime();
+  const sinceMs = dateToUtcMs(current.since);
+  const untilMs = dateToUtcMs(current.until);
   const periodDays = Math.round((untilMs - sinceMs) / ONE_DAY_MS);
 
   const prevUntil = new Date(sinceMs - ONE_DAY_MS);
   const prevSince = new Date(prevUntil.getTime() - periodDays * ONE_DAY_MS);
 
   return {
-    since: prevSince.toISOString().slice(0, 10),
-    until: prevUntil.toISOString().slice(0, 10),
+    since: formatDateStringUtc(prevSince),
+    until: formatDateStringUtc(prevUntil),
   };
 }
 

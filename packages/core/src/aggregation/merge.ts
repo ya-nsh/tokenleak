@@ -1,4 +1,5 @@
 import type { DailyUsage, ProviderData } from '../types';
+import { compareDateStrings } from '../date-utils';
 
 /**
  * Merges daily data from multiple providers, combining entries for the same date.
@@ -34,6 +35,6 @@ export function mergeProviderData(providers: ProviderData[]): DailyUsage[] {
   }
 
   return [...dateMap.values()].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => compareDateStrings(a.date, b.date),
   );
 }

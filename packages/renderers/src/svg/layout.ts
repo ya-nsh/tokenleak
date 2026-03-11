@@ -7,9 +7,6 @@ export const CELL_SIZE = 16;
 /** Gap between heatmap cells */
 export const CELL_GAP = 4;
 
-/** Height reserved for the header section */
-export const HEADER_HEIGHT = 60;
-
 /** Height reserved for month labels above the heatmap */
 export const MONTH_LABEL_HEIGHT = 24;
 
@@ -22,22 +19,9 @@ export const HEATMAP_ROWS = 7;
 /** Spacing between major sections */
 export const SECTION_GAP = 32;
 
-/** Height of a stats card row */
-export const STAT_ROW_HEIGHT = 28;
-
-/** Height of a bar in bar charts */
-export const BAR_HEIGHT = 20;
-
-/** Gap between bars in bar charts */
-export const BAR_GAP = 8;
-
-/** Maximum width of bar labels */
-export const BAR_LABEL_WIDTH = 120;
-
 /** Font sizes */
 export const FONT_SIZE_TITLE = 28;
 export const FONT_SIZE_SUBTITLE = 14;
-export const FONT_SIZE_BODY = 12;
 export const FONT_SIZE_SMALL = 11;
 export const FONT_SIZE_STAT_VALUE = 32;
 export const FONT_SIZE_STAT_LABEL = 11;

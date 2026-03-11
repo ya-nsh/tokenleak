@@ -12,6 +12,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCost } from '../models/cost';
+import { isInRange } from '../utils';
 
 /**
  * Shape of a Codex session JSONL response event.
@@ -107,13 +108,6 @@ function compactModelDateSuffix(model: string): string {
 function extractDate(timestamp: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
   return match ? match[1]! : null;
-}
-
-/**
- * Checks whether a date string falls within the given range (inclusive).
- */
-function isInRange(date: string, range: DateRange): boolean {
-  return date >= range.since && date <= range.until;
 }
 
 /**

@@ -6,6 +6,7 @@ import type { DateRange, DailyUsage, ModelBreakdown, ProviderColors, ProviderDat
 import type { IProvider } from '../provider';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCost } from '../models/cost';
+import { isInRange } from '../utils';
 
 const PROVIDER_NAME = 'open-code';
 const DISPLAY_NAME = 'Open Code';
@@ -51,10 +52,6 @@ function extractDate(createdAt: string | number): string {
   }
   // ISO string
   return new Date(createdAt).toISOString().slice(0, 10);
-}
-
-function isWithinRange(date: string, range: DateRange): boolean {
-  return date >= range.since && date <= range.until;
 }
 
 interface UsageRecord {
@@ -154,7 +151,7 @@ function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
     const records: UsageRecord[] = [];
     for (const row of rows) {
       const date = extractDate(row.created_at);
-      if (isWithinRange(date, range)) {
+      if (isInRange(date, range)) {
         records.push({
           date,
           model: row.model,
@@ -187,7 +184,7 @@ function loadFromJson(sessionsDir: string, range: DateRange): UsageRecord[] {
       }
 
       const date = extractDate(msg.created_at);
-      if (isWithinRange(date, range)) {
+      if (isInRange(date, range)) {
         records.push({
           date,
           model: msg.model,

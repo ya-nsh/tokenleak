@@ -1,4 +1,5 @@
 import type { DailyUsage } from '../types';
+import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
 
 /**
  * Sums tokens and cost for the last N days from the reference date (inclusive).
@@ -13,15 +14,14 @@ export function rollingWindow(
     return { tokens: 0, cost: 0 };
   }
 
-  const refTime = new Date(referenceDate + 'T00:00:00Z').getTime();
-  const ONE_DAY_MS = 86_400_000;
+  const refTime = dateToUtcMs(referenceDate);
   const windowStart = refTime - (days - 1) * ONE_DAY_MS;
 
   let tokens = 0;
   let cost = 0;
 
   for (const entry of daily) {
-    const entryTime = new Date(entry.date + 'T00:00:00Z').getTime();
+    const entryTime = dateToUtcMs(entry.date);
     if (entryTime >= windowStart && entryTime <= refTime) {
       tokens += entry.totalTokens;
       cost += entry.cost;
