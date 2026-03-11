@@ -1,4 +1,5 @@
 import type { DailyUsage, DayOfWeekEntry } from '../types';
+import { dateToUtcMs } from '../date-utils';
 
 const DAY_LABELS = [
   'Sunday',
@@ -23,7 +24,7 @@ export function dayOfWeekBreakdown(daily: DailyUsage[]): DayOfWeekEntry[] {
   }));
 
   for (const entry of daily) {
-    const dayIndex = new Date(entry.date + 'T00:00:00').getUTCDay();
+    const dayIndex = new Date(dateToUtcMs(entry.date)).getUTCDay();
     const bucket = buckets[dayIndex]!;
     bucket.tokens += entry.totalTokens;
     bucket.cost += entry.cost;

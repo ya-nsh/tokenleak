@@ -12,6 +12,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCost } from '../models/cost';
+import { isInRange } from '../utils';
 
 /**
  * Shape of a Codex session JSONL response event.
@@ -110,13 +111,6 @@ function extractDate(timestamp: string): string | null {
 }
 
 /**
- * Checks whether a date string falls within the given range (inclusive).
- */
-function isInRange(date: string, range: DateRange): boolean {
-  return date >= range.since && date <= range.until;
-}
-
-/**
  * Codex session provider.
  *
  * Reads JSONL session files from `~/.codex/sessions/` and extracts
@@ -205,7 +199,9 @@ export class CodexProvider implements IProvider {
           const breakdown = modelMap.get(normalizedModel)!;
           breakdown.inputTokens += inputTokens;
           breakdown.outputTokens += outputTokens;
-          breakdown.totalTokens += inputTokens + outputTokens;
+          breakdown.cacheReadTokens += cacheReadTokens;
+          breakdown.cacheWriteTokens += cacheWriteTokens;
+          breakdown.totalTokens += inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
           breakdown.cost += cost;
         }
       } catch {

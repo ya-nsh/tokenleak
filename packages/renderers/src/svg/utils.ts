@@ -44,13 +44,23 @@ export function group(children: string[], transform?: string): string {
   return `<g${transformAttr}>${children.join('')}</g>`;
 }
 
-/** Format a number with commas for readability */
+/** Format a number with commas for readability.
+ *  Uses post-rounding unit selection so e.g. 999_950_000 → "1.0B" not "1000.0M".
+ */
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1)}M`;
+    const millions = Number((n / 1_000_000).toFixed(1));
+    if (millions >= 1_000) {
+      return `${(n / 1_000_000_000).toFixed(1)}B`;
+    }
+    return `${millions.toFixed(1)}M`;
   }
   if (n >= 1_000) {
-    return `${(n / 1_000).toFixed(1)}K`;
+    const thousands = Number((n / 1_000).toFixed(1));
+    if (thousands >= 1_000) {
+      return `${(n / 1_000_000).toFixed(1)}M`;
+    }
+    return `${thousands.toFixed(1)}K`;
   }
   return n.toFixed(0);
 }
@@ -66,7 +76,3 @@ export function formatCost(cost: number): string {
   return `$${cost.toFixed(4)}`;
 }
 
-/** Format a percentage (0-1 range) */
-export function formatPercent(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
-}

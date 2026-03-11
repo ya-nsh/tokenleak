@@ -1,103 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import type {
-  TokenleakOutput,
-  AggregatedStats,
-  ProviderData,
-  DailyUsage,
-  DayOfWeekEntry,
-  TopModelEntry,
-} from '@tokenleak/core';
-import { SCHEMA_VERSION } from '@tokenleak/core';
 import { renderWrappedCard } from './wrapped';
 import { renderBadge } from './badge';
-
-function createDayOfWeek(): DayOfWeekEntry[] {
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return days.map((label, i) => ({
-    day: i,
-    label,
-    tokens: (i + 1) * 1000,
-    cost: (i + 1) * 0.01,
-    count: i + 1,
-  }));
-}
-
-function createTopModels(): TopModelEntry[] {
-  return [
-    { model: 'claude-3-opus', tokens: 50000, cost: 1.5, percentage: 50 },
-  ];
-}
-
-function createPopulatedStats(overrides: Partial<AggregatedStats> = {}): AggregatedStats {
-  return {
-    currentStreak: 7,
-    longestStreak: 14,
-    rolling30dTokens: 80000,
-    rolling30dCost: 3.2,
-    rolling7dTokens: 20000,
-    rolling7dCost: 0.8,
-    peakDay: { date: '2026-03-01', tokens: 8000 },
-    averageDailyTokens: 2500,
-    averageDailyCost: 0.1,
-    cacheHitRate: 0.42,
-    totalTokens: 100000,
-    totalCost: 4.0,
-    totalDays: 40,
-    activeDays: 30,
-    dayOfWeek: createDayOfWeek(),
-    topModels: createTopModels(),
-    ...overrides,
-  };
-}
-
-function createDailyUsage(date: string, totalTokens: number): DailyUsage {
-  return {
-    date,
-    inputTokens: Math.floor(totalTokens * 0.6),
-    outputTokens: Math.floor(totalTokens * 0.3),
-    cacheReadTokens: Math.floor(totalTokens * 0.08),
-    cacheWriteTokens: Math.floor(totalTokens * 0.02),
-    totalTokens,
-    cost: totalTokens * 0.00004,
-    models: [
-      {
-        model: 'claude-3-opus',
-        inputTokens: Math.floor(totalTokens * 0.6),
-        outputTokens: Math.floor(totalTokens * 0.3),
-        cacheReadTokens: Math.floor(totalTokens * 0.08),
-        cacheWriteTokens: Math.floor(totalTokens * 0.02),
-        totalTokens,
-        cost: totalTokens * 0.00004,
-      },
-    ],
-  };
-}
-
-function createProvider(name: string, displayName: string): ProviderData {
-  return {
-    provider: name,
-    displayName,
-    daily: [createDailyUsage('2026-03-01', 5000)],
-    totalTokens: 5000,
-    totalCost: 0.2,
-    colors: {
-      primary: '#d97706',
-      secondary: '#fbbf24',
-      gradient: ['#d97706', '#fbbf24'],
-    },
-  };
-}
-
-function createOutput(overrides: Partial<TokenleakOutput> = {}): TokenleakOutput {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    generated: '2026-03-11T00:00:00.000Z',
-    dateRange: { since: '2026-01-01', until: '2026-03-11' },
-    providers: [createProvider('claude-code', 'Claude Code')],
-    aggregated: createPopulatedStats(),
-    ...overrides,
-  };
-}
+import {
+  createOutput,
+  createPopulatedStats,
+  createProvider,
+} from '../__test-fixtures__';
 
 describe('renderWrappedCard', () => {
   it('has viewBox 1200x630', () => {
@@ -129,7 +37,7 @@ describe('renderWrappedCard', () => {
 
   it('includes streak count', () => {
     const svg = renderWrappedCard(createOutput());
-    expect(svg).toContain('7 days');
+    expect(svg).toContain('5 days');
   });
 
   it('includes provider name', () => {

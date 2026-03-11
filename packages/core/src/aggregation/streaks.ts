@@ -1,4 +1,5 @@
 import type { DailyUsage } from '../types';
+import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
 
 /**
  * Calculates current and longest streaks of consecutive days with usage.
@@ -14,16 +15,15 @@ export function calculateStreaks(daily: DailyUsage[]): {
   }
 
   const sorted = [...daily].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => dateToUtcMs(a.date) - dateToUtcMs(b.date),
   );
 
-  const ONE_DAY_MS = 86_400_000;
   let longest = 1;
   let currentRun = 1;
 
   for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]!.date).getTime();
-    const curr = new Date(sorted[i]!.date).getTime();
+    const prev = dateToUtcMs(sorted[i - 1]!.date);
+    const curr = dateToUtcMs(sorted[i]!.date);
     const diff = curr - prev;
 
     if (diff === ONE_DAY_MS) {
@@ -40,8 +40,8 @@ export function calculateStreaks(daily: DailyUsage[]): {
   // Current streak: count back from the last day
   let current = 1;
   for (let i = sorted.length - 1; i > 0; i--) {
-    const curr = new Date(sorted[i]!.date).getTime();
-    const prev = new Date(sorted[i - 1]!.date).getTime();
+    const curr = dateToUtcMs(sorted[i]!.date);
+    const prev = dateToUtcMs(sorted[i - 1]!.date);
 
     if (curr - prev === ONE_DAY_MS) {
       current++;

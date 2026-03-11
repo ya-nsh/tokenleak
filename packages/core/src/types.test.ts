@@ -84,11 +84,14 @@ describe('core types', () => {
       averageDailyCost: 0.17,
       cacheHitRate: 0.45,
       totalTokens: 300000,
+      totalInputTokens: 180000,
+      totalOutputTokens: 90000,
       totalCost: 15.0,
       totalDays: 90,
       activeDays: 45,
       dayOfWeek: [],
       topModels: [],
+      rolling30dTopModel: null,
     };
     expect(stats.currentStreak).toBe(5);
     expect(stats.peakDay?.tokens).toBe(15000);
@@ -108,11 +111,14 @@ describe('core types', () => {
       averageDailyCost: 0,
       cacheHitRate: 0,
       totalTokens: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
       totalCost: 0,
       totalDays: 0,
       activeDays: 0,
       dayOfWeek: [],
       topModels: [],
+      rolling30dTopModel: null,
     };
     expect(stats.peakDay).toBeNull();
   });
@@ -148,9 +154,10 @@ describe('core types', () => {
         peakDay: null,
         averageDailyTokens: 0, averageDailyCost: 0,
         cacheHitRate: 0,
-        totalTokens: 0, totalCost: 0,
+        totalTokens: 0, totalInputTokens: 0, totalOutputTokens: 0, totalCost: 0,
         totalDays: 0, activeDays: 0,
         dayOfWeek: [], topModels: [],
+        rolling30dTopModel: null,
       },
     };
     expect(output.schemaVersion).toBe(1);
@@ -183,9 +190,10 @@ describe('core types', () => {
       peakDay: null,
       averageDailyTokens: 0, averageDailyCost: 0,
       cacheHitRate: 0,
-      totalTokens: 0, totalCost: 0,
+      totalTokens: 0, totalInputTokens: 0, totalOutputTokens: 0, totalCost: 0,
       totalDays: 0, activeDays: 0,
       dayOfWeek: [], topModels: [],
+      rolling30dTopModel: null,
     };
     const compare: CompareOutput = {
       schemaVersion: 1,

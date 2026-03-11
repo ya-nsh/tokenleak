@@ -1,141 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import type {
-  TokenleakOutput,
-  RenderOptions,
-  AggregatedStats,
-  ProviderData,
-  DailyUsage,
-  DayOfWeekEntry,
-  TopModelEntry,
-} from '@tokenleak/core';
-import { SCHEMA_VERSION } from '@tokenleak/core';
 import { SvgRenderer } from './svg-renderer';
-
-function createDayOfWeek(): DayOfWeekEntry[] {
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return days.map((label, i) => ({
-    day: i,
-    label,
-    tokens: (i + 1) * 1000,
-    cost: (i + 1) * 0.01,
-    count: i + 1,
-  }));
-}
-
-function createTopModels(): TopModelEntry[] {
-  return [
-    { model: 'claude-3-opus', tokens: 50000, cost: 1.5, percentage: 50 },
-    { model: 'claude-3-sonnet', tokens: 30000, cost: 0.6, percentage: 30 },
-    { model: 'claude-3-haiku', tokens: 20000, cost: 0.1, percentage: 20 },
-  ];
-}
-
-function createZeroedStats(): AggregatedStats {
-  return {
-    currentStreak: 0,
-    longestStreak: 0,
-    rolling30dTokens: 0,
-    rolling30dCost: 0,
-    rolling7dTokens: 0,
-    rolling7dCost: 0,
-    peakDay: null,
-    averageDailyTokens: 0,
-    averageDailyCost: 0,
-    cacheHitRate: 0,
-    totalTokens: 0,
-    totalCost: 0,
-    totalDays: 0,
-    activeDays: 0,
-    dayOfWeek: [],
-    topModels: [],
-  };
-}
-
-function createPopulatedStats(): AggregatedStats {
-  return {
-    currentStreak: 5,
-    longestStreak: 12,
-    rolling30dTokens: 80000,
-    rolling30dCost: 3.2,
-    rolling7dTokens: 20000,
-    rolling7dCost: 0.8,
-    peakDay: { date: '2026-03-01', tokens: 8000 },
-    averageDailyTokens: 2500,
-    averageDailyCost: 0.1,
-    cacheHitRate: 0.42,
-    totalTokens: 100000,
-    totalCost: 4.0,
-    totalDays: 40,
-    activeDays: 30,
-    dayOfWeek: createDayOfWeek(),
-    topModels: createTopModels(),
-  };
-}
-
-function createDailyUsage(date: string, totalTokens: number): DailyUsage {
-  return {
-    date,
-    inputTokens: Math.floor(totalTokens * 0.6),
-    outputTokens: Math.floor(totalTokens * 0.3),
-    cacheReadTokens: Math.floor(totalTokens * 0.08),
-    cacheWriteTokens: Math.floor(totalTokens * 0.02),
-    totalTokens,
-    cost: totalTokens * 0.00004,
-    models: [
-      {
-        model: 'claude-3-opus',
-        inputTokens: Math.floor(totalTokens * 0.6),
-        outputTokens: Math.floor(totalTokens * 0.3),
-        cacheReadTokens: Math.floor(totalTokens * 0.08),
-        cacheWriteTokens: Math.floor(totalTokens * 0.02),
-        totalTokens,
-        cost: totalTokens * 0.00004,
-      },
-    ],
-  };
-}
-
-function createProvider(name: string, displayName: string): ProviderData {
-  return {
-    provider: name,
-    displayName,
-    daily: [
-      createDailyUsage('2026-03-01', 5000),
-      createDailyUsage('2026-03-02', 3000),
-      createDailyUsage('2026-03-03', 7000),
-    ],
-    totalTokens: 15000,
-    totalCost: 0.6,
-    colors: {
-      primary: '#d97706',
-      secondary: '#fbbf24',
-      gradient: ['#d97706', '#fbbf24'],
-    },
-  };
-}
-
-function createOutput(overrides: Partial<TokenleakOutput> = {}): TokenleakOutput {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    generated: '2026-03-11T00:00:00.000Z',
-    dateRange: { since: '2026-01-01', until: '2026-03-11' },
-    providers: [createProvider('claude-code', 'Claude Code')],
-    aggregated: createPopulatedStats(),
-    ...overrides,
-  };
-}
-
-function createRenderOptions(overrides: Partial<RenderOptions> = {}): RenderOptions {
-  return {
-    format: 'svg',
-    theme: 'dark',
-    width: 800,
-    showInsights: true,
-    noColor: false,
-    output: null,
-    ...overrides,
-  };
-}
+import {
+  createDailyUsage,
+  createOutput,
+  createPopulatedStats,
+  createProvider,
+  createRenderOptions,
+  createZeroedStats,
+} from '../__test-fixtures__';
 
 describe('SvgRenderer', () => {
   const renderer = new SvgRenderer();
@@ -187,11 +59,11 @@ describe('SvgRenderer', () => {
 
   it('stats text is present (streak, tokens)', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Current Streak');
-    expect(result).toContain('Longest Streak');
-    expect(result).toContain('Total Tokens');
-    expect(result).toContain('Cache Hit Rate');
-    expect(result).toContain('Statistics');
+    expect(result).toContain('CURRENT STREAK');
+    expect(result).toContain('LONGEST STREAK');
+    expect(result).toContain('TOTAL TOKENS');
+    expect(result).toContain('CACHE HIT RATE');
+    expect(result).toContain('MOST USED MODEL');
   });
 
   it('output is valid XML (properly closed tags)', async () => {
@@ -224,32 +96,24 @@ describe('SvgRenderer', () => {
     expect(result).toContain('<svg');
     expect(result).toContain('</svg>');
     expect(result).toContain('Tokenleak');
-    expect(result).toContain('Statistics');
+    expect(result).toContain('TOTAL TOKENS');
   });
 
-  it('showInsights=false omits insights panel', async () => {
-    const withInsights = await renderer.render(
-      createOutput(),
-      createRenderOptions({ showInsights: true }),
-    );
-    const withoutInsights = await renderer.render(
-      createOutput(),
-      createRenderOptions({ showInsights: false }),
-    );
-
-    expect(withInsights).toContain('Insights');
-    expect(withoutInsights).not.toContain('Insights');
-  });
-
-  it('renders day of week chart when data is present', async () => {
+  it('renders bottom stat cards with model info', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Day of Week');
-  });
-
-  it('renders top models chart when data is present', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('Top Models');
+    expect(result).toContain('MOST USED MODEL');
     expect(result).toContain('claude-3-opus');
+    expect(result).toContain('RECENT USE');
+    expect(result).toContain('TOTAL COST');
+    expect(result).toContain('ACTIVE DAYS');
+    expect(result).toContain('AVG DAILY TOKENS');
+  });
+
+  it('renders header token stats', async () => {
+    const result = await renderer.render(createOutput(), createRenderOptions());
+    expect(result).toContain('INPUT TOKENS');
+    expect(result).toContain('OUTPUT TOKENS');
+    expect(result).toContain('TOTAL TOKENS');
   });
 
   it('escapes XML entities in provider names', async () => {

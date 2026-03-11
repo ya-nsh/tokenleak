@@ -12,6 +12,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCost } from '../models/cost';
+import { isInRange } from '../utils';
 
 const DEFAULT_BASE_DIR = join(homedir(), '.claude', 'projects');
 
@@ -117,13 +118,6 @@ function extractUsage(record: unknown): UsageRecord | null {
 }
 
 /**
- * Checks whether a date string falls within the given range (inclusive).
- */
-function isInRange(date: string, range: DateRange): boolean {
-  return date >= range.since && date <= range.until;
-}
-
-/**
  * Builds the DailyUsage array from a flat list of usage records,
  * grouping by date and model.
  */
@@ -164,7 +158,7 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
     mb.outputTokens += rec.outputTokens;
     mb.cacheReadTokens += rec.cacheReadTokens;
     mb.cacheWriteTokens += rec.cacheWriteTokens;
-    mb.totalTokens += rec.inputTokens + rec.outputTokens;
+    mb.totalTokens += rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
     mb.cost += cost;
   }
 

@@ -46,11 +46,14 @@ export interface AggregatedStats {
   averageDailyCost: number;
   cacheHitRate: number;
   totalTokens: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
   totalCost: number;
   totalDays: number;
   activeDays: number;
   dayOfWeek: DayOfWeekEntry[];
   topModels: TopModelEntry[];
+  rolling30dTopModel: string | null;
 }
 
 export interface DayOfWeekEntry {

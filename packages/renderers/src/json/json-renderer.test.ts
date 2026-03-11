@@ -1,59 +1,31 @@
 import { describe, expect, it } from 'bun:test';
 import type {
-  TokenleakOutput,
-  RenderOptions,
-  AggregatedStats,
   ProviderData,
 } from '@tokenleak/core';
 import { SCHEMA_VERSION } from '@tokenleak/core';
 import { JsonRenderer } from './json-renderer';
-
-function createZeroedAggregatedStats(): AggregatedStats {
-  return {
-    currentStreak: 0,
-    longestStreak: 0,
-    rolling30dTokens: 0,
-    rolling30dCost: 0,
-    rolling7dTokens: 0,
-    rolling7dCost: 0,
-    peakDay: null,
-    averageDailyTokens: 0,
-    averageDailyCost: 0,
-    cacheHitRate: 0,
-    totalTokens: 0,
-    totalCost: 0,
-    totalDays: 0,
-    activeDays: 0,
-    dayOfWeek: [],
-    topModels: [],
-  };
-}
+import {
+  createOutput,
+  createRenderOptions,
+  createZeroedStats,
+} from '../__test-fixtures__';
 
 function createMinimalTokenleakOutput(
-  overrides: Partial<TokenleakOutput> = {},
-): TokenleakOutput {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    generated: '2026-03-11T00:00:00.000Z',
-    dateRange: {
-      since: '2026-01-01',
-      until: '2026-03-11',
-    },
+  overrides: Parameters<typeof createOutput>[0] = {},
+) {
+  return createOutput({
     providers: [],
-    aggregated: createZeroedAggregatedStats(),
+    aggregated: createZeroedStats(),
     ...overrides,
-  };
+  });
 }
 
-function createDefaultRenderOptions(): RenderOptions {
-  return {
+function createDefaultRenderOptions() {
+  return createRenderOptions({
     format: 'json',
-    theme: 'dark',
     width: 1200,
     showInsights: false,
-    noColor: false,
-    output: null,
-  };
+  });
 }
 
 describe('JsonRenderer', () => {
@@ -125,17 +97,15 @@ describe('JsonRenderer', () => {
   });
 
   it('preserves aggregated stats', async () => {
-    const aggregated: AggregatedStats = {
-      ...createZeroedAggregatedStats(),
-      currentStreak: 5,
-      longestStreak: 12,
-      totalTokens: 50000,
-      totalCost: 2.5,
-      activeDays: 10,
-      totalDays: 30,
-      cacheHitRate: 0.42,
-      peakDay: { date: '2026-03-01', tokens: 8000 },
-    };
+    const aggregated = createZeroedStats();
+    aggregated.currentStreak = 5;
+    aggregated.longestStreak = 12;
+    aggregated.totalTokens = 50000;
+    aggregated.totalCost = 2.5;
+    aggregated.activeDays = 10;
+    aggregated.totalDays = 30;
+    aggregated.cacheHitRate = 0.42;
+    aggregated.peakDay = { date: '2026-03-01', tokens: 8000 };
     const output = createMinimalTokenleakOutput({ aggregated });
     const result = await renderer.render(output, options);
     const parsed = JSON.parse(result);
