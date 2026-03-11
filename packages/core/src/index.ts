@@ -33,6 +33,7 @@ export {
   topModels,
   aggregate,
   mergeProviderData,
+  compareRanges,
   computeDeltas,
   buildCompareOutput,
   parseCompareRange,

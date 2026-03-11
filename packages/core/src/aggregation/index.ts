@@ -7,4 +7,4 @@ export { calculateAverages } from './averages';
 export { topModels } from './top-models';
 export { aggregate } from './aggregate';
 export { mergeProviderData } from './merge';
-export { computeDeltas, buildCompareOutput, parseCompareRange, computePreviousPeriod } from './compare';
+export { compareRanges, computeDeltas, buildCompareOutput, parseCompareRange, computePreviousPeriod } from './compare';

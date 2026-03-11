@@ -31,6 +31,7 @@ import type { IRenderer } from '@tokenleak/renderers';
 import { loadConfig } from './config.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
+import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
@@ -84,6 +85,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   noInsights: boolean;
   compare?: string;
   provider?: string;
+  clipboard: boolean;
+  open: boolean;
+  upload?: string;
 } {
   const fileConfig = loadConfig();
   const envConfig = loadEnvOverrides();
@@ -100,6 +104,8 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: number;
     noColor: boolean;
     noInsights: boolean;
+    clipboard: boolean;
+    open: boolean;
   } = {
     format: 'terminal',
     theme: 'dark',
@@ -108,6 +114,8 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: 80,
     noColor: false,
     noInsights: false,
+    clipboard: false,
+    open: false,
   };
 
   // Layer: defaults < file config < env vars < CLI flags
@@ -172,6 +180,15 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['provider'] !== undefined) {
     result.provider = cliArgs['provider'] as string;
+  }
+  if (cliArgs['clipboard'] !== undefined) {
+    result.clipboard = cliArgs['clipboard'] as boolean;
+  }
+  if (cliArgs['open'] !== undefined) {
+    result.open = cliArgs['open'] as boolean;
+  }
+  if (cliArgs['upload'] !== undefined) {
+    result.upload = cliArgs['upload'] as string;
   }
 
   return result;
@@ -353,6 +370,36 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
     process.stdout.write(text + '\n');
   }
+
+  // Sharing: clipboard
+  if (config.clipboard) {
+    const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
+    await copyToClipboard(text);
+    process.stderr.write('Copied output to clipboard.\n');
+  }
+
+  // Sharing: open file
+  if (config.open) {
+    if (!config.output) {
+      throw new TokenleakError('--open requires --output to specify a file path');
+    }
+    await openFile(config.output);
+    process.stderr.write(`Opened ${config.output} in default application.\n`);
+  }
+
+  // Sharing: upload to gist
+  if (config.upload === 'gist') {
+    const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
+    const ext = config.format === 'json' ? 'json' : config.format === 'svg' ? 'svg' : 'txt';
+    const filename = `tokenleak.${ext}`;
+    const description = `Tokenleak report (${dateRange.since} to ${dateRange.until})`;
+    const url = await uploadToGist(text, filename, description);
+    process.stderr.write(`Uploaded to gist: ${url}\n`);
+  } else if (config.upload !== undefined) {
+    throw new TokenleakError(
+      `Unknown upload target "${config.upload}". Supported: gist`,
+    );
+  }
 }
 
 const main = defineCommand({
@@ -417,6 +464,20 @@ const main = defineCommand({
       alias: 'p',
       description: 'Filter to specific provider(s), comma-separated',
     },
+    clipboard: {
+      type: 'boolean',
+      description: 'Copy output to clipboard after rendering',
+      default: false,
+    },
+    open: {
+      type: 'boolean',
+      description: 'Open output file in default application (requires --output)',
+      default: false,
+    },
+    upload: {
+      type: 'string',
+      description: 'Upload output to a service (supported: gist)',
+    },
   },
   async run({ args }) {
     try {
@@ -433,6 +494,9 @@ const main = defineCommand({
       if (args.noInsights) cliArgs['noInsights'] = true;
       if (args.compare !== undefined) cliArgs['compare'] = args.compare;
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+      if (args.clipboard) cliArgs['clipboard'] = true;
+      if (args.open) cliArgs['open'] = true;
+      if (args.upload !== undefined) cliArgs['upload'] = args.upload;
 
       await run(cliArgs);
     } catch (error: unknown) {
