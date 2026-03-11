@@ -22,3 +22,15 @@ export {
   MAX_JSONL_RECORD_BYTES,
   SCHEMA_VERSION,
 } from './constants';
+
+export {
+  calculateStreaks,
+  rollingWindow,
+  findPeakDay,
+  dayOfWeekBreakdown,
+  cacheHitRate,
+  calculateAverages,
+  topModels,
+  aggregate,
+  mergeProviderData,
+} from './aggregation';
