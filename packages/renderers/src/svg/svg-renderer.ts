@@ -16,15 +16,19 @@ import { renderInsightsPanel } from './insights-panel';
 import { renderDayOfWeekChart } from './day-of-week-chart';
 import { renderModelChart } from './model-chart';
 
+/** Minimum SVG width in pixels */
+const MIN_SVG_WIDTH = 520;
+
 export class SvgRenderer implements IRenderer {
   readonly format = 'svg' as const;
 
   async render(output: TokenleakOutput, options: RenderOptions): Promise<string> {
     const theme = getTheme(options.theme);
-    const contentWidth = options.width - PADDING * 2;
     let y = PADDING;
 
     const sections: string[] = [];
+    // Track the widest section to compute final SVG width
+    const sectionWidths: number[] = [];
 
     // Header
     sections.push(
@@ -62,7 +66,6 @@ export class SvgRenderer implements IRenderer {
     // Merge all daily data for the heatmap
     const allDaily = output.providers.flatMap((p) => p.daily);
     if (allDaily.length > 0) {
-      // Section title
       sections.push(
         text(PADDING, y, 'Activity', {
           fill: theme.foreground,
@@ -80,6 +83,7 @@ export class SvgRenderer implements IRenderer {
       sections.push(
         group([heatmap.svg], `translate(${PADDING}, ${y})`),
       );
+      sectionWidths.push(heatmap.width);
       y += heatmap.height + SECTION_GAP;
     }
 
@@ -98,6 +102,7 @@ export class SvgRenderer implements IRenderer {
     sections.push(
       group([stats.svg], `translate(${PADDING}, ${y})`),
     );
+    sectionWidths.push(stats.width);
     y += stats.height + SECTION_GAP;
 
     // Day of week chart
@@ -116,6 +121,7 @@ export class SvgRenderer implements IRenderer {
       sections.push(
         group([dowChart.svg], `translate(${PADDING}, ${y})`),
       );
+      sectionWidths.push(dowChart.width);
       y += dowChart.height + SECTION_GAP;
     }
 
@@ -135,6 +141,7 @@ export class SvgRenderer implements IRenderer {
       sections.push(
         group([modelChart.svg], `translate(${PADDING}, ${y})`),
       );
+      sectionWidths.push(modelChart.width);
       y += modelChart.height + SECTION_GAP;
     }
 
@@ -158,15 +165,21 @@ export class SvgRenderer implements IRenderer {
       sections.push(
         group([insights.svg], `translate(${PADDING}, ${y})`),
       );
+      sectionWidths.push(insights.width);
       y += insights.height + SECTION_GAP;
     }
 
     const totalHeight = y + PADDING;
+    // SVG width = widest section + padding on both sides, with a minimum floor
+    const maxContentWidth = sectionWidths.length > 0
+      ? Math.max(...sectionWidths)
+      : MIN_SVG_WIDTH - PADDING * 2;
+    const svgWidth = Math.max(maxContentWidth + PADDING * 2, MIN_SVG_WIDTH);
 
     // Assemble the full SVG
     const svgContent = [
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${options.width}" height="${totalHeight}" viewBox="0 0 ${options.width} ${totalHeight}">`,
-      rect(0, 0, options.width, totalHeight, theme.background, 8),
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${totalHeight}" viewBox="0 0 ${svgWidth} ${totalHeight}">`,
+      rect(0, 0, svgWidth, totalHeight, theme.background, 8),
       ...sections,
       '</svg>',
     ].join('\n');
