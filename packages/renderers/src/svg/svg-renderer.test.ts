@@ -109,6 +109,28 @@ describe('SvgRenderer', () => {
     expect(result).toContain('AVG DAILY TOKENS');
   });
 
+  it('truncates long model names to prevent overflow', async () => {
+    const longModelName = 'claude-opus-4-6-super-extended-name';
+    const output = createOutput({
+      aggregated: createPopulatedStats({
+        topModels: [{ model: longModelName, tokens: 993_700_000, percentage: 80 }],
+      }),
+    });
+    const result = await renderer.render(output, createRenderOptions());
+    // Should contain truncation ellipsis, not the full model name with tokens
+    const fullLabel = `${longModelName} (993.7M)`;
+    expect(result).not.toContain(fullLabel);
+    expect(result).toContain('…');
+  });
+
+  it('SVG minimum width is at least 1000px', async () => {
+    const result = await renderer.render(createOutput(), createRenderOptions());
+    const widthMatch = result.match(/width="(\d+)"/);
+    expect(widthMatch).not.toBeNull();
+    const width = Number(widthMatch![1]);
+    expect(width).toBeGreaterThanOrEqual(1000);
+  });
+
   it('renders header token stats', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
     expect(result).toContain('INPUT TOKENS');

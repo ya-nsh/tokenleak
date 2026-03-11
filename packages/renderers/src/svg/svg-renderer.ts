@@ -16,7 +16,16 @@ import { escapeXml, rect, text, group, formatNumber } from './utils';
 import { renderHeatmap } from './heatmap';
 
 /** Minimum SVG width in pixels */
-const MIN_SVG_WIDTH = 800;
+const MIN_SVG_WIDTH = 1000;
+
+/** Maximum characters for stat values before truncation */
+const MAX_STAT_VALUE_CHARS = 28;
+
+/** Truncate text with ellipsis if it exceeds maxChars */
+function truncateText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return value.slice(0, maxChars - 1) + '…';
+}
 
 /** Render a large stat (label on top, big value below) */
 function renderHeaderStat(
@@ -65,7 +74,7 @@ function renderBottomStat(
     }),
     text(x, y + 32, value, {
       fill: theme.foreground,
-      'font-size': 22,
+      'font-size': 18,
       'font-family': FONT_FAMILY,
       'font-weight': '700',
     }),
@@ -165,14 +174,17 @@ export class SvgRenderer implements IRenderer {
     );
     y += SECTION_GAP;
 
-    // === BOTTOM STATS ROW ===
-    const numCards = 4;
-    const cardWidth = contentWidth / numCards;
+    // === BOTTOM STATS ROW 1 (asymmetric: wide model cards, narrow streak cards) ===
+    // Model name cards need more width; streak cards have short values
+    const col1Width = contentWidth * 0.35;  // MOST USED MODEL
+    const col2Width = contentWidth * 0.35;  // RECENT USE
+    const col3Width = contentWidth * 0.15;  // LONGEST STREAK
+    const col4Width = contentWidth * 0.15;  // CURRENT STREAK
 
     // Card 1: Most Used Model
     const topModel = stats.topModels.length > 0 ? stats.topModels[0] : null;
     const topModelLabel = topModel
-      ? `${topModel.model} (${formatNumber(topModel.tokens)})`
+      ? truncateText(`${topModel.model} (${formatNumber(topModel.tokens)})`, MAX_STAT_VALUE_CHARS)
       : 'N/A';
 
     sections.push(
@@ -187,12 +199,12 @@ export class SvgRenderer implements IRenderer {
 
     // Card 2: Recent Use (Last 30 Days)
     const recent30Label = stats.rolling30dTopModel
-      ? `${stats.rolling30dTopModel} (${formatNumber(stats.rolling30dTokens)})`
+      ? truncateText(`${stats.rolling30dTopModel} (${formatNumber(stats.rolling30dTokens)})`, MAX_STAT_VALUE_CHARS)
       : formatNumber(stats.rolling30dTokens);
 
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth,
+        PADDING + col1Width,
         y,
         'RECENT USE (LAST 30 DAYS)',
         recent30Label,
@@ -203,7 +215,7 @@ export class SvgRenderer implements IRenderer {
     // Card 3: Longest Streak
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth * 2,
+        PADDING + col1Width + col2Width,
         y,
         'LONGEST STREAK',
         `${stats.longestStreak} days`,
@@ -214,7 +226,7 @@ export class SvgRenderer implements IRenderer {
     // Card 4: Current Streak
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth * 3,
+        PADDING + col1Width + col2Width + col3Width,
         y,
         'CURRENT STREAK',
         `${stats.currentStreak} days`,
@@ -224,7 +236,9 @@ export class SvgRenderer implements IRenderer {
 
     y += 56 + SECTION_GAP;
 
-    // === SECONDARY STATS ROW (additional useful data) ===
+    // === SECONDARY STATS ROW (even 4-column — short values, no overflow risk) ===
+    const evenCardWidth = contentWidth / 4;
+
     sections.push(
       `<line x1="${PADDING}" y1="${y - SECTION_GAP / 2}" x2="${PADDING + contentWidth}" y2="${y - SECTION_GAP / 2}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
     );
@@ -241,7 +255,7 @@ export class SvgRenderer implements IRenderer {
 
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth,
+        PADDING + evenCardWidth,
         y,
         'CACHE HIT RATE',
         `${(stats.cacheHitRate * 100).toFixed(1)}%`,
@@ -251,7 +265,7 @@ export class SvgRenderer implements IRenderer {
 
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth * 2,
+        PADDING + evenCardWidth * 2,
         y,
         'ACTIVE DAYS',
         `${stats.activeDays} / ${stats.totalDays}`,
@@ -261,7 +275,7 @@ export class SvgRenderer implements IRenderer {
 
     sections.push(
       renderBottomStat(
-        PADDING + cardWidth * 3,
+        PADDING + evenCardWidth * 3,
         y,
         'AVG DAILY TOKENS',
         formatNumber(stats.averageDailyTokens),
