@@ -33,4 +33,8 @@ export {
   topModels,
   aggregate,
   mergeProviderData,
+  computeDeltas,
+  buildCompareOutput,
+  parseCompareRange,
+  computePreviousPeriod,
 } from './aggregation';
