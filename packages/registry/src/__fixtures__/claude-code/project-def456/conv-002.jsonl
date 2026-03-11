@@ -1,0 +1,2 @@
+{"type":"assistant","timestamp":"2025-06-15T14:00:00Z","message":{"role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"Another project"}],"usage":{"input_tokens":1000,"output_tokens":600,"cache_read_input_tokens":100,"cache_creation_input_tokens":50}}}
+{"type":"assistant","timestamp":"2025-06-17T08:00:00Z","message":{"role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"Day 3"}],"usage":{"input_tokens":800,"output_tokens":400,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
