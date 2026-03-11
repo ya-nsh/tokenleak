@@ -205,10 +205,9 @@ describe('run', () => {
   });
 
   test('throws TokenleakError for unsupported format', async () => {
-    // Use terminal format which is not yet implemented
     let thrown: unknown;
     try {
-      await run({ format: 'terminal' });
+      await run({ format: 'pdf' });
     } catch (error: unknown) {
       thrown = error;
     }

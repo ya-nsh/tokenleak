@@ -85,11 +85,13 @@ describe('getModelPricing', () => {
     expect(getModelPricing('totally-unknown-model')).toBeUndefined();
   });
 
-  test('pricing table contains all 14 expected models', () => {
+  test('pricing table contains all expected models', () => {
     const expected = [
       'claude-3-haiku', 'claude-3-sonnet', 'claude-3-opus',
       'claude-3.5-haiku', 'claude-3.5-sonnet',
+      'claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5',
       'claude-sonnet-4', 'claude-opus-4',
+      'claude-sonnet-4-6', 'claude-opus-4-6',
       'gpt-4o', 'gpt-4o-mini',
       'o1', 'o1-mini', 'o3', 'o3-mini', 'o4-mini',
     ];

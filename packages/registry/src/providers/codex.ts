@@ -159,53 +159,58 @@ export class CodexProvider implements IProvider {
     for (const file of files) {
       const filePath = join(this.sessionsDir, file);
 
-      for await (const record of splitJsonlRecords(filePath)) {
-        const event = parseResponseEvent(record);
-        if (!event) {
-          continue;
-        }
+      try {
+        for await (const record of splitJsonlRecords(filePath)) {
+          const event = parseResponseEvent(record);
+          if (!event) {
+            continue;
+          }
 
-        const date = extractDate(event.timestamp);
-        if (!date || !isInRange(date, range)) {
-          continue;
-        }
+          const date = extractDate(event.timestamp);
+          if (!date || !isInRange(date, range)) {
+            continue;
+          }
 
-        const normalizedModel = normalizeModelName(
-          compactModelDateSuffix(event.model),
-        );
-        const inputTokens = event.usage.input_tokens;
-        const outputTokens = event.usage.output_tokens;
-        const cacheReadTokens = 0;
-        const cacheWriteTokens = 0;
-        const cost = estimateCost(
-          normalizedModel,
-          inputTokens,
-          outputTokens,
-          cacheReadTokens,
-          cacheWriteTokens,
-        );
+          const normalizedModel = normalizeModelName(
+            compactModelDateSuffix(event.model),
+          );
+          const inputTokens = event.usage.input_tokens;
+          const outputTokens = event.usage.output_tokens;
+          const cacheReadTokens = 0;
+          const cacheWriteTokens = 0;
+          const cost = estimateCost(
+            normalizedModel,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+          );
 
-        if (!dailyMap.has(date)) {
-          dailyMap.set(date, new Map());
-        }
-        const modelMap = dailyMap.get(date)!;
+          if (!dailyMap.has(date)) {
+            dailyMap.set(date, new Map());
+          }
+          const modelMap = dailyMap.get(date)!;
 
-        if (!modelMap.has(normalizedModel)) {
-          modelMap.set(normalizedModel, {
-            model: normalizedModel,
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            totalTokens: 0,
-            cost: 0,
-          });
+          if (!modelMap.has(normalizedModel)) {
+            modelMap.set(normalizedModel, {
+              model: normalizedModel,
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+              totalTokens: 0,
+              cost: 0,
+            });
+          }
+          const breakdown = modelMap.get(normalizedModel)!;
+          breakdown.inputTokens += inputTokens;
+          breakdown.outputTokens += outputTokens;
+          breakdown.totalTokens += inputTokens + outputTokens;
+          breakdown.cost += cost;
         }
-        const breakdown = modelMap.get(normalizedModel)!;
-        breakdown.inputTokens += inputTokens;
-        breakdown.outputTokens += outputTokens;
-        breakdown.totalTokens += inputTokens + outputTokens;
-        breakdown.cost += cost;
+      } catch {
+        // Skip files that fail to parse
+        continue;
       }
     }
 

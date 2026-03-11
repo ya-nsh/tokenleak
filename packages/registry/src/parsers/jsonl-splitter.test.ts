@@ -59,25 +59,19 @@ describe('splitJsonlRecords', () => {
     });
   });
 
-  test('malformed JSON throws with file path and line number', async () => {
+  test('malformed JSON lines are skipped', async () => {
     const filePath = join(FIXTURES_DIR, 'malformed.jsonl');
-
-    try {
-      await collectAll(splitJsonlRecords(filePath));
-      throw new Error('Expected an error to be thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toContain(
-        `Malformed JSON in ${filePath} at line 2`,
-      );
-    }
+    // malformed.jsonl has valid JSON on line 1 and bad JSON on line 2
+    const records = await collectAll(splitJsonlRecords(filePath));
+    // Only the valid records should be yielded, bad ones are skipped
+    expect(records).toHaveLength(2);
+    expect(records[0]).toEqual({ id: 1, model: 'claude-3-opus', tokens: 1500 });
+    expect(records[1]).toEqual({ id: 3, model: 'gpt-4', tokens: 2000 });
   });
 
-  test('oversized record throws with file path and line number', async () => {
-    // Create a temporary file with an oversized record
+  test('oversized records are skipped', async () => {
     const tmpPath = join(FIXTURES_DIR, '_oversized_temp.jsonl');
     const smallRecord = JSON.stringify({ id: 1 });
-    // Create a record larger than 50 bytes to test with a low limit
     const largeRecord = JSON.stringify({ data: 'x'.repeat(100) });
     await Bun.write(tmpPath, `${smallRecord}\n${largeRecord}\n`);
 
@@ -85,15 +79,10 @@ describe('splitJsonlRecords', () => {
     try {
       process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'] = '50';
 
-      try {
-        await collectAll(splitJsonlRecords(tmpPath));
-        throw new Error('Expected an error to be thrown');
-      } catch (err) {
-        expect(err).toBeInstanceOf(Error);
-        expect((err as Error).message).toMatch(
-          /Oversized JSONL record in .+_oversized_temp\.jsonl at line 2/,
-        );
-      }
+      const records = await collectAll(splitJsonlRecords(tmpPath));
+      // Only the small record should be yielded, oversized one is skipped
+      expect(records).toHaveLength(1);
+      expect(records[0]).toEqual({ id: 1 });
     } finally {
       if (originalEnv === undefined) {
         delete process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'];
