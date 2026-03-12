@@ -56,6 +56,30 @@ describe('computeDateRange', () => {
     const range = computeDateRange({ since: '2025-01-01', until: '2025-06-15', days: 10 });
     expect(range.since).toBe('2025-01-01');
   });
+
+  test('throws on invalid --since format', () => {
+    expect(() => computeDateRange({ since: 'not-a-date', until: '2025-06-15' })).toThrow(
+      'Invalid --since date',
+    );
+  });
+
+  test('throws on invalid --until format', () => {
+    expect(() => computeDateRange({ until: '01-31-2025' })).toThrow(
+      'Invalid --until date',
+    );
+  });
+
+  test('throws on impossible date like 2025-02-30', () => {
+    expect(() => computeDateRange({ since: '2025-02-30', until: '2025-06-15' })).toThrow(
+      'Invalid --since date',
+    );
+  });
+
+  test('throws when --since is after --until', () => {
+    expect(() =>
+      computeDateRange({ since: '2025-06-01', until: '2025-01-01' }),
+    ).toThrow('must not be after');
+  });
 });
 
 // ─── resolveConfig ──────────────────────────────────────────────────────

@@ -372,7 +372,9 @@ describe('mergeProviderData', () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.totalTokens).toBe(300);
     expect(result[0]!.cost).toBeCloseTo(0.03);
-    expect(result[0]!.models).toHaveLength(2);
+    // Both use same model (claude-3-opus), so they get aggregated into 1 entry
+    expect(result[0]!.models).toHaveLength(1);
+    expect(result[0]!.models[0]!.totalTokens).toBe(300);
   });
 
   test('multiple providers different dates', () => {

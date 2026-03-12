@@ -51,6 +51,15 @@ export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[numb
   }
 }
 
+const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validate that a date string is YYYY-MM-DD and represents a real date. */
+function isValidDate(dateStr: string): boolean {
+  if (!DATE_FORMAT.test(dateStr)) return false;
+  const d = new Date(dateStr + 'T00:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
+}
+
 /** Compute the date range from CLI flags. */
 export function computeDateRange(args: {
   since?: string;
@@ -58,6 +67,19 @@ export function computeDateRange(args: {
   days?: number;
 }): DateRange {
   const until = args.until ?? new Date().toISOString().slice(0, 10);
+
+  if (args.until && !isValidDate(args.until)) {
+    throw new TokenleakError(
+      `Invalid --until date: "${args.until}". Use YYYY-MM-DD format.`,
+    );
+  }
+
+  if (args.since && !isValidDate(args.since)) {
+    throw new TokenleakError(
+      `Invalid --since date: "${args.since}". Use YYYY-MM-DD format.`,
+    );
+  }
+
   let since: string;
 
   if (args.since) {
@@ -67,6 +89,12 @@ export function computeDateRange(args: {
     const d = new Date(until);
     d.setDate(d.getDate() - daysBack);
     since = d.toISOString().slice(0, 10);
+  }
+
+  if (since > until) {
+    throw new TokenleakError(
+      `--since (${since}) must not be after --until (${until}).`,
+    );
   }
 
   return { since, until };
@@ -313,8 +341,13 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     throw new TokenleakError('No provider data found');
   }
 
-  // Handle --compare mode
+  // Handle --compare mode (currently only supports JSON output)
   if (config.compare) {
+    if (config.format !== 'json' && config.format !== 'terminal') {
+      process.stderr.write(
+        `Warning: --compare only supports JSON output. Ignoring --format ${config.format}.\n`,
+      );
+    }
     const compareOutput = await runCompare(
       config.compare,
       dateRange,
@@ -363,6 +396,17 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Live server mode
   if (config.liveServer) {
+    const ignoredFlags: string[] = [];
+    if (config.output) ignoredFlags.push('--output');
+    if (config.clipboard) ignoredFlags.push('--clipboard');
+    if (config.open) ignoredFlags.push('--open');
+    if (config.upload) ignoredFlags.push('--upload');
+    if (ignoredFlags.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignoredFlags.join(', ')} ignored in --live-server mode.\n`,
+      );
+    }
+
     const renderOptions: RenderOptions = {
       format: config.format,
       theme: config.theme,
