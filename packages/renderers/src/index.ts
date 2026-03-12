@@ -3,3 +3,5 @@ export { JsonRenderer } from './json/index';
 export { SvgRenderer, renderWrappedCard, renderBadge } from './svg/index';
 export { PngRenderer } from './png/index';
 export { TerminalRenderer } from './terminal/index';
+export { startLiveServer } from './live/live-server';
+export type { LiveServerOptions } from './live/live-server';
