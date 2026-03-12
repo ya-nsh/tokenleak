@@ -4,7 +4,7 @@ const DEFAULT_LIMIT = 10;
 
 /**
  * Aggregates model usage across all days, returns top N models by token count
- * with percentage of total.
+ * with percentage share of total in the 0..100 range.
  */
 export function topModels(
   daily: DailyUsage[],
@@ -35,7 +35,7 @@ export function topModels(
       model,
       tokens,
       cost,
-      percentage: grandTotal > 0 ? tokens / grandTotal : 0,
+      percentage: grandTotal > 0 ? (tokens / grandTotal) * 100 : 0,
     });
   }
 

@@ -316,7 +316,7 @@ describe('topModels', () => {
     const result = topModels(days);
     expect(result).toHaveLength(1);
     expect(result[0]!.model).toBe('claude-3-opus');
-    expect(result[0]!.percentage).toBe(1);
+    expect(result[0]!.percentage).toBe(100);
   });
 
   test('multiple models sorted by tokens', () => {
@@ -332,6 +332,8 @@ describe('topModels', () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.model).toBe('claude-3-opus');
     expect(result[1]!.model).toBe('claude-3-haiku');
+    expect(result[0]!.percentage).toBeCloseTo(66.666, 2);
+    expect(result[1]!.percentage).toBeCloseTo(33.333, 2);
   });
 
   test('limit restricts results', () => {

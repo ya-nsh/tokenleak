@@ -265,11 +265,6 @@ export function renderTerminalCardSvg(
   let y = 0;
   const sections: string[] = [];
 
-  // Font import
-  sections.push(
-    `<defs><style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');</style></defs>`,
-  );
-
   // Background
   sections.push(
     `<rect width="${cardWidth}" height="__CARD_HEIGHT__" rx="12" fill="${escapeXml(theme.bg)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
@@ -465,7 +460,7 @@ export function renderTerminalCardSvg(
   const svg = sections.join('\n').replace('__CARD_HEIGHT__', String(cardHeight));
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${cardWidth}" height="${cardHeight}" viewBox="0 0 ${cardWidth} ${cardHeight}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${cardWidth}" height="${cardHeight}" viewBox="0 0 ${cardWidth} ${cardHeight}" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">`,
     svg,
     '</svg>',
   ].join('\n');
