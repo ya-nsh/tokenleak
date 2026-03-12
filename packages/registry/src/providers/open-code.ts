@@ -144,8 +144,23 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
 }
 
 function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
-  const db = new Database(dbPath, { readonly: true });
+  let db: InstanceType<typeof Database>;
   try {
+    db = new Database(dbPath, { readonly: true });
+  } catch {
+    // Database file is corrupted or inaccessible
+    return [];
+  }
+
+  try {
+    // Verify the expected schema exists before querying
+    const tables = db.query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='messages'",
+    ).all() as { name: string }[];
+    if (tables.length === 0) {
+      return [];
+    }
+
     const rows = db.query(
       'SELECT model, input_tokens, output_tokens, created_at FROM messages WHERE role = \'assistant\'',
     ).all() as SqliteRow[];
@@ -163,6 +178,9 @@ function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
       }
     }
     return records;
+  } catch {
+    // Incompatible schema or query error — return empty rather than crash
+    return [];
   } finally {
     db.close();
   }
@@ -173,27 +191,32 @@ function loadFromJson(sessionsDir: string, range: DateRange): UsageRecord[] {
   const records: UsageRecord[] = [];
 
   for (const file of files) {
-    const content = readFileSync(join(sessionsDir, file), 'utf-8');
-    const session = JSON.parse(content) as JsonSession;
+    try {
+      const content = readFileSync(join(sessionsDir, file), 'utf-8');
+      const session = JSON.parse(content) as JsonSession;
 
-    if (!Array.isArray(session.messages)) {
-      continue;
-    }
-
-    for (const msg of session.messages) {
-      if (msg.role !== 'assistant' || !msg.usage) {
+      if (!Array.isArray(session.messages)) {
         continue;
       }
 
-      const date = extractDate(msg.created_at);
-      if (isInRange(date, range)) {
-        records.push({
-          date,
-          model: msg.model,
-          inputTokens: msg.usage.input_tokens,
-          outputTokens: msg.usage.output_tokens,
-        });
+      for (const msg of session.messages) {
+        if (msg.role !== 'assistant' || !msg.usage) {
+          continue;
+        }
+
+        const date = extractDate(msg.created_at);
+        if (isInRange(date, range)) {
+          records.push({
+            date,
+            model: msg.model,
+            inputTokens: msg.usage.input_tokens,
+            outputTokens: msg.usage.output_tokens,
+          });
+        }
       }
+    } catch {
+      // Skip files that fail to read or parse
+      continue;
     }
   }
 

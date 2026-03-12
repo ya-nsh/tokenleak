@@ -10,6 +10,8 @@ const TEMP_ROOT = join(tmpdir(), `opencode-test-${Date.now()}`);
 const SQLITE_DIR = join(TEMP_ROOT, 'sqlite-base');
 const JSON_DIR = join(TEMP_ROOT, 'json-base');
 const EMPTY_DB_DIR = join(TEMP_ROOT, 'empty-db-base');
+const BAD_SCHEMA_DIR = join(TEMP_ROOT, 'bad-schema-base');
+const BAD_JSON_DIR = join(TEMP_ROOT, 'bad-json-base');
 const MISSING_DIR = join(TEMP_ROOT, 'nonexistent');
 
 const DEFAULT_RANGE: DateRange = {
@@ -102,6 +104,26 @@ beforeAll(() => {
     )
   `);
   emptyDb.close();
+
+  // -- Bad schema DB fixture (no messages table) --
+  mkdirSync(BAD_SCHEMA_DIR, { recursive: true });
+  const badDb = new Database(join(BAD_SCHEMA_DIR, 'sessions.db'));
+  badDb.exec('CREATE TABLE other_table (id TEXT PRIMARY KEY)');
+  badDb.close();
+
+  // -- Bad JSON fixture (malformed files) --
+  mkdirSync(join(BAD_JSON_DIR, 'sessions'), { recursive: true });
+  writeFileSync(join(BAD_JSON_DIR, 'sessions', 'bad.json'), 'not valid json {{{');
+  writeFileSync(join(BAD_JSON_DIR, 'sessions', 'good.json'), JSON.stringify({
+    messages: [
+      {
+        model: 'gpt-4o',
+        role: 'assistant',
+        usage: { input_tokens: 100, output_tokens: 200 },
+        created_at: '2026-03-05T10:00:00Z',
+      },
+    ],
+  }));
 });
 
 afterAll(() => {
@@ -243,6 +265,23 @@ describe('OpenCodeProvider', () => {
       // claude-sonnet-4-20250514 should become claude-sonnet-4
       expect(allModels).toContain('claude-sonnet-4');
       expect(allModels).not.toContain('claude-sonnet-4-20250514');
+    });
+  });
+
+  describe('load — error handling', () => {
+    test('returns empty data when SQLite schema is incompatible', async () => {
+      const provider = new OpenCodeProvider(BAD_SCHEMA_DIR);
+      const data = await provider.load(DEFAULT_RANGE);
+      expect(data.daily).toEqual([]);
+      expect(data.totalTokens).toBe(0);
+    });
+
+    test('skips malformed JSON files and loads valid ones', async () => {
+      const provider = new OpenCodeProvider(BAD_JSON_DIR);
+      const data = await provider.load(DEFAULT_RANGE);
+      // Should load data from good.json, skip bad.json
+      expect(data.daily.length).toBe(1);
+      expect(data.totalTokens).toBe(300); // 100 + 200
     });
   });
 
