@@ -134,24 +134,24 @@ tokenleak --format json --upload gist
 
 ## All flags
 
-| Flag | Alias | Default | Description |
-|------|-------|---------|-------------|
-| `--format` | `-f` | `terminal` | Output format: `json`, `svg`, `png`, `terminal` |
-| `--theme` | `-t` | `dark` | Colour theme: `dark`, `light` |
-| `--since` | `-s` | | Start date (`YYYY-MM-DD`). Overrides `--days` |
-| `--until` | `-u` | today | End date (`YYYY-MM-DD`) |
-| `--days` | `-d` | `90` | Number of days to look back |
-| `--output` | `-o` | stdout | Output file path. Format is inferred from extension |
-| `--width` | `-w` | `80` | Terminal width for dashboard layout |
-| `--no-color` | | `false` | Strip ANSI escape codes from terminal output |
-| `--no-insights` | | `false` | Hide the insights panel |
-| `--compare` | | | Compare two date ranges. Use `auto` or `YYYY-MM-DD..YYYY-MM-DD` |
-| `--provider` | `-p` | all | Filter to specific provider(s), comma-separated |
-| `--clipboard` | | `false` | Copy output to clipboard after rendering |
-| `--open` | | `false` | Open output file in default app (requires `--output`) |
-| `--upload` | | | Upload output to a service. Supported: `gist` |
-| `--version` | | | Print version number |
-| `--help` | | | Print usage information |
+| Flag            | Alias | Default    | Description                                                     |
+| --------------- | ----- | ---------- | --------------------------------------------------------------- |
+| `--format`      | `-f`  | `terminal` | Output format: `json`, `svg`, `png`, `terminal`                 |
+| `--theme`       | `-t`  | `dark`     | Colour theme: `dark`, `light`                                   |
+| `--since`       | `-s`  |            | Start date (`YYYY-MM-DD`). Overrides `--days`                   |
+| `--until`       | `-u`  | today      | End date (`YYYY-MM-DD`)                                         |
+| `--days`        | `-d`  | `90`       | Number of days to look back                                     |
+| `--output`      | `-o`  | stdout     | Output file path. Format is inferred from extension             |
+| `--width`       | `-w`  | `80`       | Terminal width for dashboard layout                             |
+| `--no-color`    |       | `false`    | Strip ANSI escape codes from terminal output                    |
+| `--no-insights` |       | `false`    | Hide the insights panel                                         |
+| `--compare`     |       |            | Compare two date ranges. Use `auto` or `YYYY-MM-DD..YYYY-MM-DD` |
+| `--provider`    | `-p`  | all        | Filter to specific provider(s), comma-separated                 |
+| `--clipboard`   |       | `false`    | Copy output to clipboard after rendering                        |
+| `--open`        |       | `false`    | Open output file in default app (requires `--output`)           |
+| `--upload`      |       |            | Upload output to a service. Supported: `gist`                   |
+| `--version`     |       |            | Print version number                                            |
+| `--help`        |       |            | Print usage information                                         |
 
 ## Supported providers
 
@@ -159,30 +159,30 @@ tokenleak --format json --upload gist
 
 Reads JSONL conversation logs from the Claude Code projects directory. Each assistant message with a `usage` field is parsed for input/output/cache token counts.
 
-| | |
-|---|---|
-| **Data location** | `~/.claude/projects/*/*.jsonl` |
-| **Override** | Set `CLAUDE_CONFIG_DIR` environment variable |
-| **Provider name** | `claude-code` |
+|                   |                                              |
+| ----------------- | -------------------------------------------- |
+| **Data location** | `~/.claude/projects/*/*.jsonl`               |
+| **Override**      | Set `CLAUDE_CONFIG_DIR` environment variable |
+| **Provider name** | `claude-code`                                |
 
 ### Codex
 
 Reads JSONL session logs from the Codex sessions directory. Parses `response` events for token usage with cumulative delta extraction.
 
-| | |
-|---|---|
-| **Data location** | `~/.codex/sessions/*.jsonl` |
-| **Override** | Set `CODEX_HOME` environment variable |
-| **Provider name** | `codex` |
+|                   |                                       |
+| ----------------- | ------------------------------------- |
+| **Data location** | `~/.codex/sessions/*.jsonl`           |
+| **Override**      | Set `CODEX_HOME` environment variable |
+| **Provider name** | `codex`                               |
 
 ### Open Code
 
 Reads usage data from the Open Code SQLite database. Falls back to legacy JSON session files if no database is found.
 
-| | |
-|---|---|
-| **Data location** | `~/.opencode/sessions.db` (primary) or `~/.opencode/sessions/*.json` (fallback) |
-| **Provider name** | `open-code` |
+|                   |                                                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Data location** | `~/.local/share/opencode/storage/message/<session>/*.json` (primary), `~/.opencode/opencode.db` or `~/.opencode/sessions.db` (legacy), `~/.opencode/sessions/*.json` (legacy fallback) |
+| **Provider name** | `open-code`                                                                                                                                                                            |
 
 ## Output formats
 
@@ -219,24 +219,30 @@ Structured JSON output containing:
           "cacheReadTokens": 2000,
           "cacheWriteTokens": 500,
           "totalTokens": 22500,
-          "cost": 0.0825
-        }
+          "cost": 0.0825,
+        },
         // ...
       ],
       "models": [
-        { "model": "claude-sonnet-4", "inputTokens": 10000, "outputTokens": 3000, "totalTokens": 13000, "cost": 0.075 }
+        {
+          "model": "claude-sonnet-4",
+          "inputTokens": 10000,
+          "outputTokens": 3000,
+          "totalTokens": 13000,
+          "cost": 0.075,
+        },
       ],
       "totalTokens": 22500,
-      "totalCost": 0.0825
-    }
+      "totalCost": 0.0825,
+    },
   ],
   "aggregated": {
     "currentStreak": 12,
     "longestStreak": 45,
     "totalTokens": 1500000,
-    "totalCost": 52.50,
+    "totalCost": 52.5,
     // ... rolling windows, peaks, averages, day-of-week, top models
-  }
+  },
 }
 ```
 
@@ -274,14 +280,14 @@ All fields are optional. Only include the ones you want to override.
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TOKENLEAK_FORMAT` | `terminal` | Default output format |
-| `TOKENLEAK_THEME` | `dark` | Default colour theme |
-| `TOKENLEAK_DAYS` | `90` | Default lookback period in days |
+| Variable                           | Default            | Description                                             |
+| ---------------------------------- | ------------------ | ------------------------------------------------------- |
+| `TOKENLEAK_FORMAT`                 | `terminal`         | Default output format                                   |
+| `TOKENLEAK_THEME`                  | `dark`             | Default colour theme                                    |
+| `TOKENLEAK_DAYS`                   | `90`               | Default lookback period in days                         |
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
-| `CODEX_HOME` | `~/.codex` | Codex home directory |
+| `CLAUDE_CONFIG_DIR`                | `~/.claude`        | Claude Code configuration directory                     |
+| `CODEX_HOME`                       | `~/.codex`         | Codex home directory                                    |
 
 ## What Tokenleak tracks
 
@@ -309,13 +315,13 @@ It then computes:
 
 Tokenleak includes pricing for these model families:
 
-| Family | Models |
-|--------|--------|
-| Claude 3 | `claude-3-haiku`, `claude-3-sonnet`, `claude-3-opus` |
-| Claude 3.5 | `claude-3.5-haiku`, `claude-3.5-sonnet` |
-| Claude 4 | `claude-sonnet-4`, `claude-opus-4` |
-| GPT-4o | `gpt-4o`, `gpt-4o-mini` |
-| o-series | `o1`, `o1-mini`, `o3`, `o3-mini`, `o4-mini` |
+| Family     | Models                                               |
+| ---------- | ---------------------------------------------------- |
+| Claude 3   | `claude-3-haiku`, `claude-3-sonnet`, `claude-3-opus` |
+| Claude 3.5 | `claude-3.5-haiku`, `claude-3.5-sonnet`              |
+| Claude 4   | `claude-sonnet-4`, `claude-opus-4`                   |
+| GPT-4o     | `gpt-4o`, `gpt-4o-mini`                              |
+| o-series   | `o1`, `o1-mini`, `o3`, `o3-mini`, `o4-mini`          |
 
 Model names with date suffixes (e.g. `claude-sonnet-4-20250514`) are automatically normalised. Unknown models show `$0.00` cost but tokens are still tracked.
 

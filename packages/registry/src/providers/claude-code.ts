@@ -14,7 +14,7 @@ import { normalizeModelName } from '../models/normalizer';
 import { estimateCost } from '../models/cost';
 import { isInRange } from '../utils';
 
-const DEFAULT_BASE_DIR = join(homedir(), '.claude', 'projects');
+const DEFAULT_CONFIG_DIR = join(homedir(), '.claude');
 
 const CLAUDE_CODE_COLORS: ProviderColors = {
   primary: '#ff6b35',
@@ -29,6 +29,16 @@ interface UsageRecord {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  messageId?: string;
+}
+
+function resolveBaseDir(baseDir?: string): string {
+  if (baseDir) {
+    return baseDir;
+  }
+
+  const configDir = process.env['CLAUDE_CONFIG_DIR'];
+  return join(configDir && configDir.length > 0 ? configDir : DEFAULT_CONFIG_DIR, 'projects');
 }
 
 /**
@@ -97,9 +107,11 @@ function extractUsage(record: unknown): UsageRecord | null {
   const cacheReadTokens =
     typeof u['cache_read_input_tokens'] === 'number' ? u['cache_read_input_tokens'] : 0;
   const cacheWriteTokens =
-    typeof u['cache_creation_input_tokens'] === 'number'
-      ? u['cache_creation_input_tokens']
-      : 0;
+    typeof u['cache_creation_input_tokens'] === 'number' ? u['cache_creation_input_tokens'] : 0;
+  const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
+  if (totalTokens === 0) {
+    return null;
+  }
 
   // Extract YYYY-MM-DD from ISO timestamp
   const date = timestamp.slice(0, 10);
@@ -114,6 +126,7 @@ function extractUsage(record: unknown): UsageRecord | null {
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
+    messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
   };
 }
 
@@ -158,7 +171,8 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
     mb.outputTokens += rec.outputTokens;
     mb.cacheReadTokens += rec.cacheReadTokens;
     mb.cacheWriteTokens += rec.cacheWriteTokens;
-    mb.totalTokens += rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
+    mb.totalTokens +=
+      rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
     mb.cost += cost;
   }
 
@@ -205,7 +219,7 @@ export class ClaudeCodeProvider implements IProvider {
   private readonly baseDir: string;
 
   constructor(baseDir?: string) {
-    this.baseDir = baseDir ?? DEFAULT_BASE_DIR;
+    this.baseDir = resolveBaseDir(baseDir);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -221,11 +235,18 @@ export class ClaudeCodeProvider implements IProvider {
     const allRecords: UsageRecord[] = [];
 
     for (const file of files) {
+      const latestRecordsByMessageId = new Map<string, UsageRecord>();
+      const anonymousRecords: UsageRecord[] = [];
+
       try {
         for await (const record of splitJsonlRecords(file)) {
           const usage = extractUsage(record);
           if (usage !== null && isInRange(usage.date, range)) {
-            allRecords.push(usage);
+            if (usage.messageId) {
+              latestRecordsByMessageId.set(usage.messageId, usage);
+            } else {
+              anonymousRecords.push(usage);
+            }
           }
         }
       } catch {
@@ -233,6 +254,8 @@ export class ClaudeCodeProvider implements IProvider {
         // prevent loading data from other files
         continue;
       }
+
+      allRecords.push(...latestRecordsByMessageId.values(), ...anonymousRecords);
     }
 
     const daily = buildDailyUsage(allRecords);
