@@ -9,6 +9,7 @@ import type { DateRange } from '@tokenleak/core';
 const TEMP_ROOT = join(tmpdir(), `opencode-test-${Date.now()}`);
 const SQLITE_DIR = join(TEMP_ROOT, 'sqlite-base');
 const JSON_DIR = join(TEMP_ROOT, 'json-base');
+const CURRENT_DIR = join(TEMP_ROOT, 'current-base');
 const EMPTY_DB_DIR = join(TEMP_ROOT, 'empty-db-base');
 const BAD_SCHEMA_DIR = join(TEMP_ROOT, 'bad-schema-base');
 const BAD_JSON_DIR = join(TEMP_ROOT, 'bad-json-base');
@@ -89,6 +90,81 @@ beforeAll(() => {
   writeFileSync(join(JSON_DIR, 'sessions', 'session1.json'), JSON.stringify(session1));
   writeFileSync(join(JSON_DIR, 'sessions', 'session2.json'), JSON.stringify(session2));
 
+  // -- Current storage fixture --
+  mkdirSync(join(CURRENT_DIR, 'storage', 'message', 'ses-current-1'), { recursive: true });
+  writeFileSync(
+    join(CURRENT_DIR, 'storage', 'message', 'ses-current-1', 'msg-user.json'),
+    JSON.stringify({
+      id: 'msg-user',
+      sessionID: 'ses-current-1',
+      role: 'user',
+      time: { created: 1772704800000 },
+    }),
+  );
+  writeFileSync(
+    join(CURRENT_DIR, 'storage', 'message', 'ses-current-1', 'msg-assistant-1.json'),
+    JSON.stringify({
+      id: 'msg-assistant-1',
+      sessionID: 'ses-current-1',
+      role: 'assistant',
+      time: { created: 1772704860000, completed: 1772704875000 },
+      modelID: 'glm-4.7-free',
+      providerID: 'opencode',
+      cost: 0.42,
+      tokens: {
+        input: 100,
+        output: 20,
+        reasoning: 0,
+        cache: {
+          read: 30,
+          write: 5,
+        },
+      },
+    }),
+  );
+  writeFileSync(
+    join(CURRENT_DIR, 'storage', 'message', 'ses-current-1', 'msg-assistant-2.json'),
+    JSON.stringify({
+      id: 'msg-assistant-2',
+      sessionID: 'ses-current-1',
+      role: 'assistant',
+      time: { created: 1772791260000, completed: 1772791270000 },
+      modelID: 'gpt-4o',
+      providerID: 'openai',
+      cost: 0.15,
+      tokens: {
+        input: 40,
+        output: 10,
+        reasoning: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+    }),
+  );
+  writeFileSync(
+    join(CURRENT_DIR, 'storage', 'message', 'ses-current-1', 'msg-assistant-aborted.json'),
+    JSON.stringify({
+      id: 'msg-assistant-aborted',
+      sessionID: 'ses-current-1',
+      role: 'assistant',
+      time: { created: 1772791300000 },
+      modelID: 'gpt-4o',
+      providerID: 'openai',
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+    }),
+  );
+
   // -- Empty DB fixture --
   mkdirSync(EMPTY_DB_DIR, { recursive: true });
   const emptyDb = new Database(join(EMPTY_DB_DIR, 'sessions.db'));
@@ -114,16 +190,19 @@ beforeAll(() => {
   // -- Bad JSON fixture (malformed files) --
   mkdirSync(join(BAD_JSON_DIR, 'sessions'), { recursive: true });
   writeFileSync(join(BAD_JSON_DIR, 'sessions', 'bad.json'), 'not valid json {{{');
-  writeFileSync(join(BAD_JSON_DIR, 'sessions', 'good.json'), JSON.stringify({
-    messages: [
-      {
-        model: 'gpt-4o',
-        role: 'assistant',
-        usage: { input_tokens: 100, output_tokens: 200 },
-        created_at: '2026-03-05T10:00:00Z',
-      },
-    ],
-  }));
+  writeFileSync(
+    join(BAD_JSON_DIR, 'sessions', 'good.json'),
+    JSON.stringify({
+      messages: [
+        {
+          model: 'gpt-4o',
+          role: 'assistant',
+          usage: { input_tokens: 100, output_tokens: 200 },
+          created_at: '2026-03-05T10:00:00Z',
+        },
+      ],
+    }),
+  );
 });
 
 afterAll(() => {
@@ -139,6 +218,11 @@ describe('OpenCodeProvider', () => {
 
     test('returns true when sessions/ directory exists', async () => {
       const provider = new OpenCodeProvider(JSON_DIR);
+      expect(await provider.isAvailable()).toBe(true);
+    });
+
+    test('returns true when current storage/message directory exists', async () => {
+      const provider = new OpenCodeProvider(CURRENT_DIR);
       expect(await provider.isAvailable()).toBe(true);
     });
 
@@ -216,6 +300,31 @@ describe('OpenCodeProvider', () => {
       // session2: 300+500 = 800
       // total = 2200
       expect(data.totalTokens).toBe(2200);
+    });
+  });
+
+  describe('load — current storage layout', () => {
+    test('loads assistant usage from storage/message files', async () => {
+      const provider = new OpenCodeProvider(CURRENT_DIR);
+      const data = await provider.load(DEFAULT_RANGE);
+
+      expect(data.provider).toBe('open-code');
+      expect(data.daily).toHaveLength(2);
+      expect(data.totalTokens).toBe(205);
+      expect(data.totalCost).toBeCloseTo(0.57, 10);
+
+      const march5 = data.daily.find((d) => d.date === '2026-03-05');
+      expect(march5).toBeDefined();
+      expect(march5!.inputTokens).toBe(100);
+      expect(march5!.outputTokens).toBe(20);
+      expect(march5!.cacheReadTokens).toBe(30);
+      expect(march5!.cacheWriteTokens).toBe(5);
+      expect(march5!.models[0]!.model).toBe('glm-4.7-free');
+
+      const march6 = data.daily.find((d) => d.date === '2026-03-06');
+      expect(march6).toBeDefined();
+      expect(march6!.totalTokens).toBe(50);
+      expect(march6!.models[0]!.cost).toBeCloseTo(0.15, 10);
     });
   });
 

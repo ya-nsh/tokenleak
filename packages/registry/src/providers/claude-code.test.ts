@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'path';
 import { ClaudeCodeProvider } from './claude-code';
 import type { DateRange } from '@tokenleak/core';
@@ -47,11 +49,7 @@ describe('ClaudeCodeProvider', () => {
 
       // Fixture has data on 2025-06-15, 2025-06-16, 2025-06-17
       expect(data.daily).toHaveLength(3);
-      expect(data.daily.map((d) => d.date)).toEqual([
-        '2025-06-15',
-        '2025-06-16',
-        '2025-06-17',
-      ]);
+      expect(data.daily.map((d) => d.date)).toEqual(['2025-06-15', '2025-06-16', '2025-06-17']);
 
       // 2025-06-15: three assistant records (two from conv-001, one from conv-002)
       // All use claude-sonnet-4 (after normalization)
@@ -75,9 +73,7 @@ describe('ClaudeCodeProvider', () => {
       expect(day3.outputTokens).toBe(400);
 
       // Totals should sum up
-      expect(data.totalTokens).toBe(
-        data.daily.reduce((sum, d) => sum + d.totalTokens, 0),
-      );
+      expect(data.totalTokens).toBe(data.daily.reduce((sum, d) => sum + d.totalTokens, 0));
       expect(data.totalCost).toBeCloseTo(
         data.daily.reduce((sum, d) => sum + d.cost, 0),
         10,
@@ -119,13 +115,7 @@ describe('ClaudeCodeProvider', () => {
       // Check 2025-06-16 which has a single opus-4 record:
       // input=2000, output=1000, cacheRead=500, cacheWrite=200
       const day2 = data.daily.find((d) => d.date === '2025-06-16')!;
-      const expectedCost = estimateCost(
-        'claude-opus-4-20250514',
-        2000,
-        1000,
-        500,
-        200,
-      );
+      const expectedCost = estimateCost('claude-opus-4-20250514', 2000, 1000, 500, 200);
       expect(day2.cost).toBeCloseTo(expectedCost, 10);
     });
   });
@@ -173,6 +163,136 @@ describe('ClaudeCodeProvider', () => {
       const day1 = data.daily.find((d) => d.date === '2025-06-15')!;
       // project-abc123: input 1500+500=2000, project-def456: input 1000
       expect(day1.inputTokens).toBe(3000);
+    });
+  });
+
+  describe('load — current Claude snapshots', () => {
+    it('keeps only the latest usage snapshot for a repeated assistant message id', async () => {
+      const tempRoot = join(tmpdir(), `claude-code-dedupe-${Date.now()}`);
+      const projectDir = join(tempRoot, 'project-a');
+      const sessionFile = join(projectDir, 'session.jsonl');
+
+      mkdirSync(projectDir, { recursive: true });
+      writeFileSync(
+        sessionFile,
+        [
+          JSON.stringify({
+            type: 'assistant',
+            timestamp: '2026-03-10T10:00:00.000Z',
+            message: {
+              id: 'msg-1',
+              model: 'claude-sonnet-4-20250514',
+              usage: {
+                input_tokens: 100,
+                output_tokens: 10,
+                cache_read_input_tokens: 20,
+                cache_creation_input_tokens: 5,
+              },
+            },
+          }),
+          JSON.stringify({
+            type: 'assistant',
+            timestamp: '2026-03-10T10:00:01.000Z',
+            message: {
+              id: 'msg-1',
+              model: 'claude-sonnet-4-20250514',
+              usage: {
+                input_tokens: 100,
+                output_tokens: 80,
+                cache_read_input_tokens: 20,
+                cache_creation_input_tokens: 5,
+              },
+            },
+          }),
+          JSON.stringify({
+            type: 'assistant',
+            timestamp: '2026-03-10T11:00:00.000Z',
+            message: {
+              id: 'msg-2',
+              model: 'claude-haiku-4-5-20251001',
+              usage: {
+                input_tokens: 50,
+                output_tokens: 25,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+              },
+            },
+          }),
+          JSON.stringify({
+            type: 'assistant',
+            timestamp: '2026-03-10T11:30:00.000Z',
+            message: {
+              id: 'msg-synthetic',
+              model: '<synthetic>',
+              usage: {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+              },
+            },
+          }),
+        ].join('\n'),
+      );
+
+      try {
+        const provider = new ClaudeCodeProvider(tempRoot);
+        const data = await provider.load({ since: '2026-03-10', until: '2026-03-10' });
+
+        expect(data.daily).toHaveLength(1);
+        expect(data.totalTokens).toBe(280);
+
+        const day = data.daily[0]!;
+        expect(day.inputTokens).toBe(150);
+        expect(day.outputTokens).toBe(105);
+        expect(day.cacheReadTokens).toBe(20);
+        expect(day.cacheWriteTokens).toBe(5);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('constructor', () => {
+    it('uses CLAUDE_CONFIG_DIR when no base directory override is provided', async () => {
+      const tempConfigDir = join(tmpdir(), `claude-config-${Date.now()}`);
+      const projectsDir = join(tempConfigDir, 'projects', 'project-a');
+      const sessionFile = join(projectsDir, 'session.jsonl');
+      const previous = process.env['CLAUDE_CONFIG_DIR'];
+
+      mkdirSync(projectsDir, { recursive: true });
+      writeFileSync(
+        sessionFile,
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2026-03-08T10:00:00.000Z',
+          message: {
+            id: 'env-msg-1',
+            model: 'claude-opus-4-20250514',
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        }),
+      );
+
+      process.env['CLAUDE_CONFIG_DIR'] = tempConfigDir;
+
+      try {
+        const provider = new ClaudeCodeProvider();
+        const data = await provider.load({ since: '2026-03-08', until: '2026-03-08' });
+        expect(data.totalTokens).toBe(15);
+      } finally {
+        if (previous === undefined) {
+          delete process.env['CLAUDE_CONFIG_DIR'];
+        } else {
+          process.env['CLAUDE_CONFIG_DIR'] = previous;
+        }
+        rmSync(tempConfigDir, { recursive: true, force: true });
+      }
     });
   });
 });
