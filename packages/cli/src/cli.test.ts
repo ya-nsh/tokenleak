@@ -266,7 +266,7 @@ describe('CLI invocation', () => {
     const exitCode = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('0.5.0');
+    expect(stdout).toContain('1.0.0');
   });
 
   test('no providers matching filter exits with code 1', async () => {
