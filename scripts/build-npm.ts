@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Build script that bundles the CLI into a single file for npm publishing.
- * Outputs to dist/tokenleak.js with sharp as an external dependency.
+ * Outputs to dist/tokenleak with sharp as an external dependency.
  */
 import { $ } from 'bun';
 
@@ -11,7 +11,7 @@ const result = await Bun.build({
   outdir: 'dist',
   target: 'bun',
   external: ['sharp'],
-  naming: 'tokenleak.js',
+  naming: 'tokenleak',
   minify: false,
 });
 
@@ -24,6 +24,6 @@ if (!result.success) {
 }
 
 // Make executable
-await $`chmod +x dist/tokenleak.js`;
+await $`chmod +x dist/tokenleak`;
 
-console.log(`Built dist/tokenleak.js (${(result.outputs[0].size / 1024).toFixed(1)} KB)`);
+console.log(`Built dist/tokenleak (${(result.outputs[0].size / 1024).toFixed(1)} KB)`);
