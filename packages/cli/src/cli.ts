@@ -25,7 +25,7 @@ import {
   OpenCodeProvider,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServer } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -88,6 +88,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   clipboard: boolean;
   open: boolean;
   upload?: string;
+  liveServer: boolean;
 } {
   const fileConfig = loadConfig();
   const envConfig = loadEnvOverrides();
@@ -106,6 +107,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     noInsights: boolean;
     clipboard: boolean;
     open: boolean;
+    liveServer: boolean;
   } = {
     format: 'terminal',
     theme: 'dark',
@@ -116,6 +118,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     noInsights: false,
     clipboard: false,
     open: false,
+    liveServer: false,
   };
 
   // Layer: defaults < file config < env vars < CLI flags
@@ -189,6 +192,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['upload'] !== undefined) {
     result.upload = cliArgs['upload'] as string;
+  }
+  if (cliArgs['liveServer'] !== undefined) {
+    result.liveServer = cliArgs['liveServer'] as boolean;
   }
 
   return result;
@@ -355,6 +361,30 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     aggregated: stats,
   };
 
+  // Live server mode
+  if (config.liveServer) {
+    const renderOptions: RenderOptions = {
+      format: config.format,
+      theme: config.theme,
+      width: config.width,
+      showInsights: !config.noInsights,
+      noColor: config.noColor,
+      output: config.output,
+    };
+    const { port } = await startLiveServer(output, renderOptions);
+    // Keep process alive until interrupted
+    await new Promise<void>((resolve) => {
+      process.on('SIGINT', () => {
+        process.stderr.write('\nShutting down server...\n');
+        resolve();
+      });
+      process.on('SIGTERM', () => {
+        resolve();
+      });
+    });
+    return;
+  }
+
   // Render
   const renderer = getRenderer(config.format);
   const renderOptions: RenderOptions = {
@@ -484,6 +514,12 @@ const main = defineCommand({
       type: 'string',
       description: 'Upload output to a service (supported: gist)',
     },
+    liveServer: {
+      type: 'boolean',
+      alias: 'L',
+      description: 'Start a local server with an interactive dashboard',
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -503,6 +539,7 @@ const main = defineCommand({
       if (args.clipboard) cliArgs['clipboard'] = true;
       if (args.open) cliArgs['open'] = true;
       if (args.upload !== undefined) cliArgs['upload'] = args.upload;
+      if (args.liveServer) cliArgs['liveServer'] = true;
 
       await run(cliArgs);
     } catch (error: unknown) {
