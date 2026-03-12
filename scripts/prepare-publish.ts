@@ -15,9 +15,9 @@ const publishPkg = {
   description: 'Visualise your AI coding-assistant token usage across providers — heatmaps, dashboards, and shareable cards.',
   type: 'module',
   bin: {
-    tokenleak: './tokenleak.js',
+    tokenleak: 'tokenleak',
   },
-  files: ['tokenleak.js'],
+  files: ['tokenleak'],
   dependencies: {
     sharp: '^0.34.0',
   },
@@ -37,7 +37,7 @@ const publishPkg = {
   ],
   repository: {
     type: 'git',
-    url: 'https://github.com/ya-nsh/tokenleak.git',
+    url: 'git+https://github.com/ya-nsh/tokenleak.git',
   },
   license: 'MIT',
   author: 'ya-nsh',
