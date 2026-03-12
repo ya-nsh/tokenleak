@@ -3,6 +3,7 @@ import { startLiveServer } from '../live-server';
 import {
   createOutput,
   createRenderOptions,
+  createProvider,
 } from '../../__test-fixtures__';
 
 describe('startLiveServer', () => {
@@ -67,32 +68,25 @@ describe('startLiveServer', () => {
       { ...createRenderOptions(), port: 0 },
     );
 
-    // Verify server is running
     const res = await fetch(`http://localhost:${port}/`);
     expect(res.status).toBe(200);
 
-    // Stop the server
     stop();
 
-    // After stopping, fetch should fail
     try {
       await fetch(`http://localhost:${port}/`);
-      // If we get here, the server hasn't fully stopped yet which is okay
-      // in some environments — the important thing is stop() doesn't throw
     } catch {
       // Expected: connection refused
     }
   });
 
   it('port fallback works when default port is taken', async () => {
-    // Start first server on a specific port
     const { port: port1, stop: stop1 } = await startLiveServer(
       createOutput(),
       { ...createRenderOptions(), port: 19876 },
     );
     cleanups.push(stop1);
 
-    // Start second server on the same port — should increment
     const { port: port2, stop: stop2 } = await startLiveServer(
       createOutput(),
       { ...createRenderOptions(), port: 19876 },
@@ -103,10 +97,32 @@ describe('startLiveServer', () => {
     expect(port2).not.toBe(port1);
     expect(port2).toBeGreaterThan(port1);
 
-    // Both should respond
     const res1 = await fetch(`http://localhost:${port1}/`);
     const res2 = await fetch(`http://localhost:${port2}/`);
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
+  });
+
+  it('HTML contains per-provider sections for multiple providers', async () => {
+    const multiOutput = createOutput({
+      providers: [
+        createProvider('claude-code', 'Claude Code'),
+        createProvider('codex', 'Codex'),
+      ],
+    });
+    const { port, stop } = await startLiveServer(
+      multiOutput,
+      { ...createRenderOptions(), port: 0 },
+    );
+    cleanups.push(stop);
+
+    const res = await fetch(`http://localhost:${port}/`);
+    const html = await res.text();
+
+    expect(html).toContain('Claude Code');
+    expect(html).toContain('Codex');
+    expect(html).toContain('provider-section');
+    expect(html).toContain('provider-dot');
+    expect(html).toContain('OVERALL');
   });
 });

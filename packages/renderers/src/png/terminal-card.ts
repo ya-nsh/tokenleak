@@ -1,6 +1,10 @@
-import type { TokenleakOutput, RenderOptions, DailyUsage } from '@tokenleak/core';
-import { getTheme } from '../svg/theme';
-import type { SvgTheme } from '../svg/theme';
+import type {
+  TokenleakOutput,
+  RenderOptions,
+  DailyUsage,
+  ProviderData,
+  ProviderColors,
+} from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
 
 // ── Layout constants ──────────────────────────────────────────────────
@@ -12,22 +16,22 @@ const CELL_SIZE = 16;
 const CELL_GAP = 4;
 const STAT_GRID_COLS = 3;
 const MODEL_BAR_HEIGHT = 8;
+const DAY_LABEL_WIDTH = 44;
+const MONTH_LABEL_HEIGHT = 24;
+const PROVIDER_SECTION_GAP = 36;
 
 const FONT_FAMILY =
   "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
 
-// ── Terminal card theme (extends SvgTheme with card-specific values) ──
+// ── Terminal card theme ───────────────────────────────────────────────
 interface CardTheme {
   bg: string;
   fg: string;
   muted: string;
   border: string;
   accent: string;
-  heatmap: readonly [string, string, string, string, string];
+  heatmapEmpty: string;
   barTrack: string;
-  barGradient: readonly [string, string];
-  shadow: string;
-  glow: string;
   titlebarBorder: string;
 }
 
@@ -39,11 +43,8 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
       muted: '#52525b',
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
-      heatmap: ['transparent', '#052e16', '#064e3b', '#047857', '#10b981'],
+      heatmapEmpty: '#1a1a1a',
       barTrack: '#1c1c1c',
-      barGradient: ['#064e3b', '#10b981'],
-      shadow: '0 20px 60px -12px rgba(0,0,0,0.7)',
-      glow: '0 0 80px rgba(16,185,129,0.1)',
       titlebarBorder: 'rgba(255,255,255,0.06)',
     };
   }
@@ -53,16 +54,54 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
     muted: '#a1a1aa',
     border: 'rgba(0,0,0,0.08)',
     accent: '#059669',
-    heatmap: ['transparent', '#d1fae5', '#6ee7b7', '#34d399', '#059669'],
+    heatmapEmpty: '#e4e4e7',
     barTrack: '#e5e5e5',
-    barGradient: ['#6ee7b7', '#059669'],
-    shadow: '0 20px 60px -12px rgba(0,0,0,0.15)',
-    glow: '0 0 80px rgba(5,150,105,0.08)',
     titlebarBorder: 'rgba(0,0,0,0.08)',
   };
 }
 
-// ── Heatmap quantile logic (reused from svg/heatmap.ts) ───────────────
+/**
+ * Generate a 5-level heatmap color scale from a provider's color gradient.
+ * Level 0 is empty (transparent), levels 1-4 interpolate between the gradient endpoints.
+ */
+function buildHeatmapScale(
+  colors: ProviderColors,
+  isDark: boolean,
+): [string, string, string, string, string] {
+  const [startHex, endHex] = colors.gradient;
+  const s = hexToRgb(startHex);
+  const e = hexToRgb(endHex);
+
+  // For dark theme: levels go from very dim to bright
+  // For light theme: levels go from very light to saturated
+  const opacities = isDark ? [0.15, 0.35, 0.6, 1.0] : [0.2, 0.4, 0.65, 1.0];
+
+  return [
+    'transparent',
+    ...opacities.map((t) => {
+      const r = Math.round(s.r + (e.r - s.r) * t);
+      const g = Math.round(s.g + (e.g - s.g) * t);
+      const b = Math.round(s.b + (e.b - s.b) * t);
+      return rgbToHex(r, g, b);
+    }),
+  ] as [string, string, string, string, string];
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number): string => n.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// ── Heatmap quantile logic ────────────────────────────────────────────
 function computeQuantiles(values: number[]): number[] {
   const nonZero = values.filter((v) => v > 0).sort((a, b) => a - b);
   if (nonZero.length === 0) return [0, 0, 0];
@@ -81,18 +120,15 @@ function getLevel(tokens: number, quantiles: number[]): number {
   return 4;
 }
 
-// ── Month names ───────────────────────────────────────────────────────
+// ── Month / day names ─────────────────────────────────────────────────
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
-
 const MONTH_NAMES_FULL = [
   'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
 ];
-
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // ── Helpers ───────────────────────────────────────────────────────────
 function formatDateRange(since: string, until: string): string {
@@ -102,9 +138,7 @@ function formatDateRange(since: string, until: string): string {
   const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
   const sMonth = MONTH_NAMES_FULL[s.getUTCMonth()] ?? '';
   const uMonth = MONTH_NAMES_FULL[u.getUTCMonth()] ?? '';
-  const sYear = s.getUTCFullYear();
-  const uYear = u.getUTCFullYear();
-  return `${sMonth} ${sYear} — ${uMonth} ${uYear} · ${days} DAYS`;
+  return `${sMonth} ${s.getUTCFullYear()} — ${uMonth} ${u.getUTCFullYear()} · ${days} DAYS`;
 }
 
 function formatPercentage(rate: number): string {
@@ -115,44 +149,36 @@ function formatStreak(n: number): string {
   return `${n} day${n !== 1 ? 's' : ''}`;
 }
 
-// ── Main render function ──────────────────────────────────────────────
-export function renderTerminalCardSvg(
-  output: TokenleakOutput,
-  options: RenderOptions,
-): string {
-  const theme = getCardTheme(options.theme);
-  const pad = CARD_PADDING;
+// ── Heatmap renderer for a single provider ────────────────────────────
+interface HeatmapResult {
+  svg: string;
+  gridWidth: number;
+  height: number;
+}
 
-  // Merge all daily usage from all providers
-  const allDaily: DailyUsage[] = [];
-  for (const p of output.providers) {
-    allDaily.push(...p.daily);
-  }
+function renderProviderHeatmap(
+  daily: DailyUsage[],
+  since: string,
+  until: string,
+  heatmapColors: [string, string, string, string, string],
+  emptyColor: string,
+): HeatmapResult {
   const tokenMap = new Map<string, number>();
-  for (const d of allDaily) {
+  for (const d of daily) {
     tokenMap.set(d.date, (tokenMap.get(d.date) ?? 0) + d.totalTokens);
   }
 
-  const stats = output.aggregated;
-  const { since, until } = output.dateRange;
-
-  // ── Heatmap grid computation ──────────────────────────────────────
-  const dates = allDaily.map((d) => d.date).sort();
+  const dates = daily.map((d) => d.date).sort();
   const endStr = until ?? dates[dates.length - 1] ?? new Date().toISOString().slice(0, 10);
   const startStr = since ?? dates[0] ?? endStr;
 
   const end = new Date(endStr + 'T00:00:00Z');
   const start = new Date(startStr + 'T00:00:00Z');
-  const startDay = start.getUTCDay();
-  start.setUTCDate(start.getUTCDate() - startDay);
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
 
   const allTokens = Array.from(tokenMap.values());
   const quantiles = computeQuantiles(allTokens);
 
-  const DAY_LABEL_WIDTH = 44;
-  const MONTH_LABEL_HEIGHT = 24;
-
-  // Generate heatmap cells
   const cells: string[] = [];
   const monthLabels: string[] = [];
   let lastMonth = -1;
@@ -167,20 +193,18 @@ export function renderTerminalCardSvg(
 
     const x = DAY_LABEL_WIDTH + col * (CELL_SIZE + CELL_GAP);
     const y = MONTH_LABEL_HEIGHT + row * (CELL_SIZE + CELL_GAP);
-
-    const fillColor = theme.heatmap[level];
-    const cellFill = level === 0 ? (options.theme === 'dark' ? '#1a1a1a' : '#e4e4e7') : fillColor;
+    const fill = level === 0 ? emptyColor : heatmapColors[level];
 
     const title = `${dateStr}: ${tokens.toLocaleString()} tokens`;
     cells.push(
-      `<rect x="${x}" y="${y}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="${escapeXml(cellFill)}" rx="3"><title>${escapeXml(title)}</title></rect>`,
+      `<rect x="${x}" y="${y}" width="${CELL_SIZE}" height="${CELL_SIZE}" fill="${escapeXml(fill)}" rx="3"><title>${escapeXml(title)}</title></rect>`,
     );
 
     const month = current.getUTCMonth();
     if (month !== lastMonth && row === 0) {
       lastMonth = month;
       monthLabels.push(
-        `<text x="${x}" y="${MONTH_LABEL_HEIGHT - 8}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(MONTH_NAMES[month] ?? '')}</text>`,
+        `<text x="${x}" y="${MONTH_LABEL_HEIGHT - 8}" fill="__MUTED__" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(MONTH_NAMES[month] ?? '')}</text>`,
       );
     }
 
@@ -188,41 +212,73 @@ export function renderTerminalCardSvg(
     current.setUTCDate(current.getUTCDate() + 1);
   }
 
-  const totalCols = col + 1;
-  const heatmapGridWidth = DAY_LABEL_WIDTH + totalCols * (CELL_SIZE + CELL_GAP);
-  const heatmapHeight = MONTH_LABEL_HEIGHT + 7 * (CELL_SIZE + CELL_GAP);
-
-  // Day labels for heatmap
-  const dayLabelsSvg = [1, 3, 5, 0].map((i) => {
-    // Show Mon, Wed, Fri, Sun
-    const labels = ['Sun', 'Mon', '', 'Wed', '', 'Fri', ''];
-    const label = i === 0 ? 'Sun' : labels[i] ?? '';
-    if (!label) return '';
-    const y = MONTH_LABEL_HEIGHT + i * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2;
-    return `<text x="0" y="${y}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(label)}</text>`;
+  // Day labels (Mon, Wed, Fri, Sun)
+  const dayLabels = [
+    { label: 'Mon', row: 1 },
+    { label: 'Wed', row: 3 },
+    { label: 'Fri', row: 5 },
+    { label: 'Sun', row: 0 },
+  ].map((d) => {
+    const y = MONTH_LABEL_HEIGHT + d.row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2;
+    return `<text x="0" y="${y}" fill="__MUTED__" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(d.label)}</text>`;
   }).join('');
 
-  // ── Calculate overall card width ──────────────────────────────────
-  const minContentWidth = Math.max(heatmapGridWidth, 700);
+  const totalCols = col + 1;
+  const gridWidth = DAY_LABEL_WIDTH + totalCols * (CELL_SIZE + CELL_GAP);
+  const height = MONTH_LABEL_HEIGHT + 7 * (CELL_SIZE + CELL_GAP);
+
+  const svg = [dayLabels, ...monthLabels, ...cells].join('\n');
+  return { svg, gridWidth, height };
+}
+
+// ── Main render function ──────────────────────────────────────────────
+export function renderTerminalCardSvg(
+  output: TokenleakOutput,
+  options: RenderOptions,
+): string {
+  const theme = getCardTheme(options.theme);
+  const isDark = options.theme === 'dark';
+  const pad = CARD_PADDING;
+  const stats = output.aggregated;
+  const { since, until } = output.dateRange;
+  const providers = output.providers;
+
+  // Pre-compute all provider heatmaps to determine max width
+  const providerHeatmaps = providers.map((p) => {
+    const heatmapColors = buildHeatmapScale(p.colors, isDark);
+    return {
+      provider: p,
+      heatmap: renderProviderHeatmap(p.daily, since, until, heatmapColors, theme.heatmapEmpty),
+      heatmapColors,
+    };
+  });
+
+  const maxHeatmapWidth = providerHeatmaps.reduce(
+    (max, ph) => Math.max(max, ph.heatmap.gridWidth),
+    0,
+  );
+  const minContentWidth = Math.max(maxHeatmapWidth, 700);
   const cardWidth = minContentWidth + pad * 2;
   const contentWidth = cardWidth - pad * 2;
 
-  // ── Build sections with Y tracking ────────────────────────────────
+  // ── Build SVG sections ──────────────────────────────────────────────
   let y = 0;
   const sections: string[] = [];
 
-  // Google Fonts import
-  sections.push(`<defs><style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');</style></defs>`);
+  // Font import
+  sections.push(
+    `<defs><style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');</style></defs>`,
+  );
 
-  // Background with rounded corners
-  sections.push(`<rect width="${cardWidth}" height="__CARD_HEIGHT__" rx="12" fill="${escapeXml(theme.bg)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`);
+  // Background
+  sections.push(
+    `<rect width="${cardWidth}" height="__CARD_HEIGHT__" rx="12" fill="${escapeXml(theme.bg)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+  );
 
   // ── Title bar ─────────────────────────────────────────────────────
-  // Clip the title bar to rounded top corners
   sections.push(`<clipPath id="titlebar-clip"><rect width="${cardWidth}" height="${TITLEBAR_HEIGHT}" rx="12"/></clipPath>`);
   sections.push(`<rect width="${cardWidth}" height="${TITLEBAR_HEIGHT}" fill="${escapeXml(theme.bg)}" clip-path="url(#titlebar-clip)"/>`);
 
-  // Traffic light dots
   const dotY = TITLEBAR_HEIGHT / 2;
   const dotStartX = pad;
   const dots = [
@@ -234,18 +290,16 @@ export function renderTerminalCardSvg(
     sections.push(`<circle cx="${dot.cx}" cy="${dotY}" r="${DOT_RADIUS}" fill="${escapeXml(dot.color)}"/>`);
   }
 
-  // "tokenleak" title
   const titleX = dots[2].cx + DOT_RADIUS + 20;
   sections.push(
     `<text x="${titleX}" y="${dotY + 5}" fill="${escapeXml(theme.muted)}" font-size="13" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml('tokenleak')}</text>`,
   );
 
-  // Title bar bottom border
   sections.push(`<line x1="0" y1="${TITLEBAR_HEIGHT}" x2="${cardWidth}" y2="${TITLEBAR_HEIGHT}" stroke="${escapeXml(theme.titlebarBorder)}" stroke-width="1"/>`);
 
   y = TITLEBAR_HEIGHT + pad * 0.6;
 
-  // ── Command prompt line ───────────────────────────────────────────
+  // ── Command prompt ────────────────────────────────────────────────
   sections.push(
     `<text x="${pad}" y="${y + 16}" font-size="15" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">` +
     `<tspan fill="${escapeXml(theme.accent)}">$</tspan>` +
@@ -262,17 +316,68 @@ export function renderTerminalCardSvg(
   );
   y += 40;
 
-  // ── Heatmap ───────────────────────────────────────────────────────
-  sections.push(`<g transform="translate(${pad}, ${y})">`);
-  sections.push(dayLabelsSvg);
-  for (const label of monthLabels) sections.push(label);
-  for (const cell of cells) sections.push(cell);
-  sections.push('</g>');
-  y += heatmapHeight + 32;
+  // ── Per-provider sections (stacked vertically) ────────────────────
+  for (let pi = 0; pi < providerHeatmaps.length; pi++) {
+    const { provider, heatmap, heatmapColors } = providerHeatmaps[pi];
 
-  // ── Divider ───────────────────────────────────────────────────────
-  sections.push(`<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`);
+    // Provider header: colored dot + display name + token/cost summary
+    const provDotRadius = 5;
+    const provColor = provider.colors.primary;
+
+    sections.push(
+      `<circle cx="${pad + provDotRadius}" cy="${y + 8}" r="${provDotRadius}" fill="${escapeXml(provColor)}"/>`,
+    );
+    sections.push(
+      `<text x="${pad + provDotRadius * 2 + 10}" y="${y + 13}" fill="${escapeXml(theme.fg)}" font-size="14" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(provider.displayName)}</text>`,
+    );
+
+    // Inline summary on the right: total tokens · cost
+    const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost)}`;
+    sections.push(
+      `<text x="${cardWidth - pad}" y="${y + 13}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(summaryText)}</text>`,
+    );
+    y += 28;
+
+    // Heatmap
+    const heatmapSvg = heatmap.svg.replace(/__MUTED__/g, escapeXml(theme.muted));
+    sections.push(`<g transform="translate(${pad}, ${y})">`);
+    sections.push(heatmapSvg);
+    sections.push('</g>');
+    y += heatmap.height;
+
+    // Divider between providers (not after the last one)
+    if (pi < providerHeatmaps.length - 1) {
+      y += 12;
+      sections.push(
+        `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+      );
+      y += PROVIDER_SECTION_GAP - 12;
+    } else {
+      y += 24;
+    }
+  }
+
+  // Handle empty providers
+  if (providers.length === 0) {
+    sections.push(
+      `<text x="${pad}" y="${y + 14}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml('No provider data')}</text>`,
+    );
+    y += 32;
+  }
+
+  // ── Overall stats divider ─────────────────────────────────────────
+  sections.push(
+    `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+  );
   y += 28;
+
+  // ── "OVERALL" label (only if multiple providers) ──────────────────
+  if (providers.length > 1) {
+    sections.push(
+      `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('OVERALL')}</text>`,
+    );
+    y += 24;
+  }
 
   // ── Stats grid (2 rows × 3 columns) ──────────────────────────────
   const statColWidth = contentWidth / STAT_GRID_COLS;
@@ -291,12 +396,9 @@ export function renderTerminalCardSvg(
     for (let i = 0; i < row.length; i++) {
       const stat = row[i];
       const x = pad + i * statColWidth;
-
-      // Label
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.5">${escapeXml(stat.label)}</text>`,
       );
-      // Value
       const valueColor = stat.accent ? theme.accent : theme.fg;
       sections.push(
         `<text x="${x}" y="${startY + 28}" fill="${escapeXml(valueColor)}" font-size="22" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(stat.value)}</text>`,
@@ -311,7 +413,9 @@ export function renderTerminalCardSvg(
 
   // ── Top Models section ────────────────────────────────────────────
   y += 8;
-  sections.push(`<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`);
+  sections.push(
+    `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+  );
   y += 28;
 
   sections.push(
@@ -327,30 +431,26 @@ export function renderTerminalCardSvg(
   for (const model of topModels) {
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
-    // Model name
     sections.push(
       `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
     );
 
-    // Bar track
     const barX = pad + modelNameWidth;
     sections.push(
       `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="${escapeXml(theme.barTrack)}"/>`,
     );
 
-    // Bar fill with gradient
     const gradId = `grad-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(theme.barGradient[0])}"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(theme.barGradient[1])}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(theme.accent)}44"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(theme.accent)}"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
       `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="url(#${escapeXml(gradId)})"/>`,
     );
 
-    // Percentage
     sections.push(
       `<text x="${barX + barMaxWidth + 12}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
@@ -362,7 +462,6 @@ export function renderTerminalCardSvg(
   y += pad * 0.5;
   const cardHeight = y;
 
-  // Replace placeholder height
   const svg = sections.join('\n').replace('__CARD_HEIGHT__', String(cardHeight));
 
   return [

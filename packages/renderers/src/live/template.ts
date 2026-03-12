@@ -1,11 +1,16 @@
-import type { TokenleakOutput, RenderOptions, DailyUsage } from '@tokenleak/core';
-import { formatNumber, formatCost, escapeXml } from '../svg/utils';
+import type {
+  TokenleakOutput,
+  RenderOptions,
+  DailyUsage,
+  ProviderData,
+  ProviderColors,
+} from '@tokenleak/core';
+import { formatNumber, formatCost } from '../svg/utils';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
-
 const MONTH_NAMES_FULL = [
   'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
@@ -18,9 +23,7 @@ function formatDateRange(since: string, until: string): string {
   const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
   const sMonth = MONTH_NAMES_FULL[s.getUTCMonth()] ?? '';
   const uMonth = MONTH_NAMES_FULL[u.getUTCMonth()] ?? '';
-  const sYear = s.getUTCFullYear();
-  const uYear = u.getUTCFullYear();
-  return `${sMonth} ${sYear} &mdash; ${uMonth} ${uYear} &middot; ${days} DAYS`;
+  return `${sMonth} ${s.getUTCFullYear()} &mdash; ${uMonth} ${u.getUTCFullYear()} &middot; ${days} DAYS`;
 }
 
 function formatPercentage(rate: number): string {
@@ -32,14 +35,10 @@ function formatStreak(n: number): string {
 }
 
 function esc(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Heatmap quantile logic
+// ── Heatmap quantile logic ────────────────────────────────────────────
 function computeQuantiles(values: number[]): number[] {
   const nonZero = values.filter((v) => v > 0).sort((a, b) => a - b);
   if (nonZero.length === 0) return [0, 0, 0];
@@ -58,6 +57,39 @@ function getLevel(tokens: number, quantiles: number[]): number {
   return 4;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number): string => n.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function buildHeatmapScale(
+  colors: ProviderColors,
+  isDark: boolean,
+): [string, string, string, string, string] {
+  const [startHex, endHex] = colors.gradient;
+  const s = hexToRgb(startHex);
+  const e = hexToRgb(endHex);
+  const opacities = isDark ? [0.15, 0.35, 0.6, 1.0] : [0.2, 0.4, 0.65, 1.0];
+  return [
+    'transparent',
+    ...opacities.map((t) => {
+      const r = Math.round(s.r + (e.r - s.r) * t);
+      const g = Math.round(s.g + (e.g - s.g) * t);
+      const b = Math.round(s.b + (e.b - s.b) * t);
+      return rgbToHex(r, g, b);
+    }),
+  ] as [string, string, string, string, string];
+}
+
 interface HeatmapCell {
   date: string;
   tokens: number;
@@ -67,16 +99,16 @@ interface HeatmapCell {
 }
 
 function buildHeatmapCells(
-  allDaily: DailyUsage[],
+  daily: DailyUsage[],
   since: string,
   until: string,
 ): { cells: HeatmapCell[]; months: { label: string; col: number }[]; totalCols: number } {
   const tokenMap = new Map<string, number>();
-  for (const d of allDaily) {
+  for (const d of daily) {
     tokenMap.set(d.date, (tokenMap.get(d.date) ?? 0) + d.totalTokens);
   }
 
-  const dates = allDaily.map((d) => d.date).sort();
+  const dates = daily.map((d) => d.date).sort();
   const endStr = until ?? dates[dates.length - 1] ?? new Date().toISOString().slice(0, 10);
   const startStr = since ?? dates[0] ?? endStr;
 
@@ -98,7 +130,6 @@ function buildHeatmapCells(
     const dateStr = current.toISOString().slice(0, 10);
     const tokens = tokenMap.get(dateStr) ?? 0;
     const level = getLevel(tokens, quantiles);
-
     cells.push({ date: dateStr, tokens, level, row, col });
 
     const month = current.getUTCMonth();
@@ -114,54 +145,25 @@ function buildHeatmapCells(
   return { cells, months, totalCols: col + 1 };
 }
 
-export function generateHtml(output: TokenleakOutput, options: RenderOptions): string {
-  const isDark = options.theme === 'dark';
-  const stats = output.aggregated;
-  const { since, until } = output.dateRange;
+function renderProviderHeatmapHtml(
+  provider: ProviderData,
+  since: string,
+  until: string,
+  isDark: boolean,
+  emptyCell: string,
+): string {
+  const heatmapColors = buildHeatmapScale(provider.colors, isDark);
+  const { cells, months, totalCols } = buildHeatmapCells(provider.daily, since, until);
 
-  const allDaily: DailyUsage[] = [];
-  for (const p of output.providers) {
-    allDaily.push(...p.daily);
-  }
-
-  const { cells, months, totalCols } = buildHeatmapCells(allDaily, since, until);
-  const topModels = stats.topModels.slice(0, 3);
-
-  // Colors
-  const bg = isDark ? '#0c0c0c' : '#fafafa';
-  const fg = isDark ? '#ffffff' : '#18181b';
-  const muted = isDark ? '#52525b' : '#a1a1aa';
-  const accent = isDark ? '#10b981' : '#059669';
-  const border = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
-  const emptyCell = isDark ? '#1a1a1a' : '#e4e4e7';
-  const barTrack = isDark ? '#1c1c1c' : '#e5e5e5';
-  const heatmapColors = isDark
-    ? ['transparent', '#052e16', '#064e3b', '#047857', '#10b981']
-    : ['transparent', '#d1fae5', '#6ee7b7', '#34d399', '#059669'];
-  const gradStart = isDark ? '#064e3b' : '#6ee7b7';
-  const gradEnd = isDark ? '#10b981' : '#059669';
-
-  // Stat definitions
-  const statRows = [
-    [
-      { label: 'CURRENT STREAK', value: esc(formatStreak(stats.currentStreak)), accent: true },
-      { label: 'LONGEST STREAK', value: esc(formatStreak(stats.longestStreak)), accent: false },
-      { label: 'TOTAL TOKENS', value: esc(formatNumber(stats.totalTokens)), accent: true },
-    ],
-    [
-      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost)), accent: false },
-      { label: '30-DAY TOKENS', value: esc(formatNumber(stats.rolling30dTokens)), accent: false },
-      { label: 'CACHE HIT RATE', value: esc(formatPercentage(stats.cacheHitRate)), accent: false },
-    ],
-  ];
-
-  // Build heatmap grid HTML
   const cellSize = 16;
   const cellGap = 4;
   const dayLabelWidth = 44;
   const monthLabelHeight = 24;
 
-  const heatmapCellsHtml = cells.map((c) => {
+  const heatmapWidth = dayLabelWidth + totalCols * (cellSize + cellGap);
+  const heatmapHeight = monthLabelHeight + 7 * (cellSize + cellGap);
+
+  const cellsHtml = cells.map((c) => {
     const x = dayLabelWidth + c.col * (cellSize + cellGap);
     const y = monthLabelHeight + c.row * (cellSize + cellGap);
     const fill = c.level === 0 ? emptyCell : heatmapColors[c.level];
@@ -183,8 +185,59 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
     return `<span class="day-label" style="top:${y - 10}px">${d.label}</span>`;
   }).join('\n');
 
-  const heatmapWidth = dayLabelWidth + totalCols * (cellSize + cellGap);
-  const heatmapHeight = monthLabelHeight + 7 * (cellSize + cellGap);
+  const summaryText = `${esc(formatNumber(provider.totalTokens))} tokens &middot; ${esc(formatCost(provider.totalCost))}`;
+
+  return `<div class="provider-section" data-provider="${esc(provider.provider)}">
+    <div class="provider-header">
+      <div class="provider-name-row">
+        <span class="provider-dot" style="background:${esc(provider.colors.primary)}"></span>
+        <span class="provider-name">${esc(provider.displayName)}</span>
+      </div>
+      <span class="provider-summary">${summaryText}</span>
+    </div>
+    <div class="heatmap-container" style="width:${heatmapWidth}px;height:${heatmapHeight}px">
+      ${dayLabelsHtml}
+      ${monthLabelsHtml}
+      ${cellsHtml}
+    </div>
+  </div>`;
+}
+
+export function generateHtml(output: TokenleakOutput, options: RenderOptions): string {
+  const isDark = options.theme === 'dark';
+  const stats = output.aggregated;
+  const { since, until } = output.dateRange;
+  const providers = output.providers;
+
+  // Colors
+  const bg = isDark ? '#0c0c0c' : '#fafafa';
+  const fg = isDark ? '#ffffff' : '#18181b';
+  const muted = isDark ? '#52525b' : '#a1a1aa';
+  const accent = isDark ? '#10b981' : '#059669';
+  const border = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+  const emptyCell = isDark ? '#1a1a1a' : '#e4e4e7';
+  const barTrack = isDark ? '#1c1c1c' : '#e5e5e5';
+
+  // Per-provider heatmap sections
+  const providerSectionsHtml = providers.map((p, i) => {
+    const section = renderProviderHeatmapHtml(p, since, until, isDark, emptyCell);
+    const divider = i < providers.length - 1 ? '<hr class="provider-divider">' : '';
+    return section + divider;
+  }).join('\n');
+
+  // Overall stats
+  const statRows = [
+    [
+      { label: 'CURRENT STREAK', value: esc(formatStreak(stats.currentStreak)), accent: true },
+      { label: 'LONGEST STREAK', value: esc(formatStreak(stats.longestStreak)), accent: false },
+      { label: 'TOTAL TOKENS', value: esc(formatNumber(stats.totalTokens)), accent: true },
+    ],
+    [
+      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost)), accent: false },
+      { label: '30-DAY TOKENS', value: esc(formatNumber(stats.rolling30dTokens)), accent: false },
+      { label: 'CACHE HIT RATE', value: esc(formatPercentage(stats.cacheHitRate)), accent: false },
+    ],
+  ];
 
   const statsHtml = statRows.map((row) =>
     `<div class="stat-row">${row.map((s) =>
@@ -192,6 +245,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
     ).join('')}</div>`
   ).join('');
 
+  const topModels = stats.topModels.slice(0, 3);
   const modelsHtml = topModels.map((m) => {
     const width = Math.max(2, m.percentage);
     return `<div class="model-row">
@@ -200,6 +254,10 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       <span class="model-pct">${m.percentage.toFixed(0)}%</span>
     </div>`;
   }).join('');
+
+  const overallLabel = providers.length > 1
+    ? '<div class="overall-label">OVERALL</div>'
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -249,11 +307,21 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   .prompt .cursor { color: ${accent}; animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   .date-range { color: ${muted}; font-size: 12px; font-weight: 600; letter-spacing: 2px; margin-bottom: 24px; }
-  .heatmap-container { position: relative; width: ${heatmapWidth}px; height: ${heatmapHeight}px; margin-bottom: 32px; }
+
+  /* Provider sections */
+  .provider-section { margin-bottom: 12px; }
+  .provider-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .provider-name-row { display: flex; align-items: center; gap: 10px; }
+  .provider-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .provider-name { color: ${fg}; font-size: 14px; font-weight: 600; }
+  .provider-summary { color: ${muted}; font-size: 11px; font-weight: 500; }
+  .provider-divider { border: none; border-top: 1px solid ${border}; margin: 24px 0; }
+
+  .heatmap-container { position: relative; margin-bottom: 8px; }
   .heatmap-cell {
     position: absolute;
-    width: ${cellSize}px;
-    height: ${cellSize}px;
+    width: 16px;
+    height: 16px;
     border-radius: 3px;
     cursor: pointer;
   }
@@ -274,7 +342,9 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
     white-space: nowrap;
     box-shadow: 0 4px 12px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)'};
   }
+
   .divider { border: none; border-top: 1px solid ${border}; margin: 0 0 28px; }
+  .overall-label { color: ${muted}; font-size: 10px; font-weight: 600; letter-spacing: 2px; margin-bottom: 16px; }
   .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
   .stat-label { color: ${muted}; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; margin-bottom: 8px; }
   .stat-value { color: ${fg}; font-size: 22px; font-weight: 700; }
@@ -284,7 +354,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   .model-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
   .model-name { color: ${muted}; font-size: 12px; width: 200px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-bar-track { flex: 1; height: 8px; background: ${barTrack}; border-radius: 4px; overflow: hidden; }
-  .model-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, ${gradStart}, ${gradEnd}); }
+  .model-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, ${accent}44, ${accent}); }
   .model-pct { color: ${muted}; font-size: 12px; width: 40px; text-align: right; flex-shrink: 0; }
   .refresh-btn {
     display: inline-flex;
@@ -319,12 +389,9 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       <span class="cursor">_</span>
     </div>
     <div class="date-range">${formatDateRange(since, until)}</div>
-    <div class="heatmap-container">
-      ${dayLabelsHtml}
-      ${monthLabelsHtml}
-      ${heatmapCellsHtml}
-    </div>
+    ${providerSectionsHtml}
     <hr class="divider">
+    ${overallLabel}
     ${statsHtml}
     <hr class="divider" style="margin-top:8px">
     <div class="models-section">
@@ -338,10 +405,12 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
 <script>
   const tooltip = document.getElementById('tooltip');
   document.querySelectorAll('.heatmap-cell').forEach(cell => {
+    const section = cell.closest('.provider-section');
+    const provider = section ? section.dataset.provider : '';
     cell.addEventListener('mouseenter', e => {
       const date = cell.dataset.date;
       const tokens = Number(cell.dataset.tokens).toLocaleString();
-      tooltip.textContent = date + ': ' + tokens + ' tokens';
+      tooltip.textContent = (provider ? provider + ' — ' : '') + date + ': ' + tokens + ' tokens';
       tooltip.style.display = 'block';
     });
     cell.addEventListener('mousemove', e => {
