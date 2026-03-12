@@ -4,10 +4,12 @@ import type { DateRange } from '@tokenleak/core';
 import { CodexProvider } from './codex';
 
 const FIXTURES_DIR = join(import.meta.dir, '..', '__fixtures__', 'codex', 'sessions');
+const CURRENT_FIXTURES_DIR = join(import.meta.dir, '..', '__fixtures__', 'codex-current', 'sessions');
 const NONEXISTENT_DIR = join(import.meta.dir, '..', '__fixtures__', 'codex', 'does-not-exist');
 const EMPTY_DIR = join(import.meta.dir, '..', '__fixtures__', 'codex-empty');
 
 const FULL_RANGE: DateRange = { since: '2025-06-01', until: '2025-06-30' };
+const CURRENT_RANGE: DateRange = { since: '2026-03-12', until: '2026-03-12' };
 
 describe('CodexProvider', () => {
   // -- metadata -----------------------------------------------------------
@@ -78,6 +80,22 @@ describe('CodexProvider', () => {
 
     // Totals
     expect(data.totalTokens).toBe(2800 + 3700 + 4500);
+    expect(data.totalCost).toBeGreaterThan(0);
+  });
+
+  it('loads nested Codex sessions using token_count events', async () => {
+    const provider = new CodexProvider(CURRENT_FIXTURES_DIR);
+    const data = await provider.load(CURRENT_RANGE);
+
+    expect(data.daily).toHaveLength(1);
+    expect(data.daily[0]!.date).toBe('2026-03-12');
+    expect(data.daily[0]!.models).toHaveLength(1);
+    expect(data.daily[0]!.models[0]!.model).toBe('gpt-5.4');
+    expect(data.daily[0]!.inputTokens).toBe(1800);
+    expect(data.daily[0]!.outputTokens).toBe(380);
+    expect(data.daily[0]!.cacheReadTokens).toBe(700);
+    expect(data.daily[0]!.totalTokens).toBe(2880);
+    expect(data.totalTokens).toBe(2880);
     expect(data.totalCost).toBeGreaterThan(0);
   });
 

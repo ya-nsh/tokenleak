@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { PngRenderer } from './png-renderer';
+import sharp from 'sharp';
 import {
   createOutput,
   createRenderOptions,
@@ -48,5 +49,15 @@ describe('PngRenderer', () => {
   it('returns a Buffer instance', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions({ format: 'png' }));
     expect(Buffer.isBuffer(result)).toBe(true);
+  });
+
+  it('renders at a high enough pixel density to stay sharp', async () => {
+    const result = await renderer.render(
+      createOutput(),
+      createRenderOptions({ format: 'png' }),
+    );
+    const metadata = await sharp(result).metadata();
+
+    expect(metadata.width).toBeGreaterThanOrEqual(2000);
   });
 });

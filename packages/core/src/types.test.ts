@@ -130,8 +130,8 @@ describe('core types', () => {
   });
 
   it('TopModelEntry has percentage field', () => {
-    const entry: TopModelEntry = { model: 'claude-sonnet-4', tokens: 50000, cost: 2.5, percentage: 0.65 };
-    expect(entry.percentage).toBe(0.65);
+    const entry: TopModelEntry = { model: 'claude-sonnet-4', tokens: 50000, cost: 2.5, percentage: 65 };
+    expect(entry.percentage).toBe(65);
   });
 
   it('ProviderResult can hold data or error', () => {

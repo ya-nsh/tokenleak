@@ -1,0 +1,4 @@
+{"timestamp":"2026-03-12T10:00:00Z","type":"session_meta","payload":{"id":"sess-current","model_provider":"openai"}}
+{"timestamp":"2026-03-12T10:00:01Z","type":"turn_context","payload":{"turn_id":"turn-current","model":"gpt-5.4"}}
+{"timestamp":"2026-03-12T10:05:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":150,"total_tokens":1150},"total_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":150,"total_tokens":1150}}}}
+{"timestamp":"2026-03-12T10:15:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":2500,"cached_input_tokens":700,"output_tokens":380,"total_tokens":2880}}}}

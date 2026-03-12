@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -35,7 +35,28 @@ const CODEX_COLORS: ProviderColors = {
   gradient: ['#10a37f', '#4ade80'],
 };
 
-const DEFAULT_SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
+const DEFAULT_SESSIONS_DIR = join(
+  process.env['CODEX_HOME'] ?? join(homedir(), '.codex'),
+  'sessions',
+);
+
+interface CodexUsageRecord {
+  date: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+interface SessionContext {
+  model: string;
+  previousTotals: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+  } | null;
+}
 
 /**
  * Narrows an unknown parsed JSONL record to a CodexResponseEvent,
@@ -110,6 +131,208 @@ function extractDate(timestamp: string): string | null {
   return match ? match[1]! : null;
 }
 
+function collectJsonlFiles(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      files.push(...collectJsonlFiles(fullPath));
+    } else if (entry.endsWith('.jsonl')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+function inferModelFromContext(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) {
+    return null;
+  }
+
+  const obj = record as Record<string, unknown>;
+  if (obj['type'] !== 'session_meta' && obj['type'] !== 'turn_context') {
+    return null;
+  }
+
+  const payload = obj['payload'];
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+
+  const meta = payload as Record<string, unknown>;
+  const directModelKeys = ['model', 'model_name', 'model_slug'] as const;
+  for (const key of directModelKeys) {
+    if (typeof meta[key] === 'string' && meta[key].trim()) {
+      return meta[key].trim();
+    }
+  }
+
+  const instructions = meta['base_instructions'];
+  if (typeof instructions === 'object' && instructions !== null) {
+    const text = (instructions as Record<string, unknown>)['text'];
+    if (typeof text === 'string') {
+      const match = /based on ([A-Za-z0-9.-]+)/i.exec(text);
+      if (match?.[1]) {
+        return match[1].toLowerCase();
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseTokenCountUsage(
+  record: unknown,
+  context: SessionContext,
+): CodexUsageRecord | null {
+  if (typeof record !== 'object' || record === null) {
+    return null;
+  }
+
+  const obj = record as Record<string, unknown>;
+  if (obj['type'] !== 'event_msg') {
+    return null;
+  }
+
+  const timestamp = obj['timestamp'];
+  const payload = obj['payload'];
+  if (
+    typeof timestamp !== 'string' ||
+    typeof payload !== 'object' ||
+    payload === null
+  ) {
+    return null;
+  }
+
+  const eventPayload = payload as Record<string, unknown>;
+  if (eventPayload['type'] !== 'token_count') {
+    return null;
+  }
+
+  const info = eventPayload['info'];
+  if (typeof info !== 'object' || info === null) {
+    return null;
+  }
+
+  const usageInfo = info as Record<string, unknown>;
+  const lastUsage = usageInfo['last_token_usage'];
+  const totalUsage = usageInfo['total_token_usage'];
+  const date = extractDate(timestamp);
+
+  if (!date) {
+    return null;
+  }
+
+  const parseUsage = (
+    usage: unknown,
+  ): { inputTokens: number; outputTokens: number; cachedInputTokens: number } | null => {
+    if (typeof usage !== 'object' || usage === null) {
+      return null;
+    }
+
+    const usageObj = usage as Record<string, unknown>;
+    const inputTokens = usageObj['input_tokens'];
+    const outputTokens = usageObj['output_tokens'];
+    const cachedInputTokens = usageObj['cached_input_tokens'];
+
+    if (
+      typeof inputTokens !== 'number' ||
+      typeof outputTokens !== 'number'
+    ) {
+      return null;
+    }
+
+    return {
+      inputTokens,
+      outputTokens,
+      cachedInputTokens:
+        typeof cachedInputTokens === 'number' ? cachedInputTokens : 0,
+    };
+  };
+
+  let usage = parseUsage(lastUsage);
+
+  if (!usage) {
+    const cumulative = parseUsage(totalUsage);
+    if (!cumulative) {
+      return null;
+    }
+
+    const previous = context.previousTotals ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+    };
+    usage = {
+      inputTokens: Math.max(0, cumulative.inputTokens - previous.inputTokens),
+      outputTokens: Math.max(0, cumulative.outputTokens - previous.outputTokens),
+      cachedInputTokens: Math.max(
+        0,
+        cumulative.cachedInputTokens - previous.cachedInputTokens,
+      ),
+    };
+    context.previousTotals = cumulative;
+  } else if (parseUsage(totalUsage)) {
+    context.previousTotals = parseUsage(totalUsage);
+  }
+
+  const cacheReadTokens = Math.min(usage.cachedInputTokens, usage.inputTokens);
+  const inputTokens = Math.max(0, usage.inputTokens - cacheReadTokens);
+
+  return {
+    date,
+    model: context.model,
+    inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens: 0,
+  };
+}
+
+function parseUsageRecord(
+  record: unknown,
+  context: SessionContext,
+): CodexUsageRecord | null {
+  const inferredModel = inferModelFromContext(record);
+  if (inferredModel) {
+    if (context.model !== inferredModel) {
+      context.model = inferredModel;
+      context.previousTotals = null;
+    }
+    return null;
+  }
+
+  const tokenCountUsage = parseTokenCountUsage(record, context);
+  if (tokenCountUsage) {
+    return tokenCountUsage;
+  }
+
+  const legacyEvent = parseResponseEvent(record);
+  if (!legacyEvent) {
+    return null;
+  }
+
+  const date = extractDate(legacyEvent.timestamp);
+  if (!date) {
+    return null;
+  }
+
+  return {
+    date,
+    model: compactModelDateSuffix(legacyEvent.model),
+    inputTokens: legacyEvent.usage.input_tokens,
+    outputTokens: legacyEvent.usage.output_tokens,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+}
+
 /**
  * Codex session provider.
  *
@@ -140,38 +363,32 @@ export class CodexProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
-
-    let files: string[];
-    try {
-      files = readdirSync(this.sessionsDir).filter((f) =>
-        f.endsWith('.jsonl'),
-      );
-    } catch {
-      files = [];
-    }
+    const files = collectJsonlFiles(this.sessionsDir);
 
     for (const file of files) {
-      const filePath = join(this.sessionsDir, file);
+      const context: SessionContext = {
+        model: 'gpt-5',
+        previousTotals: null,
+      };
 
       try {
-        for await (const record of splitJsonlRecords(filePath)) {
-          const event = parseResponseEvent(record);
-          if (!event) {
+        for await (const record of splitJsonlRecords(file)) {
+          const usage = parseUsageRecord(record, context);
+          if (!usage) {
             continue;
           }
 
-          const date = extractDate(event.timestamp);
-          if (!date || !isInRange(date, range)) {
+          if (!isInRange(usage.date, range)) {
             continue;
           }
 
           const normalizedModel = normalizeModelName(
-            compactModelDateSuffix(event.model),
+            compactModelDateSuffix(usage.model),
           );
-          const inputTokens = event.usage.input_tokens;
-          const outputTokens = event.usage.output_tokens;
-          const cacheReadTokens = 0;
-          const cacheWriteTokens = 0;
+          const inputTokens = usage.inputTokens;
+          const outputTokens = usage.outputTokens;
+          const cacheReadTokens = usage.cacheReadTokens;
+          const cacheWriteTokens = usage.cacheWriteTokens;
           const cost = estimateCost(
             normalizedModel,
             inputTokens,
@@ -180,10 +397,10 @@ export class CodexProvider implements IProvider {
             cacheWriteTokens,
           );
 
-          if (!dailyMap.has(date)) {
-            dailyMap.set(date, new Map());
+          if (!dailyMap.has(usage.date)) {
+            dailyMap.set(usage.date, new Map());
           }
-          const modelMap = dailyMap.get(date)!;
+          const modelMap = dailyMap.get(usage.date)!;
 
           if (!modelMap.has(normalizedModel)) {
             modelMap.set(normalizedModel, {

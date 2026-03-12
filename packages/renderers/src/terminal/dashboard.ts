@@ -35,10 +35,14 @@ export function formatCost(cost: number): string {
 }
 
 /**
- * Formats a percentage (0..1) as a display string.
+ * Formats a rate (0..1) as a display string.
  */
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+function formatSharePercent(percentage: number): string {
+  return `${percentage.toFixed(0)}%`;
 }
 
 /**
@@ -133,7 +137,7 @@ function renderTopModels(stats: AggregatedStats, width: number, noColor: boolean
   const lines: string[] = [];
 
   for (const model of stats.topModels.slice(0, 5)) {
-    const pct = formatPercent(model.percentage);
+    const pct = formatSharePercent(model.percentage);
     const tokens = formatTokens(model.tokens);
     const line = `  ${colorize(model.model, 'yellow', noColor)}  ${tokens}  ${pct}`;
     lines.push(line.length > width ? line.slice(0, width) : line);

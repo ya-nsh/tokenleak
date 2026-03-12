@@ -118,6 +118,56 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
     cacheWrite: 0.15,
   },
 
+  // OpenAI GPT-5 family
+  'gpt-5': {
+    input: 1.25,
+    output: 10.00,
+    cacheRead: 0.125,
+    cacheWrite: 1.25,
+  },
+  'gpt-5.1': {
+    input: 1.25,
+    output: 10.00,
+    cacheRead: 0.125,
+    cacheWrite: 1.25,
+  },
+  'gpt-5.2': {
+    input: 1.75,
+    output: 14.00,
+    cacheRead: 0.175,
+    cacheWrite: 1.75,
+  },
+  'gpt-5.4': {
+    input: 2.50,
+    output: 15.00,
+    cacheRead: 0.25,
+    cacheWrite: 2.50,
+  },
+  'gpt-5-codex': {
+    input: 1.25,
+    output: 10.00,
+    cacheRead: 0.125,
+    cacheWrite: 1.25,
+  },
+  'gpt-5.1-codex': {
+    input: 1.25,
+    output: 10.00,
+    cacheRead: 0.125,
+    cacheWrite: 1.25,
+  },
+  'gpt-5.1-codex-max': {
+    input: 1.25,
+    output: 10.00,
+    cacheRead: 0.125,
+    cacheWrite: 1.25,
+  },
+  'gpt-5.2-codex': {
+    input: 1.75,
+    output: 14.00,
+    cacheRead: 0.175,
+    cacheWrite: 1.75,
+  },
+
   // OpenAI o-series reasoning models
   'o1': {
     input: 15.00,
