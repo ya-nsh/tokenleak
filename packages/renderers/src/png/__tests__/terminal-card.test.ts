@@ -4,6 +4,7 @@ import {
   createOutput,
   createRenderOptions,
   createZeroedStats,
+  createPopulatedStats,
   createProvider,
 } from '../../__test-fixtures__';
 
@@ -178,6 +179,31 @@ describe('renderTerminalCardSvg', () => {
     // 3 traffic light dots + 3 provider dots = 6 circles
     const circleCount = (svg.match(/<circle/g) ?? []).length;
     expect(circleCount).toBe(6);
+  });
+
+  it('displays correct percentage labels for 0-1 fraction topModels', () => {
+    // Real aggregation returns percentages as 0-1 fractions (not 0-100)
+    const fractionalOutput = createOutput({
+      aggregated: createPopulatedStats({
+        topModels: [
+          { model: 'claude-3-opus', tokens: 50000, cost: 1.5, percentage: 0.50 },
+          { model: 'claude-3-sonnet', tokens: 30000, cost: 0.6, percentage: 0.30 },
+          { model: 'claude-3-haiku', tokens: 20000, cost: 0.1, percentage: 0.20 },
+        ],
+      }),
+    });
+    const svg = renderTerminalCardSvg(fractionalOutput, options);
+
+    // Should display "50%", "30%", "20%" — NOT "1%", "0%", "0%"
+    expect(svg).toContain('50%');
+    expect(svg).toContain('30%');
+    expect(svg).toContain('20%');
+  });
+
+  it('uses visible empty cell color on dark theme', () => {
+    const svg = renderTerminalCardSvg(output, options);
+    // Empty cells should use #27272a (visible) not #1a1a1a (invisible on #0c0c0c)
+    expect(svg).toContain('#27272a');
   });
 
   it('each provider gets its own heatmap section', () => {

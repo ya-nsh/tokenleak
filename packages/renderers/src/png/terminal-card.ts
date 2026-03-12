@@ -43,7 +43,7 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
       muted: '#52525b',
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
-      heatmapEmpty: '#1a1a1a',
+      heatmapEmpty: '#27272a',
       barTrack: '#1c1c1c',
       titlebarBorder: 'rgba(255,255,255,0.06)',
     };
@@ -429,7 +429,9 @@ export function renderTerminalCardSvg(
   const barMaxWidth = contentWidth - modelNameWidth - percentWidth - 20;
 
   for (const model of topModels) {
-    const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
+    // percentage is 0-1 fraction from aggregation; convert to 0-100 for display
+    const pct = model.percentage <= 1 ? model.percentage * 100 : model.percentage;
+    const barWidth = Math.max(4, (pct / 100) * barMaxWidth);
 
     sections.push(
       `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
@@ -451,8 +453,10 @@ export function renderTerminalCardSvg(
       `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="url(#${escapeXml(gradId)})"/>`,
     );
 
+    // Percentage label aligned to right content edge
+    const pctLabel = `${Math.round(pct)}%`;
     sections.push(
-      `<text x="${barX + barMaxWidth + 12}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${cardWidth - pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(pctLabel)}</text>`,
     );
 
     y += 32;

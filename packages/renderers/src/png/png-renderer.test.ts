@@ -49,4 +49,12 @@ describe('PngRenderer', () => {
     const result = await renderer.render(createOutput(), createRenderOptions({ format: 'png' }));
     expect(Buffer.isBuffer(result)).toBe(true);
   });
+
+  it('renders at 2x density for high resolution', async () => {
+    const result = await renderer.render(createOutput(), createRenderOptions({ format: 'png' }));
+    const sharp = (await import('sharp')).default;
+    const metadata = await sharp(result).metadata();
+    // SVG card width is ~796px, at 2x density should be ~1592px
+    expect(metadata.width).toBeGreaterThan(1400);
+  });
 });

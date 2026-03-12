@@ -215,7 +215,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   const muted = isDark ? '#52525b' : '#a1a1aa';
   const accent = isDark ? '#10b981' : '#059669';
   const border = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
-  const emptyCell = isDark ? '#1a1a1a' : '#e4e4e7';
+  const emptyCell = isDark ? '#27272a' : '#e4e4e7';
   const barTrack = isDark ? '#1c1c1c' : '#e5e5e5';
 
   // Per-provider heatmap sections
@@ -247,11 +247,13 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
 
   const topModels = stats.topModels.slice(0, 3);
   const modelsHtml = topModels.map((m) => {
-    const width = Math.max(2, m.percentage);
+    // percentage is 0-1 fraction from aggregation; convert to 0-100 for display
+    const pct = m.percentage <= 1 ? m.percentage * 100 : m.percentage;
+    const width = Math.max(2, pct);
     return `<div class="model-row">
       <span class="model-name">${esc(m.model)}</span>
       <div class="model-bar-track"><div class="model-bar-fill" style="width:${width}%"></div></div>
-      <span class="model-pct">${m.percentage.toFixed(0)}%</span>
+      <span class="model-pct">${Math.round(pct)}%</span>
     </div>`;
   }).join('');
 
