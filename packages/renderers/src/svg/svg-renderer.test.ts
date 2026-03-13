@@ -31,10 +31,11 @@ describe('SvgRenderer', () => {
     const dark = await renderer.render(output, createRenderOptions({ theme: 'dark' }));
     const light = await renderer.render(output, createRenderOptions({ theme: 'light' }));
 
-    expect(dark).toContain('#0c0c0c');
+    expect(dark).toContain('#09090b');
     expect(light).toContain('#fafafa');
     expect(dark).toContain('optimizeLegibility');
-    expect(light).toContain('#059669');
+    // Single provider: accent derives from provider primary, not theme green
+    expect(light).toContain('#d97706');
   });
 
   it('includes provider sections and top model percentages', async () => {

@@ -74,7 +74,8 @@ describe('renderTerminalCardSvg', () => {
     const lightOptions = createRenderOptions({ format: 'png', theme: 'light' });
     const svg = renderTerminalCardSvg(output, lightOptions);
     expect(svg).toContain('#fafafa');
-    expect(svg).toContain('#059669');
+    // Single provider: accent derives from provider primary color
+    expect(svg).toContain('#d97706');
   });
 
   it('empty data produces a valid card with zeroed stats', () => {
@@ -93,8 +94,9 @@ describe('renderTerminalCardSvg', () => {
 
   it('dark theme uses dark theme colors', () => {
     const svg = renderTerminalCardSvg(output, options);
-    expect(svg).toContain('#0c0c0c');
-    expect(svg).toContain('#10b981');
+    expect(svg).toContain('#09090b');
+    // Single provider: accent derives from provider primary color, not theme green
+    expect(svg).toContain('#d97706');
   });
 
   // ── Per-provider / multi-provider tests ─────────────────────────────

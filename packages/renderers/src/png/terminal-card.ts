@@ -41,13 +41,13 @@ interface CardTheme {
 function getCardTheme(mode: 'dark' | 'light'): CardTheme {
   if (mode === 'dark') {
     return {
-      bg: '#0c0c0c',
+      bg: '#09090b',
       fg: '#ffffff',
       muted: '#52525b',
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
-      heatmapEmpty: '#1a1a1a',
-      barTrack: '#1c1c1c',
+      heatmapEmpty: '#141418',
+      barTrack: '#18181b',
       titlebarBorder: 'rgba(255,255,255,0.06)',
     };
   }
@@ -215,12 +215,15 @@ function renderProviderHeatmap(
     current.setUTCDate(current.getUTCDate() + 1);
   }
 
-  // Day labels (Mon, Wed, Fri, Sun)
+  // Day labels (all 7 days)
   const dayLabels = [
-    { label: 'Mon', row: 1 },
-    { label: 'Wed', row: 3 },
-    { label: 'Fri', row: 5 },
     { label: 'Sun', row: 0 },
+    { label: 'Mon', row: 1 },
+    { label: 'Tue', row: 2 },
+    { label: 'Wed', row: 3 },
+    { label: 'Thu', row: 4 },
+    { label: 'Fri', row: 5 },
+    { label: 'Sat', row: 6 },
   ].map((d) => {
     const y = MONTH_LABEL_HEIGHT + d.row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2;
     return `<text x="0" y="${y}" fill="__MUTED__" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(d.label)}</text>`;
@@ -245,6 +248,9 @@ export function renderTerminalCardSvg(
   const stats = output.aggregated;
   const { since, until } = output.dateRange;
   const providers = output.providers;
+
+  // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
+  const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
 
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
@@ -288,11 +294,6 @@ export function renderTerminalCardSvg(
     sections.push(`<circle cx="${dot.cx}" cy="${dotY}" r="${DOT_RADIUS}" fill="${escapeXml(dot.color)}"/>`);
   }
 
-  const titleX = dots[2].cx + DOT_RADIUS + 20;
-  sections.push(
-    `<text x="${titleX}" y="${dotY + 5}" fill="${escapeXml(theme.muted)}" font-size="13" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml('tokenleak')}</text>`,
-  );
-
   sections.push(`<line x1="0" y1="${TITLEBAR_HEIGHT}" x2="${cardWidth}" y2="${TITLEBAR_HEIGHT}" stroke="${escapeXml(theme.titlebarBorder)}" stroke-width="1"/>`);
 
   y = TITLEBAR_HEIGHT + pad * 0.6;
@@ -300,9 +301,9 @@ export function renderTerminalCardSvg(
   // ── Command prompt ────────────────────────────────────────────────
   sections.push(
     `<text x="${pad}" y="${y + 16}" font-size="15" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">` +
-    `<tspan fill="${escapeXml(theme.accent)}">$</tspan>` +
+    `<tspan fill="${escapeXml(cardAccent)}">$</tspan>` +
     `<tspan fill="${escapeXml(theme.fg)}"> tokenleak</tspan>` +
-    `<tspan fill="${escapeXml(theme.accent)}">_</tspan>` +
+    `<tspan fill="${escapeXml(cardAccent)}">_</tspan>` +
     `</text>`,
   );
   y += 40;
@@ -397,7 +398,7 @@ export function renderTerminalCardSvg(
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.5">${escapeXml(stat.label)}</text>`,
       );
-      const valueColor = stat.accent ? theme.accent : theme.fg;
+      const valueColor = stat.accent ? cardAccent : theme.fg;
       sections.push(
         `<text x="${x}" y="${startY + 28}" fill="${escapeXml(valueColor)}" font-size="22" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(stat.value)}</text>`,
       );
@@ -432,7 +433,7 @@ export function renderTerminalCardSvg(
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
     sections.push(
-      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
+      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
     );
 
     sections.push(
@@ -442,8 +443,8 @@ export function renderTerminalCardSvg(
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(theme.accent)}44"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(theme.accent)}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
@@ -451,7 +452,7 @@ export function renderTerminalCardSvg(
     );
 
     sections.push(
-      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
 
     y += 32;

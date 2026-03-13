@@ -11,5 +11,5 @@ export const MONTH_LABEL_HEIGHT = 24;
 export const PROVIDER_SECTION_GAP = 36;
 export const MIN_CONTENT_WIDTH = 700;
 export const MODEL_NAME_WIDTH = 220;
-export const MODEL_BAR_GAP = 18;
+export const MODEL_BAR_GAP = 36;
 export const MODEL_PERCENT_WIDTH = 40;
