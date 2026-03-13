@@ -441,7 +441,7 @@ export function renderTerminalCardSvg(
     );
 
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="${escapeXml(theme.barTrack)}"/>`,
+      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(theme.barTrack)}"/>`,
     );
 
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -455,7 +455,7 @@ export function renderTerminalCardSvg(
       `</linearGradient></defs>`,
     );
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="${escapeXml(barFill)}"/>`,
+      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(barFill)}"/>`,
     );
 
     sections.push(
