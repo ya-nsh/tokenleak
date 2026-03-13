@@ -31,7 +31,7 @@ describe('SvgRenderer', () => {
     const dark = await renderer.render(output, createRenderOptions({ theme: 'dark' }));
     const light = await renderer.render(output, createRenderOptions({ theme: 'light' }));
 
-    expect(dark).toContain('#09090b');
+    expect(dark).toContain('#07070f');
     expect(light).toContain('#fafafa');
     expect(dark).toContain('optimizeLegibility');
     // Single provider: accent derives from provider primary, not theme green

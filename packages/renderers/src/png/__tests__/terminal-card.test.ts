@@ -22,7 +22,7 @@ describe('renderTerminalCardSvg', () => {
     expect(svg).toContain('#ff5f57');
     expect(svg).toContain('#febc2e');
     expect(svg).toContain('#28c840');
-    // 3 traffic light dots + 1 provider dot = 4 circles minimum
+    // exactly 3 traffic light dots (provider section now uses accent bars)
     const circleCount = (svg.match(/<circle/g) ?? []).length;
     expect(circleCount).toBeGreaterThanOrEqual(3);
   });
@@ -94,7 +94,7 @@ describe('renderTerminalCardSvg', () => {
 
   it('dark theme uses dark theme colors', () => {
     const svg = renderTerminalCardSvg(output, options);
-    expect(svg).toContain('#09090b');
+    expect(svg).toContain('#07070f');
     // Single provider: accent derives from provider primary color, not theme green
     expect(svg).toContain('#d97706');
   });
@@ -149,7 +149,7 @@ describe('renderTerminalCardSvg', () => {
     expect(svg).not.toContain('OVERALL');
   });
 
-  it('renders three providers with distinct colored dots', () => {
+  it('renders three providers with distinct colored accent bars', () => {
     const threeProviders = createOutput({
       providers: [
         {
@@ -177,9 +177,9 @@ describe('renderTerminalCardSvg', () => {
     expect(svg).toContain('#10a37f');
     expect(svg).toContain('#6366f1');
 
-    // 3 traffic light dots + 3 provider dots = 6 circles
+    // 3 traffic light dots + 1 in dot-grid pattern def (no provider dots — accent bars used instead)
     const circleCount = (svg.match(/<circle/g) ?? []).length;
-    expect(circleCount).toBe(6);
+    expect(circleCount).toBe(4);
   });
 
   it('each provider gets its own heatmap section', () => {
