@@ -2,7 +2,6 @@ import type {
   TokenleakOutput,
   RenderOptions,
   DailyUsage,
-  ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
@@ -261,14 +260,14 @@ export function renderTerminalCardSvg(
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
 
   // Pre-compute all provider heatmaps to determine max width
-  const providerHeatmaps = providers.map((p) => {
-    const heatmapColors = buildHeatmapScale(p.colors, isDark);
-    return {
-      provider: p,
-      heatmap: renderProviderHeatmap(p.daily, since, until, heatmapColors, theme.heatmapEmpty),
-      heatmapColors,
-    };
-  });
+  const providerHeatmaps = providers.map((p) => ({
+    provider: p,
+    heatmap: renderProviderHeatmap(
+      p.daily, since, until,
+      buildHeatmapScale(p.colors, isDark),
+      theme.heatmapEmpty,
+    ),
+  }));
 
   const maxHeatmapWidth = providerHeatmaps.reduce(
     (max, ph) => Math.max(max, ph.heatmap.gridWidth),
@@ -445,9 +444,9 @@ ${stripeGradDef}</defs>`,
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(valueColor)}" font-size="${STAT_VAL_SIZE}" font-family="${escapeXml(FONT_FAMILY)}" font-weight="${stat.accent ? '800' : '700'}">${escapeXml(stat.value)}</text>`,
       );
-      // Label below — small, muted, spaced caps
+      // Label below — small, muted, spaced caps (22px below value baseline gives ~15px clear of descenders)
       sections.push(
-        `<text x="${x}" y="${startY + 20}" fill="${escapeXml(theme.muted)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.8">${escapeXml(stat.label)}</text>`,
+        `<text x="${x}" y="${startY + 22}" fill="${escapeXml(theme.muted)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.8">${escapeXml(stat.label)}</text>`,
       );
     }
   }
