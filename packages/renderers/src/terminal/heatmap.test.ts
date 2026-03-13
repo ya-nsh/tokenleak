@@ -33,4 +33,19 @@ describe('renderTerminalHeatmap', () => {
       expect(line.length).toBeLessThanOrEqual(24);
     }
   });
+
+  it('avoids overlapping month labels on short grids', () => {
+    const output = renderTerminalHeatmap(
+      [
+        createDailyUsage('2026-01-01', 1000),
+        createDailyUsage('2026-02-01', 2000),
+        createDailyUsage('2026-03-01', 3000),
+      ],
+      { width: 32, noColor: true },
+    );
+
+    expect(output).toContain('Jan');
+    expect(output).toContain('Feb');
+    expect(output).not.toContain('JaFeb');
+  });
 });

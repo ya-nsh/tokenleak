@@ -51,6 +51,7 @@ function formatDate(date: Date): string {
 function buildMonthHeader(weeks: Date[][]): string {
   const header = Array.from({ length: weeks.length * WEEK_COLUMN_WIDTH }, () => ' ');
   let lastMonth = -1;
+  let nextFreeIndex = 0;
 
   for (let weekIndex = 0; weekIndex < weeks.length; weekIndex++) {
     const firstDay = weeks[weekIndex]?.[0];
@@ -60,11 +61,23 @@ function buildMonthHeader(weeks: Date[][]): string {
     if (month === lastMonth) continue;
     lastMonth = month;
 
-    const label = MONTH_LABELS[month] ?? '';
-    const startIndex = weekIndex * WEEK_COLUMN_WIDTH;
-    for (let offset = 0; offset < label.length && startIndex + offset < header.length; offset++) {
+    const desiredStart = weekIndex * WEEK_COLUMN_WIDTH;
+    const startIndex = Math.max(desiredStart, nextFreeIndex);
+    const remaining = header.length - startIndex;
+    if (remaining <= 0) continue;
+
+    const fullLabel = MONTH_LABELS[month] ?? '';
+    const label = remaining >= fullLabel.length
+      ? fullLabel
+      : remaining >= 2
+        ? fullLabel.slice(0, 2)
+        : fullLabel.slice(0, 1);
+
+    for (let offset = 0; offset < label.length; offset++) {
       header[startIndex + offset] = label[offset] ?? ' ';
     }
+
+    nextFreeIndex = startIndex + label.length + 1;
   }
 
   return `${' '.repeat(DAY_LABEL_WIDTH)}${header.join('')}`;

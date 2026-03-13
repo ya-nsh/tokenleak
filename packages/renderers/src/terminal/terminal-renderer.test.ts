@@ -296,11 +296,26 @@ describe('TerminalRenderer', () => {
       expect(result).toContain('claude-3.5-sonnet');
     });
 
+    it('uses per-provider stats instead of repeating overall totals in each section', async () => {
+      const output = createTerminalOutput({
+        providers: [
+          createTerminalProvider('anthropic', 'Anthropic', 5),
+          createTerminalProvider('openai', 'OpenAI', 2),
+        ],
+        aggregated: createTerminalPopulatedStats(),
+      });
+      const options = createTerminalOptions({ noColor: true });
+      const result = await renderer.render(output, options);
+
+      expect(result).toContain('Total Tokens         11K');
+      expect(result).toContain('Total Tokens         4K');
+    });
+
     it('shows insights when showInsights is true and stats warrant them', async () => {
       const stats = createTerminalPopulatedStats();
       stats.currentStreak = 10; // > 7 triggers insight
       const output = createTerminalOutput({
-        providers: [createTerminalProvider('anthropic', 'Anthropic', 5)],
+        providers: [createTerminalProvider('anthropic', 'Anthropic', 10)],
         aggregated: stats,
       });
       const options = createTerminalOptions({ noColor: true, showInsights: true });

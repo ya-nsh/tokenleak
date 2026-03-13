@@ -6,19 +6,22 @@ import type {
   ProviderColors,
 } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
-
-// ── Layout constants ──────────────────────────────────────────────────
-const CARD_PADDING = 48;
-const TITLEBAR_HEIGHT = 48;
-const DOT_RADIUS = 6;
-const DOT_GAP = 8;
-const CELL_SIZE = 16;
-const CELL_GAP = 4;
-const STAT_GRID_COLS = 3;
-const MODEL_BAR_HEIGHT = 8;
-const DAY_LABEL_WIDTH = 44;
-const MONTH_LABEL_HEIGHT = 24;
-const PROVIDER_SECTION_GAP = 36;
+import {
+  CARD_PADDING,
+  TITLEBAR_HEIGHT,
+  DOT_RADIUS,
+  DOT_GAP,
+  CELL_SIZE,
+  CELL_GAP,
+  STAT_GRID_COLS,
+  MODEL_BAR_HEIGHT,
+  DAY_LABEL_WIDTH,
+  MONTH_LABEL_HEIGHT,
+  PROVIDER_SECTION_GAP,
+  MIN_CONTENT_WIDTH,
+  MODEL_NAME_WIDTH,
+  MODEL_BAR_GAP,
+} from '../card/layout';
 
 const FONT_FAMILY =
   "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
@@ -257,7 +260,7 @@ export function renderTerminalCardSvg(
     (max, ph) => Math.max(max, ph.heatmap.gridWidth),
     0,
   );
-  const minContentWidth = Math.max(maxHeatmapWidth, 700);
+  const minContentWidth = Math.max(maxHeatmapWidth, MIN_CONTENT_WIDTH);
   const cardWidth = minContentWidth + pad * 2;
   const contentWidth = cardWidth - pad * 2;
 
@@ -419,8 +422,8 @@ export function renderTerminalCardSvg(
   y += 24;
 
   const topModels = stats.topModels.slice(0, 3);
-  const modelNameWidth = 220;
-  const barGap = 18;
+  const modelNameWidth = MODEL_NAME_WIDTH;
+  const barGap = MODEL_BAR_GAP;
   const percentX = cardWidth - pad;
   const barX = pad + modelNameWidth;
   const barMaxWidth = Math.max(48, percentX - barX - barGap);

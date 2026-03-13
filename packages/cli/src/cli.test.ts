@@ -97,6 +97,8 @@ describe('resolveConfig', () => {
     expect(config.claude).toBe(false);
     expect(config.codex).toBe(false);
     expect(config.openCode).toBe(false);
+    expect(config.allProviders).toBe(false);
+    expect(config.listProviders).toBe(false);
   });
 
   test('CLI flags override defaults', () => {
@@ -143,6 +145,12 @@ describe('resolveConfig', () => {
     expect(config.claude).toBe(true);
     expect(config.codex).toBe(true);
     expect(config.openCode).toBe(true);
+  });
+
+  test('passes provider utility flags through', () => {
+    const config = resolveConfig({ allProviders: true, listProviders: true });
+    expect(config.allProviders).toBe(true);
+    expect(config.listProviders).toBe(true);
   });
 
   test('passes --compare through', () => {
@@ -248,6 +256,18 @@ describe('run', () => {
     // Either no providers or unsupported format
     expect(thrown).toBeInstanceOf(TokenleakError);
   });
+
+  test('throws when --all-providers is combined with provider filters', async () => {
+    let thrown: unknown;
+    try {
+      await run({ allProviders: true, claude: true });
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(TokenleakError);
+    expect((thrown as TokenleakError).message).toContain('--all-providers');
+  });
 });
 
 // ─── CLI invocation tests (using Bun.spawn) ─────────────────────────────
@@ -266,6 +286,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('tokenleak');
     expect(stdout).toContain('Provider Shortcuts');
     expect(stdout).toContain('--open-code');
+    expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('Examples:');
   });
 
@@ -290,5 +311,32 @@ describe('CLI invocation', () => {
     const stderr = await new Response(proc.stderr).text();
     expect(exitCode).toBe(1);
     expect(stderr).toContain('No provider data found');
+  });
+
+  test('--list-providers exits with code 0 and prints registered providers', async () => {
+    const proc = Bun.spawn(['bun', cliPath, '--list-providers'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Registered providers:');
+    expect(stdout).toContain('claude-code');
+    expect(stdout).toContain('codex');
+    expect(stdout).toContain('open-code');
+  });
+
+  test('--all-providers with provider filter exits with code 1', async () => {
+    const proc = Bun.spawn(['bun', cliPath, '--all-providers', '--claude'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('--all-providers');
   });
 });

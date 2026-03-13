@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { SvgRenderer } from './svg-renderer';
+import { renderTerminalCardSvg } from '../png/terminal-card';
 import {
   createOutput,
   createProvider,
@@ -15,11 +16,14 @@ describe('SvgRenderer', () => {
   });
 
   it('renders the terminal-card svg shell', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
+    const output = createOutput();
+    const options = createRenderOptions();
+    const result = await renderer.render(output, options);
     expect(result).toContain('<svg');
     expect(result).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(result).toContain('tokenleak');
     expect(result).toContain('TOP MODELS');
+    expect(result).toBe(renderTerminalCardSvg(output, { ...options, format: 'svg' }));
   });
 
   it('matches the png card theme palette', async () => {

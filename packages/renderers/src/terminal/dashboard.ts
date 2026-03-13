@@ -1,3 +1,4 @@
+import { aggregate } from '@tokenleak/core';
 import type { TokenleakOutput, RenderOptions, ProviderData, AggregatedStats } from '@tokenleak/core';
 import { colorize } from './ansi';
 import { renderTerminalHeatmap } from './heatmap';
@@ -253,10 +254,11 @@ export function renderDashboard(output: TokenleakOutput, options: RenderOptions)
   // Render each provider
   for (let i = 0; i < output.providers.length; i++) {
     const provider = output.providers[i]!;
+    const providerStats = aggregate(provider.daily, output.dateRange.until);
     sections.push(
       renderProviderSection(
         provider,
-        output.aggregated,
+        providerStats,
         width,
         noColor,
         options.showInsights,
