@@ -435,7 +435,7 @@ export function renderTerminalCardSvg(
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
     sections.push(
-      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
+      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
     );
 
     sections.push(
@@ -454,7 +454,7 @@ export function renderTerminalCardSvg(
     );
 
     sections.push(
-      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
 
     y += 32;
