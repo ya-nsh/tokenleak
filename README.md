@@ -2,6 +2,8 @@
 
 See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, and **Open Code**, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
 
+![Tokenleak preview card](./docs/preview.png)
+
 ## Install
 
 Tokenleak requires [Bun](https://bun.sh) (v1.0+).
