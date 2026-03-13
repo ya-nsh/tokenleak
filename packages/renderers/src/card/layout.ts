@@ -1,0 +1,15 @@
+export const CARD_PADDING = 48;
+export const TITLEBAR_HEIGHT = 48;
+export const DOT_RADIUS = 6;
+export const DOT_GAP = 8;
+export const CELL_SIZE = 16;
+export const CELL_GAP = 4;
+export const STAT_GRID_COLS = 3;
+export const MODEL_BAR_HEIGHT = 8;
+export const DAY_LABEL_WIDTH = 44;
+export const MONTH_LABEL_HEIGHT = 24;
+export const PROVIDER_SECTION_GAP = 36;
+export const MIN_CONTENT_WIDTH = 700;
+export const MODEL_NAME_WIDTH = 220;
+export const MODEL_BAR_GAP = 18;
+export const MODEL_PERCENT_WIDTH = 40;

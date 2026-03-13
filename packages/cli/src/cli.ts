@@ -35,6 +35,153 @@ import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
+const PROVIDER_SHORTCUTS = {
+  claude: 'claude-code',
+  codex: 'codex',
+  openCode: 'open-code',
+} as const;
+const PROVIDER_ALIASES: Record<string, string> = {
+  anthropic: 'claude-code',
+  claude: 'claude-code',
+  'claude-code': 'claude-code',
+  claudecode: 'claude-code',
+  codex: 'codex',
+  openai: 'codex',
+  'open-code': 'open-code',
+  open_code: 'open-code',
+  opencode: 'open-code',
+};
+const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
+  'claude-code': ['anthropic', 'claude', 'claudecode'],
+  codex: ['openai'],
+  'open-code': ['opencode', 'open_code'],
+};
+
+function normalizeProviderToken(token: string): string {
+  const normalized = token.trim().toLowerCase().replace(/\s+/g, '-');
+  return PROVIDER_ALIASES[normalized] ?? normalized;
+}
+
+function getRequestedProviders(config: ReturnType<typeof resolveConfig>): Set<string> {
+  const requested = new Set<string>();
+
+  if (config.provider) {
+    for (const token of config.provider.split(',')) {
+      const normalized = normalizeProviderToken(token);
+      if (normalized) {
+        requested.add(normalized);
+      }
+    }
+  }
+
+  if (config.claude) requested.add(PROVIDER_SHORTCUTS.claude);
+  if (config.codex) requested.add(PROVIDER_SHORTCUTS.codex);
+  if (config.openCode) requested.add(PROVIDER_SHORTCUTS.openCode);
+
+  return requested;
+}
+
+function providerMatchesFilter(provider: IProvider, requested: Set<string>): boolean {
+  if (requested.size === 0) return true;
+
+  const candidates = [
+    normalizeProviderToken(provider.name),
+    normalizeProviderToken(provider.displayName),
+  ];
+
+  return candidates.some((candidate) => requested.has(candidate));
+}
+
+function buildHelpText(): string {
+  return [
+    `tokenleak ${VERSION}`,
+    'Visualize AI coding assistant token usage across providers.',
+    '',
+    'Usage:',
+    '  tokenleak [flags]',
+    '',
+    'Provider Shortcuts:',
+    '  --claude                Only include Claude Code',
+    '  --codex                 Only include Codex',
+    '  --open-code             Only include OpenCode',
+    '  --all-providers         Ignore provider filters and use every available provider',
+    '  --list-providers        Show registered providers and aliases',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, png, svg, json',
+    '  -t, --theme <theme>     Theme for png/svg/live output: dark, light',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file and infer format from extension',
+    '  -w, --width <number>    Terminal render width',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --compare <range>   Compare against YYYY-MM-DD..YYYY-MM-DD or auto',
+    '      --clipboard         Copy rendered output to the clipboard',
+    '      --open              Open the generated output file',
+    '      --upload <target>   Upload rendered output, currently: gist',
+    '  -L, --live-server       Start the interactive local dashboard',
+    '      --no-color          Disable ANSI colors',
+    '      --no-insights       Hide insights in terminal mode',
+    '      --help              Show this help',
+    '      --version           Show version information',
+    '',
+    'Examples:',
+    '  tokenleak',
+    '  tokenleak --claude --days 30',
+    '  tokenleak --codex --format png --output codex.png',
+    '  tokenleak --open-code --since 2026-01-01 --until 2026-03-01',
+    '  tokenleak --provider claude,codex --format svg --output usage.svg',
+    '  tokenleak --provider anthropic,openai',
+    '  tokenleak --list-providers',
+    '  tokenleak --compare auto --format terminal',
+    '  tokenleak --live-server --theme light',
+    '',
+    'Version:',
+    `  CLI ${VERSION}`,
+    `  Schema ${SCHEMA_VERSION}`,
+    '',
+  ].join('\n');
+}
+
+function buildVersionText(): string {
+  return `tokenleak ${VERSION}\nschema ${SCHEMA_VERSION}\n`;
+}
+
+function normalizeCliArg(arg: string): string {
+  const flagMap: Record<string, string> = {
+    '--all-providers': '--allProviders',
+    '--list-providers': '--listProviders',
+    '--open-code': '--openCode',
+    '--live-server': '--liveServer',
+    '--no-color': '--noColor',
+    '--no-insights': '--noInsights',
+  };
+
+  return flagMap[arg] ?? arg;
+}
+
+function registerBuiltInProviders(registry: ProviderRegistry): void {
+  registry.register(new ClaudeCodeProvider());
+  registry.register(new CodexProvider());
+  registry.register(new OpenCodeProvider());
+}
+
+function buildProviderList(providers: IProvider[], availability: Map<string, boolean>): string {
+  const lines = ['Registered providers:', ''];
+
+  for (const provider of providers) {
+    const aliases = PROVIDER_ALIAS_GROUPS[provider.name] ?? [];
+    const status = availability.get(provider.name) ? 'available' : 'unavailable';
+    lines.push(`- ${provider.name} (${provider.displayName}) [${status}]`);
+    if (aliases.length > 0) {
+      lines.push(`  aliases: ${aliases.join(', ')}`);
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
 
 /** Infer format from output file extension. */
 export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[number] | null {
@@ -113,6 +260,11 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   noInsights: boolean;
   compare?: string;
   provider?: string;
+  claude: boolean;
+  codex: boolean;
+  openCode: boolean;
+  allProviders: boolean;
+  listProviders: boolean;
   clipboard: boolean;
   open: boolean;
   upload?: string;
@@ -133,6 +285,11 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: number;
     noColor: boolean;
     noInsights: boolean;
+    claude: boolean;
+    codex: boolean;
+    openCode: boolean;
+    allProviders: boolean;
+    listProviders: boolean;
     clipboard: boolean;
     open: boolean;
     liveServer: boolean;
@@ -144,6 +301,11 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: 80,
     noColor: false,
     noInsights: false,
+    claude: false,
+    codex: false,
+    openCode: false,
+    allProviders: false,
+    listProviders: false,
     clipboard: false,
     open: false,
     liveServer: false,
@@ -211,6 +373,21 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['provider'] !== undefined) {
     result.provider = cliArgs['provider'] as string;
+  }
+  if (cliArgs['claude'] !== undefined) {
+    result.claude = cliArgs['claude'] as boolean;
+  }
+  if (cliArgs['codex'] !== undefined) {
+    result.codex = cliArgs['codex'] as boolean;
+  }
+  if (cliArgs['openCode'] !== undefined) {
+    result.openCode = cliArgs['openCode'] as boolean;
+  }
+  if (cliArgs['allProviders'] !== undefined) {
+    result.allProviders = cliArgs['allProviders'] as boolean;
+  }
+  if (cliArgs['listProviders'] !== undefined) {
+    result.listProviders = cliArgs['listProviders'] as boolean;
   }
   if (cliArgs['clipboard'] !== undefined) {
     result.clipboard = cliArgs['clipboard'] as boolean;
@@ -309,6 +486,27 @@ async function runCompare(
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
 
+  if (config.allProviders && (
+    config.provider ||
+    config.claude ||
+    config.codex ||
+    config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  const registry = new ProviderRegistry();
+  registerBuiltInProviders(registry);
+
+  if (config.listProviders) {
+    const providers = registry.getAll();
+    const availabilityResults = await Promise.all(
+      providers.map(async (provider) => [provider.name, await provider.isAvailable()] as const),
+    );
+    process.stdout.write(buildProviderList(providers, new Map(availabilityResults)));
+    return;
+  }
+
   // Build date range
   const dateRange = computeDateRange({
     since: config.since,
@@ -316,25 +514,17 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     days: config.days,
   });
 
-  // Register providers
-  const registry = new ProviderRegistry();
-  registry.register(new ClaudeCodeProvider());
-  registry.register(new CodexProvider());
-  registry.register(new OpenCodeProvider());
-
   // Get available providers
   let available = await registry.getAvailable();
 
-  // Filter by --provider if set
-  if (config.provider) {
-    const requested = new Set(
-      config.provider.split(',').map((s) => s.trim().toLowerCase()),
-    );
-    available = available.filter(
-      (p) =>
-        requested.has(p.name.toLowerCase()) ||
-        requested.has(p.displayName.toLowerCase()),
-    );
+  const requestedProviders = getRequestedProviders(config);
+  if (!config.allProviders && requestedProviders.size > 0) {
+    if (config.provider && (config.claude || config.codex || config.openCode)) {
+      process.stderr.write(
+        `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
+      );
+    }
+    available = available.filter((provider) => providerMatchesFilter(provider, requestedProviders));
   }
 
   if (available.length === 0) {
@@ -544,6 +734,31 @@ const main = defineCommand({
       alias: 'p',
       description: 'Filter to specific provider(s), comma-separated',
     },
+    claude: {
+      type: 'boolean',
+      description: 'Shortcut for --provider claude-code',
+      default: false,
+    },
+    codex: {
+      type: 'boolean',
+      description: 'Shortcut for --provider codex',
+      default: false,
+    },
+    openCode: {
+      type: 'boolean',
+      description: 'Shortcut for --provider open-code',
+      default: false,
+    },
+    allProviders: {
+      type: 'boolean',
+      description: 'Ignore provider filters and use every available provider',
+      default: false,
+    },
+    listProviders: {
+      type: 'boolean',
+      description: 'List registered providers and aliases',
+      default: false,
+    },
     clipboard: {
       type: 'boolean',
       description: 'Copy output to clipboard after rendering',
@@ -580,6 +795,11 @@ const main = defineCommand({
       if (args.noInsights) cliArgs['noInsights'] = true;
       if (args.compare !== undefined) cliArgs['compare'] = args.compare;
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+      if (args.claude) cliArgs['claude'] = true;
+      if (args.codex) cliArgs['codex'] = true;
+      if (args.openCode) cliArgs['openCode'] = true;
+      if (args.allProviders) cliArgs['allProviders'] = true;
+      if (args.listProviders) cliArgs['listProviders'] = true;
       if (args.clipboard) cliArgs['clipboard'] = true;
       if (args.open) cliArgs['open'] = true;
       if (args.upload !== undefined) cliArgs['upload'] = args.upload;
@@ -600,5 +820,16 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
+  const normalizedArgv = process.argv.slice(2).map(normalizeCliArg);
+  process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
+  const argv = normalizedArgv;
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(buildHelpText());
+    process.exit(0);
+  }
+  if (argv.includes('--version') || argv.includes('-v')) {
+    process.stdout.write(buildVersionText());
+    process.exit(0);
+  }
   runMain(main);
 }

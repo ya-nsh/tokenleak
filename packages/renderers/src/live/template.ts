@@ -6,6 +6,15 @@ import type {
   ProviderColors,
 } from '@tokenleak/core';
 import { formatNumber, formatCost } from '../svg/utils';
+import {
+  CELL_SIZE,
+  CELL_GAP,
+  DAY_LABEL_WIDTH,
+  MONTH_LABEL_HEIGHT,
+  MODEL_NAME_WIDTH,
+  MODEL_BAR_GAP,
+  MODEL_PERCENT_WIDTH,
+} from '../card/layout';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -155,23 +164,18 @@ function renderProviderHeatmapHtml(
   const heatmapColors = buildHeatmapScale(provider.colors, isDark);
   const { cells, months, totalCols } = buildHeatmapCells(provider.daily, since, until);
 
-  const cellSize = 16;
-  const cellGap = 4;
-  const dayLabelWidth = 44;
-  const monthLabelHeight = 24;
-
-  const heatmapWidth = dayLabelWidth + totalCols * (cellSize + cellGap);
-  const heatmapHeight = monthLabelHeight + 7 * (cellSize + cellGap);
+  const heatmapWidth = DAY_LABEL_WIDTH + totalCols * (CELL_SIZE + CELL_GAP);
+  const heatmapHeight = MONTH_LABEL_HEIGHT + 7 * (CELL_SIZE + CELL_GAP);
 
   const cellsHtml = cells.map((c) => {
-    const x = dayLabelWidth + c.col * (cellSize + cellGap);
-    const y = monthLabelHeight + c.row * (cellSize + cellGap);
+    const x = DAY_LABEL_WIDTH + c.col * (CELL_SIZE + CELL_GAP);
+    const y = MONTH_LABEL_HEIGHT + c.row * (CELL_SIZE + CELL_GAP);
     const fill = c.level === 0 ? emptyCell : heatmapColors[c.level];
     return `<div class="heatmap-cell" style="left:${x}px;top:${y}px;background:${fill}" data-date="${esc(c.date)}" data-tokens="${c.tokens}"></div>`;
   }).join('\n');
 
   const monthLabelsHtml = months.map((m) => {
-    const x = dayLabelWidth + m.col * (cellSize + cellGap);
+    const x = DAY_LABEL_WIDTH + m.col * (CELL_SIZE + CELL_GAP);
     return `<span class="month-label" style="left:${x}px">${esc(m.label)}</span>`;
   }).join('\n');
 
@@ -181,7 +185,7 @@ function renderProviderHeatmapHtml(
     { label: 'Fri', row: 5 },
     { label: 'Sun', row: 0 },
   ].map((d) => {
-    const y = monthLabelHeight + d.row * (cellSize + cellGap) + cellSize - 2;
+    const y = MONTH_LABEL_HEIGHT + d.row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2;
     return `<span class="day-label" style="top:${y - 10}px">${d.label}</span>`;
   }).join('\n');
 
@@ -320,8 +324,8 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   .heatmap-container { position: relative; margin-bottom: 8px; }
   .heatmap-cell {
     position: absolute;
-    width: 16px;
-    height: 16px;
+    width: ${CELL_SIZE}px;
+    height: ${CELL_SIZE}px;
     border-radius: 3px;
     cursor: pointer;
   }
@@ -351,11 +355,17 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   .stat-value.accent { color: ${accent}; }
   .models-section { margin-top: 8px; }
   .models-label { color: ${muted}; font-size: 10px; font-weight: 600; letter-spacing: 2px; margin-bottom: 16px; }
-  .model-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .model-name { color: ${muted}; font-size: 12px; width: 200px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .model-bar-track { flex: 1; height: 8px; background: ${barTrack}; border-radius: 4px; overflow: hidden; }
+  .model-row {
+    display: grid;
+    grid-template-columns: ${MODEL_NAME_WIDTH}px minmax(0, 1fr) ${MODEL_PERCENT_WIDTH}px;
+    align-items: center;
+    column-gap: ${MODEL_BAR_GAP}px;
+    margin-bottom: 16px;
+  }
+  .model-name { color: ${muted}; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-bar-track { width: 100%; height: 8px; background: ${barTrack}; border-radius: 4px; overflow: hidden; }
   .model-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, ${accent}44, ${accent}); }
-  .model-pct { color: ${muted}; font-size: 12px; width: 40px; text-align: right; flex-shrink: 0; }
+  .model-pct { color: ${muted}; font-size: 12px; text-align: right; }
   .refresh-btn {
     display: inline-flex;
     align-items: center;

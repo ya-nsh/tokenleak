@@ -6,19 +6,22 @@ import type {
   ProviderColors,
 } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
-
-// ── Layout constants ──────────────────────────────────────────────────
-const CARD_PADDING = 48;
-const TITLEBAR_HEIGHT = 48;
-const DOT_RADIUS = 6;
-const DOT_GAP = 8;
-const CELL_SIZE = 16;
-const CELL_GAP = 4;
-const STAT_GRID_COLS = 3;
-const MODEL_BAR_HEIGHT = 8;
-const DAY_LABEL_WIDTH = 44;
-const MONTH_LABEL_HEIGHT = 24;
-const PROVIDER_SECTION_GAP = 36;
+import {
+  CARD_PADDING,
+  TITLEBAR_HEIGHT,
+  DOT_RADIUS,
+  DOT_GAP,
+  CELL_SIZE,
+  CELL_GAP,
+  STAT_GRID_COLS,
+  MODEL_BAR_HEIGHT,
+  DAY_LABEL_WIDTH,
+  MONTH_LABEL_HEIGHT,
+  PROVIDER_SECTION_GAP,
+  MIN_CONTENT_WIDTH,
+  MODEL_NAME_WIDTH,
+  MODEL_BAR_GAP,
+} from '../card/layout';
 
 const FONT_FAMILY =
   "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
@@ -257,7 +260,7 @@ export function renderTerminalCardSvg(
     (max, ph) => Math.max(max, ph.heatmap.gridWidth),
     0,
   );
-  const minContentWidth = Math.max(maxHeatmapWidth, 700);
+  const minContentWidth = Math.max(maxHeatmapWidth, MIN_CONTENT_WIDTH);
   const cardWidth = minContentWidth + pad * 2;
   const contentWidth = cardWidth - pad * 2;
 
@@ -419,23 +422,24 @@ export function renderTerminalCardSvg(
   y += 24;
 
   const topModels = stats.topModels.slice(0, 3);
-  const modelNameWidth = 200;
-  const percentWidth = 60;
-  const barMaxWidth = contentWidth - modelNameWidth - percentWidth - 20;
+  const modelNameWidth = MODEL_NAME_WIDTH;
+  const barGap = MODEL_BAR_GAP;
+  const percentX = cardWidth - pad;
+  const barX = pad + modelNameWidth;
+  const barMaxWidth = Math.max(48, percentX - barX - barGap);
 
-  for (const model of topModels) {
+  for (const [index, model] of topModels.entries()) {
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
     sections.push(
       `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
     );
 
-    const barX = pad + modelNameWidth;
     sections.push(
       `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="${escapeXml(theme.barTrack)}"/>`,
     );
 
-    const gradId = `grad-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
       `<stop offset="0%" stop-color="${escapeXml(theme.accent)}44"/>` +
@@ -447,7 +451,7 @@ export function renderTerminalCardSvg(
     );
 
     sections.push(
-      `<text x="${barX + barMaxWidth + 12}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT + 4}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
 
     y += 32;
@@ -460,7 +464,7 @@ export function renderTerminalCardSvg(
   const svg = sections.join('\n').replace('__CARD_HEIGHT__', String(cardHeight));
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${cardWidth}" height="${cardHeight}" viewBox="0 0 ${cardWidth} ${cardHeight}" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${cardWidth}" height="${cardHeight}" viewBox="0 0 ${cardWidth} ${cardHeight}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" color-rendering="optimizeQuality">`,
     svg,
     '</svg>',
   ].join('\n');

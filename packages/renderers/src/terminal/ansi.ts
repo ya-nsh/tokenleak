@@ -25,7 +25,7 @@ export const HEATMAP_BLOCKS = {
   DARK: '\u2593',   // ▓
   MEDIUM: '\u2592', // ▒
   LIGHT: '\u2591',  // ░
-  EMPTY: ' ',
+  EMPTY: '\u00b7',  // ·
 } as const;
 
 /**
