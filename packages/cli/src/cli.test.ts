@@ -93,6 +93,7 @@ describe('resolveConfig', () => {
     expect(config.width).toBe(80);
     expect(config.noColor).toBe(false);
     expect(config.noInsights).toBe(false);
+    expect(config.more).toBe(false);
     expect(config.output).toBeNull();
     expect(config.claude).toBe(false);
     expect(config.codex).toBe(false);
@@ -109,6 +110,7 @@ describe('resolveConfig', () => {
       width: 120,
       noColor: true,
       noInsights: true,
+      more: true,
     });
     expect(config.format).toBe('json');
     expect(config.theme).toBe('light');
@@ -116,6 +118,7 @@ describe('resolveConfig', () => {
     expect(config.width).toBe(120);
     expect(config.noColor).toBe(true);
     expect(config.noInsights).toBe(true);
+    expect(config.more).toBe(true);
   });
 
   test('infers format from output file extension', () => {
@@ -156,6 +159,11 @@ describe('resolveConfig', () => {
   test('passes --compare through', () => {
     const config = resolveConfig({ compare: '2025-01-01..2025-01-31' });
     expect(config.compare).toBe('2025-01-01..2025-01-31');
+  });
+
+  test('passes --more through', () => {
+    const config = resolveConfig({ more: true });
+    expect(config.more).toBe(true);
   });
 });
 
@@ -287,6 +295,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('Provider Shortcuts');
     expect(stdout).toContain('--open-code');
     expect(stdout).toContain('--list-providers');
+    expect(stdout).toContain('--more');
     expect(stdout).toContain('Examples:');
   });
 

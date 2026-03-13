@@ -15,6 +15,7 @@ export interface CliConfig {
   noInsights: boolean;
   compare: string;
   provider: string;
+  more: boolean;
 }
 
 const CONFIG_FILENAME = '.tokenleakrc';

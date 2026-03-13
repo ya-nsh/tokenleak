@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { renderTerminalCardSvg } from '../terminal-card';
 import {
   createOutput,
+  createMoreStats,
   createRenderOptions,
   createZeroedStats,
   createProvider,
@@ -195,5 +196,48 @@ describe('renderTerminalCardSvg', () => {
     // so we should see at least 2 heatmap groups
     const groupTranslateCount = (svg.match(/<g transform="translate\(/g) ?? []).length;
     expect(groupTranslateCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders expanded stats when --more is enabled', () => {
+    const moreOutput = createOutput({
+      more: createMoreStats(),
+    });
+    const svg = renderTerminalCardSvg(
+      moreOutput,
+      createRenderOptions({ format: 'png', more: true }),
+    );
+
+    expect(svg).toContain('PROJECTED MONTHLY BURN');
+    expect(svg).toContain('CACHE ECONOMICS');
+    expect(svg).toContain('SESSION STATS');
+    expect(svg).toContain('HOUR OF DAY');
+  });
+
+  it('renders compare model mix shift when compare data is present', () => {
+    const moreOutput = createOutput({
+      more: createMoreStats({
+        compare: {
+          previousRange: { since: '2026-02-01', until: '2026-02-14' },
+          modelMixShift: [
+            {
+              model: 'claude-3-opus',
+              currentShare: 0.55,
+              previousShare: 0.35,
+              deltaShare: 0.2,
+              currentTokens: 55000,
+              previousTokens: 35000,
+            },
+          ],
+        },
+      }),
+    });
+    const svg = renderTerminalCardSvg(
+      moreOutput,
+      createRenderOptions({ format: 'png', more: true }),
+    );
+
+    expect(svg).toContain('MODEL MIX SHIFT');
+    expect(svg).toContain('claude-3-opus');
+    expect(svg).toContain('+20.0pp');
   });
 });

@@ -8,3 +8,4 @@ export { topModels } from './top-models';
 export { aggregate } from './aggregate';
 export { mergeProviderData } from './merge';
 export { compareRanges, computeDeltas, buildCompareOutput, parseCompareRange, computePreviousPeriod } from './compare';
+export { buildMoreStats, computeModelMixShift } from './more';

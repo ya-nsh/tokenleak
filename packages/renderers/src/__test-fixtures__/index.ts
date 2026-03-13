@@ -6,6 +6,8 @@ import type {
   DailyUsage,
   DayOfWeekEntry,
   TopModelEntry,
+  MoreStats,
+  UsageEvent,
 } from '@tokenleak/core';
 import { SCHEMA_VERSION } from '@tokenleak/core';
 
@@ -118,6 +120,106 @@ export function createProvider(name: string, displayName: string): ProviderData 
       secondary: '#fbbf24',
       gradient: ['#d97706', '#fbbf24'],
     },
+    events: createUsageEvents(name),
+  };
+}
+
+export function createUsageEvents(provider: string = 'claude-code'): UsageEvent[] {
+  return [
+    {
+      provider,
+      timestamp: '2026-03-01T09:15:00.000Z',
+      date: '2026-03-01',
+      model: 'claude-3-opus',
+      inputTokens: 1000,
+      outputTokens: 500,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 50,
+      totalTokens: 1750,
+      cost: 0.2,
+      sessionId: `${provider}-session-a`,
+      projectId: 'project-alpha',
+      durationMs: 120000,
+    },
+    {
+      provider,
+      timestamp: '2026-03-01T21:45:00.000Z',
+      date: '2026-03-01',
+      model: 'claude-3-sonnet',
+      inputTokens: 800,
+      outputTokens: 400,
+      cacheReadTokens: 100,
+      cacheWriteTokens: 20,
+      totalTokens: 1320,
+      cost: 0.12,
+      sessionId: `${provider}-session-a`,
+      projectId: 'project-alpha',
+      durationMs: 180000,
+    },
+    {
+      provider,
+      timestamp: '2026-03-02T14:30:00.000Z',
+      date: '2026-03-02',
+      model: 'claude-3-haiku',
+      inputTokens: 600,
+      outputTokens: 300,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 15,
+      totalTokens: 995,
+      cost: 0.08,
+      sessionId: `${provider}-session-b`,
+      projectId: 'project-beta',
+      durationMs: 90000,
+    },
+  ];
+}
+
+export function createMoreStats(overrides: Partial<MoreStats> = {}): MoreStats {
+  return {
+    inputOutput: {
+      inputPerOutput: 2,
+      outputPerInput: 0.5,
+      outputShare: 0.333,
+    },
+    monthlyBurn: {
+      projectedTokens: 155000,
+      projectedCost: 6.2,
+      observedDays: 14,
+      calendarDays: 31,
+    },
+    cacheEconomics: {
+      readTokens: 8000,
+      writeTokens: 2000,
+      readCoverage: 0.4,
+      reuseRatio: 4,
+    },
+    hourOfDay: Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      tokens: hour === 14 ? 6000 : hour === 21 ? 4500 : hour === 9 ? 3000 : 500,
+      cost: hour === 14 ? 0.6 : 0.05,
+      count: hour === 14 ? 3 : 1,
+    })),
+    sessionMetrics: {
+      totalSessions: 2,
+      averageTokens: 24000,
+      averageCost: 0.6,
+      averageMessages: 4,
+      averageDurationMs: 240000,
+      longestSession: {
+        label: 'project-alpha',
+        tokens: 33000,
+        cost: 1.2,
+        count: 6,
+        durationMs: 420000,
+      },
+      projectCount: 2,
+      topProject: {
+        name: 'project-alpha',
+        tokens: 33000,
+      },
+    },
+    compare: null,
+    ...overrides,
   };
 }
 
@@ -130,6 +232,7 @@ export function createOutput(
     dateRange: { since: '2026-01-01', until: '2026-03-11' },
     providers: [createProvider('claude-code', 'Claude Code')],
     aggregated: createPopulatedStats(),
+    more: null,
     ...overrides,
   };
 }
