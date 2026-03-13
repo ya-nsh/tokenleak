@@ -31,7 +31,7 @@ describe('SvgRenderer', () => {
     const dark = await renderer.render(output, createRenderOptions({ theme: 'dark' }));
     const light = await renderer.render(output, createRenderOptions({ theme: 'light' }));
 
-    expect(dark).toContain('#0c0c0c');
+    expect(dark).toContain('#09090b');
     expect(light).toContain('#fafafa');
     expect(dark).toContain('optimizeLegibility');
     expect(light).toContain('#059669');

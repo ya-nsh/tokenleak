@@ -93,7 +93,7 @@ describe('renderTerminalCardSvg', () => {
 
   it('dark theme uses dark theme colors', () => {
     const svg = renderTerminalCardSvg(output, options);
-    expect(svg).toContain('#0c0c0c');
+    expect(svg).toContain('#09090b');
     expect(svg).toContain('#10b981');
   });
 

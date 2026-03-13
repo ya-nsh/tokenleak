@@ -41,13 +41,13 @@ interface CardTheme {
 function getCardTheme(mode: 'dark' | 'light'): CardTheme {
   if (mode === 'dark') {
     return {
-      bg: '#0c0c0c',
+      bg: '#09090b',
       fg: '#ffffff',
       muted: '#52525b',
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
-      heatmapEmpty: '#1a1a1a',
-      barTrack: '#1c1c1c',
+      heatmapEmpty: '#141418',
+      barTrack: '#18181b',
       titlebarBorder: 'rgba(255,255,255,0.06)',
     };
   }
