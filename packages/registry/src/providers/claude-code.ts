@@ -123,14 +123,14 @@ function extractUsage(record: unknown): UsageRecord | null {
     return null;
   }
 
-      return {
-        date,
-        timestamp,
-        model,
-        inputTokens,
-        outputTokens,
-        cacheReadTokens,
-        cacheWriteTokens,
+  return {
+    date,
+    timestamp,
+    model,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
     messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
   };
 }

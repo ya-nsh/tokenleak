@@ -112,7 +112,7 @@ function buildHourOfDay(events: UsageEvent[]): MoreStats['hourOfDay'] {
     if (Number.isNaN(date.getTime())) {
       continue;
     }
-    const bucket = buckets[date.getHours()];
+    const bucket = buckets[date.getUTCHours()];
     if (!bucket) {
       continue;
     }
@@ -184,6 +184,7 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
   let durationTotal = 0;
   let durationCount = 0;
   let longestSession: SessionSummary | null = null;
+  let longestSessionDuration = -1;
 
   for (const session of sessionEntries) {
     totalTokens += session.tokens;
@@ -201,7 +202,12 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
       durationCount += 1;
     }
 
-    if (!longestSession || session.tokens > longestSession.tokens) {
+    if (
+      derivedDurationMs > longestSessionDuration ||
+      (derivedDurationMs === longestSessionDuration &&
+        (!longestSession || session.tokens > longestSession.tokens))
+    ) {
+      longestSessionDuration = derivedDurationMs;
       longestSession = {
         label: session.label,
         tokens: session.tokens,

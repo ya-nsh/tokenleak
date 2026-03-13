@@ -191,6 +191,17 @@ function truncateText(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
+function formatSessionSummary(
+  summary: NonNullable<NonNullable<TokenleakOutput['more']>['sessionMetrics']['longestSession']>,
+): string {
+  const duration = formatDuration(summary.durationMs);
+  if (duration === 'n/a') {
+    return truncateText(summary.label, 20);
+  }
+
+  return truncateText(`${summary.label} · ${duration}`, 24);
+}
+
 // ── Heatmap renderer for a single provider ────────────────────────────
 interface HeatmapResult {
   svg: string;
@@ -752,10 +763,16 @@ export function renderTerminalCardSvg(
         value: formatDuration(more.sessionMetrics.averageDurationMs),
       },
       {
-        label: more.sessionMetrics.topProject ? 'Top Project' : 'Longest Session',
+        label: 'Longest Session',
+        value: more.sessionMetrics.longestSession
+          ? formatSessionSummary(more.sessionMetrics.longestSession)
+          : 'n/a',
+      },
+      {
+        label: 'Top Project',
         value: more.sessionMetrics.topProject
           ? truncateText(more.sessionMetrics.topProject.name, 20)
-          : truncateText(more.sessionMetrics.longestSession?.label ?? 'n/a', 20),
+          : 'n/a',
       },
     ];
     sections.push(

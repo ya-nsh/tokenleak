@@ -179,6 +179,34 @@ describe('buildMoreStats', () => {
     expect(more.compare?.modelMixShift.length).toBeGreaterThan(0);
     expect(more.compare?.previousRange.until).toBe('2026-02-14');
   });
+
+  it('uses UTC hour bucketing so charts stay stable across machine timezones', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T00:30:00+05:30',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 150,
+          cost: 0.1,
+          sessionId: 'session-tz',
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.hourOfDay[19]?.tokens).toBe(150);
+    expect(more.hourOfDay[0]?.tokens).toBe(0);
+  });
 });
 
 describe('computeModelMixShift', () => {
@@ -214,5 +242,50 @@ describe('computeModelMixShift', () => {
 
     expect(shift[0]?.model).toBe('claude-3-opus');
     expect(Math.abs(shift[0]?.deltaShare ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('prefers the longest duration session over the highest token session', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 500,
+          outputTokens: 200,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 700,
+          cost: 0.4,
+          sessionId: 'short-heavy',
+          projectId: 'project-heavy',
+          durationMs: 60_000,
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T12:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-haiku',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 150,
+          cost: 0.1,
+          sessionId: 'long-light',
+          projectId: 'project-long',
+          durationMs: 600_000,
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.sessionMetrics.longestSession?.label).toBe('project-long');
+    expect(more.sessionMetrics.longestSession?.durationMs).toBe(600_000);
   });
 });

@@ -211,6 +211,8 @@ describe('renderTerminalCardSvg', () => {
     expect(svg).toContain('CACHE ECONOMICS');
     expect(svg).toContain('SESSION STATS');
     expect(svg).toContain('HOUR OF DAY');
+    expect(svg).toContain('Longest Session');
+    expect(svg).toContain('Top Project');
   });
 
   it('renders compare model mix shift when compare data is present', () => {

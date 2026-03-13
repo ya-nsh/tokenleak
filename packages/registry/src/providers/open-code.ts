@@ -415,7 +415,6 @@ function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[
           explicitCost: typeof message.cost === 'number' ? message.cost : undefined,
           sessionId:
             (typeof message.sessionID === 'string' && message.sessionID) || sessionDir,
-          projectId: typeof message.providerID === 'string' ? message.providerID : undefined,
         };
         const completedAt = message.time?.completed;
         const completedMs =
