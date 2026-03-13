@@ -135,12 +135,21 @@ function renderDayOfWeek(stats: AggregatedStats, width: number, noColor: boolean
  */
 function renderTopModels(stats: AggregatedStats, width: number, noColor: boolean): string {
   const lines: string[] = [];
+  const nameWidth = Math.min(28, Math.max(16, Math.floor(width * 0.35)));
+  const pctWidth = 4;
+  const barGap = 2;
+  const barWidth = Math.max(8, width - nameWidth - pctWidth - 6);
 
   for (const model of stats.topModels.slice(0, 5)) {
     const pct = formatSharePercent(model.percentage);
-    const tokens = formatTokens(model.tokens);
-    const line = `  ${colorize(model.model, 'yellow', noColor)}  ${tokens}  ${pct}`;
-    lines.push(line.length > width ? line.slice(0, width) : line);
+    const normalizedName = model.model.length > nameWidth
+      ? `${model.model.slice(0, nameWidth - 1)}…`
+      : model.model;
+    const fillLength = Math.max(1, Math.round((model.percentage / 100) * barWidth));
+    const fill = colorize(BAR_CHAR.repeat(fillLength), 'green', noColor);
+    const track = '\u2591'.repeat(Math.max(0, barWidth - fillLength));
+    const line = `  ${colorize(normalizedName.padEnd(nameWidth), 'yellow', noColor)}${' '.repeat(barGap)}${fill}${track}${' '.repeat(barGap)}${pct.padStart(pctWidth)}`;
+    lines.push(line);
   }
 
   return lines.join('\n');

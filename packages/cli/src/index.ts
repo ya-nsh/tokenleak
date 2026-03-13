@@ -1,4 +1,4 @@
-export const CLI_VERSION = '0.1.0';
+export { VERSION as CLI_VERSION } from '@tokenleak/core';
 
 export { run, resolveConfig, computeDateRange, inferFormatFromPath } from './cli.js';
 export { loadConfig } from './config.js';

@@ -3,7 +3,7 @@ import type { IRenderer } from '../renderer';
 import { renderTerminalCardSvg } from './terminal-card';
 import sharp from 'sharp';
 
-const PNG_DENSITY = 288;
+const PNG_DENSITY = 432;
 
 export class PngRenderer implements IRenderer {
   readonly format = 'png' as const;
@@ -14,7 +14,9 @@ export class PngRenderer implements IRenderer {
       density: PNG_DENSITY,
     })
       .png({
+        adaptiveFiltering: true,
         compressionLevel: 9,
+        force: true,
       })
       .toBuffer();
     return pngBuffer;

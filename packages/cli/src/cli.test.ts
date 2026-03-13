@@ -94,6 +94,9 @@ describe('resolveConfig', () => {
     expect(config.noColor).toBe(false);
     expect(config.noInsights).toBe(false);
     expect(config.output).toBeNull();
+    expect(config.claude).toBe(false);
+    expect(config.codex).toBe(false);
+    expect(config.openCode).toBe(false);
   });
 
   test('CLI flags override defaults', () => {
@@ -133,6 +136,13 @@ describe('resolveConfig', () => {
   test('passes --provider through', () => {
     const config = resolveConfig({ provider: 'claude-code,codex' });
     expect(config.provider).toBe('claude-code,codex');
+  });
+
+  test('passes provider shortcut flags through', () => {
+    const config = resolveConfig({ claude: true, codex: true, openCode: true });
+    expect(config.claude).toBe(true);
+    expect(config.codex).toBe(true);
+    expect(config.openCode).toBe(true);
   });
 
   test('passes --compare through', () => {
@@ -254,8 +264,9 @@ describe('CLI invocation', () => {
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
     expect(stdout).toContain('tokenleak');
-    expect(stdout).toContain('--format');
-    expect(stdout).toContain('--theme');
+    expect(stdout).toContain('Provider Shortcuts');
+    expect(stdout).toContain('--open-code');
+    expect(stdout).toContain('Examples:');
   });
 
   test('--version prints version', async () => {
@@ -267,6 +278,7 @@ describe('CLI invocation', () => {
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
     expect(stdout).toContain('1.0.1');
+    expect(stdout).toContain('schema');
   });
 
   test('no providers matching filter exits with code 1', async () => {

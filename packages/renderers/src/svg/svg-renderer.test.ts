@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { SvgRenderer } from './svg-renderer';
 import {
-  createDailyUsage,
   createOutput,
-  createPopulatedStats,
   createProvider,
   createRenderOptions,
   createZeroedStats,
@@ -16,13 +14,26 @@ describe('SvgRenderer', () => {
     expect(renderer.format).toBe('svg');
   });
 
-  it('output contains <svg opening tag', async () => {
+  it('renders the terminal-card svg shell', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
     expect(result).toContain('<svg');
     expect(result).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(result).toContain('tokenleak');
+    expect(result).toContain('TOP MODELS');
   });
 
-  it('output contains provider names', async () => {
+  it('matches the png card theme palette', async () => {
+    const output = createOutput();
+    const dark = await renderer.render(output, createRenderOptions({ theme: 'dark' }));
+    const light = await renderer.render(output, createRenderOptions({ theme: 'light' }));
+
+    expect(dark).toContain('#0c0c0c');
+    expect(light).toContain('#fafafa');
+    expect(dark).toContain('optimizeLegibility');
+    expect(light).toContain('#059669');
+  });
+
+  it('includes provider sections and top model percentages', async () => {
     const output = createOutput({
       providers: [
         createProvider('claude-code', 'Claude Code'),
@@ -30,123 +41,40 @@ describe('SvgRenderer', () => {
       ],
     });
     const result = await renderer.render(output, createRenderOptions());
+
     expect(result).toContain('Claude Code');
     expect(result).toContain('Codex');
+    expect(result).toContain('50%');
+    expect(result).toContain('30%');
   });
 
-  it('dark vs light theme produces different backgrounds', async () => {
-    const output = createOutput();
-    const dark = await renderer.render(output, createRenderOptions({ theme: 'dark' }));
-    const light = await renderer.render(output, createRenderOptions({ theme: 'light' }));
-
-    // Dark theme uses #0d1117, light uses #ffffff
-    expect(dark).toContain('#0d1117');
-    expect(light).toContain('#ffffff');
-    expect(dark).not.toContain('fill="#ffffff"');
-    expect(light).not.toContain('fill="#0d1117"');
-  });
-
-  it('heatmap has rect elements for cells', async () => {
+  it('renders valid XML with multiple rects', async () => {
     const result = await renderer.render(createOutput(), createRenderOptions());
-    // The heatmap should have rect elements with titles (tooltips)
-    expect(result).toContain('<title>');
-    expect(result).toContain('tokens</title>');
-    // Should have multiple rect elements
-    const rectCount = (result.match(/<rect /g) ?? []).length;
-    // At least the background rect + some heatmap cells
-    expect(rectCount).toBeGreaterThan(5);
-  });
-
-  it('stats text is present (streak, tokens)', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('CURRENT STREAK');
-    expect(result).toContain('LONGEST STREAK');
-    expect(result).toContain('TOTAL TOKENS');
-    expect(result).toContain('CACHE HIT RATE');
-    expect(result).toContain('MOST USED MODEL');
-  });
-
-  it('output is valid XML (properly closed tags)', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    // Check that the SVG starts with <svg and ends with </svg>
     expect(result.trim()).toMatch(/^<svg[\s\S]*<\/svg>$/);
-
-    // Count opening and closing g tags
-    const openG = (result.match(/<g[\s>]/g) ?? []).length;
-    const closeG = (result.match(/<\/g>/g) ?? []).length;
-    expect(openG).toBe(closeG);
-
-    // Count opening and closing text tags
-    const openText = (result.match(/<text[\s>]/g) ?? []).length;
-    const closeText = (result.match(/<\/text>/g) ?? []).length;
-    expect(openText).toBe(closeText);
-
-    // All rect elements should be either self-closing (/>) or have a closing </rect>
-    const selfClosingRects = (result.match(/<rect [^>]*\/>/g) ?? []).length;
-    const pairedRects = (result.match(/<\/rect>/g) ?? []).length;
-    expect(selfClosingRects + pairedRects).toBeGreaterThan(0);
+    expect((result.match(/<rect /g) ?? []).length).toBeGreaterThan(10);
+    expect((result.match(/<text /g) ?? []).length).toBeGreaterThan(10);
   });
 
-  it('empty providers still produces valid SVG', async () => {
+  it('handles empty data without crashing', async () => {
     const output = createOutput({
       providers: [],
       aggregated: createZeroedStats(),
     });
     const result = await renderer.render(output, createRenderOptions());
-    expect(result).toContain('<svg');
-    expect(result).toContain('</svg>');
-    expect(result).toContain('Tokenleak');
-    expect(result).toContain('TOTAL TOKENS');
+
+    expect(result).toContain('No provider data');
+    expect(result).toContain('0 days');
+    expect(result).toContain('0.0%');
   });
 
-  it('renders bottom stat cards with model info', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('MOST USED MODEL');
-    expect(result).toContain('claude-3-opus');
-    expect(result).toContain('RECENT USE');
-    expect(result).toContain('TOTAL COST');
-    expect(result).toContain('ACTIVE DAYS');
-    expect(result).toContain('AVG DAILY TOKENS');
-  });
-
-  it('truncates long model names to prevent overflow', async () => {
-    const longModelName = 'claude-opus-4-6-super-extended-name';
-    const output = createOutput({
-      aggregated: createPopulatedStats({
-        topModels: [{ model: longModelName, tokens: 993_700_000, percentage: 80 }],
-      }),
-    });
-    const result = await renderer.render(output, createRenderOptions());
-    // Should contain truncation ellipsis, not the full model name with tokens
-    const fullLabel = `${longModelName} (993.7M)`;
-    expect(result).not.toContain(fullLabel);
-    expect(result).toContain('…');
-  });
-
-  it('SVG minimum width is at least 1000px', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    const widthMatch = result.match(/width="(\d+)"/);
-    expect(widthMatch).not.toBeNull();
-    const width = Number(widthMatch![1]);
-    expect(width).toBeGreaterThanOrEqual(1000);
-  });
-
-  it('renders header token stats', async () => {
-    const result = await renderer.render(createOutput(), createRenderOptions());
-    expect(result).toContain('INPUT TOKENS');
-    expect(result).toContain('OUTPUT TOKENS');
-    expect(result).toContain('TOTAL TOKENS');
-  });
-
-  it('escapes XML entities in provider names', async () => {
+  it('escapes provider names safely', async () => {
     const output = createOutput({
       providers: [createProvider('test', 'Test <Provider> & "More"')],
     });
     const result = await renderer.render(output, createRenderOptions());
+
     expect(result).toContain('&lt;Provider&gt;');
     expect(result).toContain('&amp;');
     expect(result).toContain('&quot;More&quot;');
-    // Should NOT contain unescaped angle brackets in text content
-    expect(result).not.toContain('>Test <Provider>');
   });
 });

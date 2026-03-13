@@ -351,11 +351,17 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
   .stat-value.accent { color: ${accent}; }
   .models-section { margin-top: 8px; }
   .models-label { color: ${muted}; font-size: 10px; font-weight: 600; letter-spacing: 2px; margin-bottom: 16px; }
-  .model-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .model-name { color: ${muted}; font-size: 12px; width: 200px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .model-bar-track { flex: 1; height: 8px; background: ${barTrack}; border-radius: 4px; overflow: hidden; }
+  .model-row {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) 40px;
+    align-items: center;
+    column-gap: 18px;
+    margin-bottom: 16px;
+  }
+  .model-name { color: ${muted}; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-bar-track { width: 100%; height: 8px; background: ${barTrack}; border-radius: 4px; overflow: hidden; }
   .model-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, ${accent}44, ${accent}); }
-  .model-pct { color: ${muted}; font-size: 12px; width: 40px; text-align: right; flex-shrink: 0; }
+  .model-pct { color: ${muted}; font-size: 12px; text-align: right; }
   .refresh-btn {
     display: inline-flex;
     align-items: center;
