@@ -23,7 +23,11 @@ import {
   MODEL_BAR_GAP,
 } from '../card/layout';
 
+// Sans-serif for all UI text (stats, labels, model names, heatmap axes)
 const FONT_FAMILY =
+  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+// Monospace kept only for the terminal prompt line
+const MONO_FONT_FAMILY =
   "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
 
 // ── Terminal card theme ───────────────────────────────────────────────
@@ -300,7 +304,7 @@ export function renderTerminalCardSvg(
 
   // ── Command prompt ────────────────────────────────────────────────
   sections.push(
-    `<text x="${pad}" y="${y + 16}" font-size="15" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">` +
+    `<text x="${pad}" y="${y + 16}" font-size="15" font-family="${escapeXml(MONO_FONT_FAMILY)}" font-weight="500">` +
     `<tspan fill="${escapeXml(cardAccent)}">$</tspan>` +
     `<tspan fill="${escapeXml(theme.fg)}"> tokenleak</tspan>` +
     `<tspan fill="${escapeXml(cardAccent)}">_</tspan>` +
@@ -320,22 +324,22 @@ export function renderTerminalCardSvg(
     const { provider, heatmap, heatmapColors } = providerHeatmaps[pi];
 
     // Provider header: colored dot + display name + token/cost summary
-    const provDotRadius = 5;
+    const provDotRadius = 7;
     const provColor = provider.colors.primary;
 
     sections.push(
-      `<circle cx="${pad + provDotRadius}" cy="${y + 8}" r="${provDotRadius}" fill="${escapeXml(provColor)}"/>`,
+      `<circle cx="${pad + provDotRadius}" cy="${y + 10}" r="${provDotRadius}" fill="${escapeXml(provColor)}"/>`,
     );
     sections.push(
-      `<text x="${pad + provDotRadius * 2 + 10}" y="${y + 13}" fill="${escapeXml(theme.fg)}" font-size="14" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(provider.displayName)}</text>`,
+      `<text x="${pad + provDotRadius * 2 + 12}" y="${y + 15}" fill="${escapeXml(theme.fg)}" font-size="17" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(provider.displayName)}</text>`,
     );
 
     // Inline summary on the right: total tokens · cost
     const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost)}`;
     sections.push(
-      `<text x="${cardWidth - pad}" y="${y + 13}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(summaryText)}</text>`,
+      `<text x="${cardWidth - pad}" y="${y + 15}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(summaryText)}</text>`,
     );
-    y += 28;
+    y += 32;
 
     // Heatmap
     const heatmapSvg = heatmap.svg.replace(/__MUTED__/g, escapeXml(theme.muted));
@@ -441,6 +445,9 @@ export function renderTerminalCardSvg(
     );
 
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const barFill = providers.length === 1
+      ? `url(#${escapeXml(gradId)})`
+      : (isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.18)');
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
       `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
@@ -448,7 +455,7 @@ export function renderTerminalCardSvg(
       `</linearGradient></defs>`,
     );
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="url(#${escapeXml(gradId)})"/>`,
+      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="4" fill="${escapeXml(barFill)}"/>`,
     );
 
     sections.push(
