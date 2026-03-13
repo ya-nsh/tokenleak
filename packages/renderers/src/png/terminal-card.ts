@@ -249,6 +249,9 @@ export function renderTerminalCardSvg(
   const { since, until } = output.dateRange;
   const providers = output.providers;
 
+  // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
+  const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
+
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
     const heatmapColors = buildHeatmapScale(p.colors, isDark);
@@ -298,9 +301,9 @@ export function renderTerminalCardSvg(
   // ── Command prompt ────────────────────────────────────────────────
   sections.push(
     `<text x="${pad}" y="${y + 16}" font-size="15" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">` +
-    `<tspan fill="${escapeXml(theme.accent)}">$</tspan>` +
+    `<tspan fill="${escapeXml(cardAccent)}">$</tspan>` +
     `<tspan fill="${escapeXml(theme.fg)}"> tokenleak</tspan>` +
-    `<tspan fill="${escapeXml(theme.accent)}">_</tspan>` +
+    `<tspan fill="${escapeXml(cardAccent)}">_</tspan>` +
     `</text>`,
   );
   y += 40;
@@ -395,7 +398,7 @@ export function renderTerminalCardSvg(
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.5">${escapeXml(stat.label)}</text>`,
       );
-      const valueColor = stat.accent ? theme.accent : theme.fg;
+      const valueColor = stat.accent ? cardAccent : theme.fg;
       sections.push(
         `<text x="${x}" y="${startY + 28}" fill="${escapeXml(valueColor)}" font-size="22" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(stat.value)}</text>`,
       );
@@ -440,8 +443,8 @@ export function renderTerminalCardSvg(
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(theme.accent)}44"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(theme.accent)}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
