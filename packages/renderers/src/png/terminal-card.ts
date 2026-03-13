@@ -291,11 +291,6 @@ export function renderTerminalCardSvg(
     sections.push(`<circle cx="${dot.cx}" cy="${dotY}" r="${DOT_RADIUS}" fill="${escapeXml(dot.color)}"/>`);
   }
 
-  const titleX = dots[2].cx + DOT_RADIUS + 20;
-  sections.push(
-    `<text x="${titleX}" y="${dotY + 5}" fill="${escapeXml(theme.muted)}" font-size="13" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml('tokenleak')}</text>`,
-  );
-
   sections.push(`<line x1="0" y1="${TITLEBAR_HEIGHT}" x2="${cardWidth}" y2="${TITLEBAR_HEIGHT}" stroke="${escapeXml(theme.titlebarBorder)}" stroke-width="1"/>`);
 
   y = TITLEBAR_HEIGHT + pad * 0.6;
