@@ -215,12 +215,15 @@ function renderProviderHeatmap(
     current.setUTCDate(current.getUTCDate() + 1);
   }
 
-  // Day labels (Mon, Wed, Fri, Sun)
+  // Day labels (all 7 days)
   const dayLabels = [
-    { label: 'Mon', row: 1 },
-    { label: 'Wed', row: 3 },
-    { label: 'Fri', row: 5 },
     { label: 'Sun', row: 0 },
+    { label: 'Mon', row: 1 },
+    { label: 'Tue', row: 2 },
+    { label: 'Wed', row: 3 },
+    { label: 'Thu', row: 4 },
+    { label: 'Fri', row: 5 },
+    { label: 'Sat', row: 6 },
   ].map((d) => {
     const y = MONTH_LABEL_HEIGHT + d.row * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2;
     return `<text x="0" y="${y}" fill="__MUTED__" font-size="11" font-family="${escapeXml(FONT_FAMILY)}">${escapeXml(d.label)}</text>`;

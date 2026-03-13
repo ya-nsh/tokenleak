@@ -126,8 +126,7 @@ export function renderTerminalHeatmap(
   const lines: string[] = [buildMonthHeader(displayWeeks)];
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-    const showLabel = dayIndex === 0 || dayIndex === 1 || dayIndex === 3 || dayIndex === 5;
-    const label = showLabel ? DAY_LABELS[dayIndex] ?? '   ' : '   ';
+    const label = DAY_LABELS[dayIndex] ?? '   ';
     let line = `${label} `.slice(0, DAY_LABEL_WIDTH);
 
     for (const week of displayWeeks) {
