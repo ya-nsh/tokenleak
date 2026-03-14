@@ -948,7 +948,9 @@ async function buildCustomCommand(): Promise<InteractiveCommand> {
   const width = format === 'terminal' ? await promptWidth() : null;
   const output = format === 'terminal'
     ? await ask('Output file (blank keeps stdout)')
-    : await ask(`Output file (blank keeps ${format === 'json' ? 'stdout' : `tokenleak.${format}`})`);
+    : format === 'json'
+      ? await ask('Output file (blank keeps stdout)')
+      : await ask('Output file', `tokenleak.${format}`);
   const noColor = await askYesNo('Disable ANSI colors', false);
   const noInsights = format === 'terminal' ? await askYesNo('Hide insights', false) : false;
   const more = await askYesNo('Enable --more stats', format === 'png' || format === 'svg');
@@ -1151,6 +1153,12 @@ async function promptForMenuCommand(
       }
 
       if (key.name === 'return' || key.name === 'enter') {
+        if (options[state.selectedIndex]!.digit === '8') {
+          showHelp = true;
+          paint(renderHelpOverlay(context.helpText, Math.max(60, (process.stdout.columns ?? 120) - 1)));
+          return;
+        }
+
         resolving = true;
         cleanup();
         try {
@@ -1203,9 +1211,12 @@ export async function startInteractiveCli(
   const options = createMenuOptions();
   const state: InteractiveState = { selectedIndex: 0 };
   let interrupted = false;
+  let ignoreSigint = false;
 
   const onSigint = (): void => {
-    interrupted = true;
+    if (!ignoreSigint) {
+      interrupted = true;
+    }
   };
 
   emitKeypressEvents(process.stdin);
@@ -1222,7 +1233,6 @@ export async function startInteractiveCli(
       if (command.type === 'exit') {
         return;
       }
-
       if (command.type === 'show-help') {
         continue;
       }
@@ -1241,8 +1251,10 @@ export async function startInteractiveCli(
           clearInterval(loadingTicker);
           leaveAltScreen();
           try {
+            ignoreSigint = true;
             result = await execute(command.request);
           } finally {
+            ignoreSigint = false;
             enterAltScreen();
           }
         } else {
