@@ -32,8 +32,16 @@ function getCellWidth(mode: HeatmapDisplayMode): number {
   return mode === 'full' ? 2 : 1;
 }
 
+function getHorizontalPadding(mode: HeatmapDisplayMode): string {
+  return mode === 'full' ? '  ' : ' ';
+}
+
+function getCellGap(mode: HeatmapDisplayMode): string {
+  return mode === 'full' ? '  ' : ' ';
+}
+
 function getWeekColumnWidth(mode: HeatmapDisplayMode): number {
-  return getCellWidth(mode) + 1;
+  return getCellWidth(mode) + getCellGap(mode).length;
 }
 
 function buildMonthHeader(
@@ -98,6 +106,50 @@ function renderCell(
   return background256(' '.repeat(cellWidth), colorCode, noColor);
 }
 
+function getVisibleLength(text: string): number {
+  return text.replace(/\x1b\[[0-9;]*m/g, '').length;
+}
+
+function getPrimaryFamily(
+  visibleWeeks: NonNullable<ReturnType<typeof buildHeatmapModel>>['weeks'],
+): string {
+  const familyDays = new Map<string, number>();
+
+  for (const cell of visibleWeeks.flatMap((week) => week.days)) {
+    if (!cell.dominantModelFamily) {
+      continue;
+    }
+    familyDays.set(cell.dominantModelFamily, (familyDays.get(cell.dominantModelFamily) ?? 0) + 1);
+  }
+
+  return [...familyDays.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? 'Other';
+}
+
+function buildIntensityLegend(
+  family: string,
+  mode: HeatmapDisplayMode,
+  noColor: boolean,
+): string {
+  const cellWidth = getCellWidth(mode);
+  const palette = FAMILY_PALETTES[family] ?? FAMILY_PALETTES.Other;
+  const gap = getCellGap(mode);
+  const blocks = mode === 'full'
+    ? ['··', '░░', '▒▒', '▓▓', '██']
+    : ['·', '░', '▒', '▓', '█'];
+
+  const swatches = noColor
+    ? blocks
+    : [
+        background256(' '.repeat(cellWidth), EMPTY_CELL_CODE, noColor),
+        background256(' '.repeat(cellWidth), palette[0], noColor),
+        background256(' '.repeat(cellWidth), palette[1], noColor),
+        background256(' '.repeat(cellWidth), palette[2], noColor),
+        background256(' '.repeat(cellWidth), palette[3], noColor),
+      ];
+
+  return `Intensity ${swatches.join(gap)}`;
+}
+
 function buildFamilyLegend(
   families: string[],
   mode: HeatmapDisplayMode,
@@ -122,7 +174,7 @@ function buildFamilyLegend(
 
   for (const chunk of chunks) {
     const candidate = current.length === 7 ? `${current}${chunk}` : `${current}  ${chunk}`;
-    const visibleLength = candidate.replace(/\x1b\[[0-9;]*m/g, '').length;
+    const visibleLength = getVisibleLength(candidate);
 
     if (visibleLength > width && current.length > 7) {
       lines.push(current);
@@ -233,8 +285,10 @@ export function renderTerminalHeatmap(
   }
 
   const displayMode = getDisplayMode(options.width);
+  const padding = getHorizontalPadding(displayMode);
+  const cellGap = getCellGap(displayMode);
   const weekColumnWidth = getWeekColumnWidth(displayMode);
-  const availableColumns = Math.max(weekColumnWidth, options.width - DAY_LABEL_WIDTH);
+  const availableColumns = Math.max(weekColumnWidth, options.width - DAY_LABEL_WIDTH - padding.length);
   const maxWeeks = Math.max(1, Math.floor(availableColumns / weekColumnWidth));
   const displayWeeks = model.weeks.slice(Math.max(0, model.weeks.length - maxWeeks));
   const visibleStartWeek = model.weeks.length - displayWeeks.length;
@@ -242,15 +296,18 @@ export function renderTerminalHeatmap(
   const lines: string[] = [];
 
   if (caption) {
-    lines.push(caption);
+    lines.push(`${padding}${caption.trimStart()}`);
   }
   if (line) {
-    lines.push(line);
+    lines.push(`${padding}${line.trimStart()}`);
+    if (displayMode === 'full') {
+      lines.push('');
+    }
   }
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
     const label = DAY_LABELS[dayIndex] ?? '   ';
-    let row = `${label} `.slice(0, DAY_LABEL_WIDTH);
+    let row = `${padding}${`${label} `.slice(0, DAY_LABEL_WIDTH)}`;
 
     for (const week of displayWeeks) {
       const cell = week.days[dayIndex] ?? {
@@ -258,16 +315,11 @@ export function renderTerminalHeatmap(
         tokens: 0,
         dominantModelFamily: null,
       };
-      row += `${renderCell(cell.level, cell.dominantModelFamily, displayMode, options.noColor)} `;
+      row += `${renderCell(cell.level, cell.dominantModelFamily, displayMode, options.noColor)}${cellGap}`;
     }
 
     lines.push(row.trimEnd());
   }
-
-  const intensityBlocks = displayMode === 'full'
-    ? ['··', '░░', '▒▒', '▓▓', '██']
-    : ['·', '░', '▒', '▓', '█'];
-  lines.push(`${' '.repeat(DAY_LABEL_WIDTH)}Intensity ${intensityBlocks.join(' ')} `);
 
   const visibleFamilies = Array.from(
     new Set(
@@ -277,13 +329,18 @@ export function renderTerminalHeatmap(
         .filter((family): family is string => family !== null),
     ),
   );
-  lines.push(...buildFamilyLegend(visibleFamilies, displayMode, options.width, options.noColor));
+  const primaryFamily = getPrimaryFamily(displayWeeks);
 
-  const highlightLine = buildHighlightLine(displayWeeks, options.width, options.noColor);
+  lines.push('');
+  lines.push(`${padding}${buildIntensityLegend(primaryFamily, displayMode, options.noColor)}`);
+  lines.push(...buildFamilyLegend(visibleFamilies, displayMode, options.width - padding.length, options.noColor).map((line) => `${padding}${line}`));
+
+  const highlightLine = buildHighlightLine(displayWeeks, options.width - padding.length, options.noColor);
   if (highlightLine) {
-    lines.push(highlightLine);
+    lines.push('');
+    lines.push(`${padding}${highlightLine}`);
   }
-  lines.push(...buildStoryLines(displayWeeks, options.width, options.noColor));
+  lines.push(...buildStoryLines(displayWeeks, options.width - padding.length, options.noColor).map((line) => `${padding}${line}`));
 
   return lines.join('\n');
 }
