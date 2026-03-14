@@ -30,6 +30,7 @@ import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServ
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
+import { loadTokenleakData } from './data-loader.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildCliArgTokens } from './flags.js';

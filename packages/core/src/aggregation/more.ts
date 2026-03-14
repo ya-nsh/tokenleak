@@ -218,12 +218,12 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
     }
   }
 
-  let topProject: MoreStats['sessionMetrics']['topProject'] = null;
-  for (const [name, tokens] of projects) {
-    if (!topProject || tokens > topProject.tokens) {
-      topProject = { name, tokens };
-    }
-  }
+  const projectBreakdown = [...projects.entries()]
+    .map(([name, tokens]) => ({ name, tokens }))
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, 10);
+
+  const topProject = projectBreakdown[0] ?? null;
 
   return {
     totalSessions,
@@ -234,6 +234,7 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
     longestSession,
     projectCount: projects.size,
     topProject,
+    projectBreakdown,
   };
 }
 

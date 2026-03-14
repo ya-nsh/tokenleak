@@ -137,6 +137,7 @@ export interface SessionMetrics {
   longestSession: SessionSummary | null;
   projectCount: number;
   topProject: ProjectSummary | null;
+  projectBreakdown: ProjectSummary[];
 }
 
 export interface ModelMixShiftEntry {

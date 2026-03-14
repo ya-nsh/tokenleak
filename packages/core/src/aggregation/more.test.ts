@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { buildMoreStats, computeModelMixShift } from './more';
-import type { ProviderData, UsageEvent } from '../types';
+import type { ProviderData, UsageEvent, ProjectSummary } from '../types';
 
 function createEvents(provider: string = 'claude-code'): UsageEvent[] {
   return [
@@ -135,6 +135,12 @@ describe('buildMoreStats', () => {
     expect(more.hourOfDay[14]?.tokens).toBe(215);
     expect(more.sessionMetrics.totalSessions).toBe(2);
     expect(more.sessionMetrics.topProject?.name).toBe('project-alpha');
+    expect(more.sessionMetrics.projectBreakdown).toHaveLength(2);
+    expect(more.sessionMetrics.projectBreakdown[0]?.name).toBe('project-alpha');
+    expect(more.sessionMetrics.projectBreakdown[1]?.name).toBe('project-beta');
+    expect(more.sessionMetrics.projectBreakdown[0]!.tokens).toBeGreaterThan(
+      more.sessionMetrics.projectBreakdown[1]!.tokens,
+    );
     expect(more.monthlyBurn.calendarDays).toBe(31);
     expect(more.compare).toBeNull();
   });
@@ -206,6 +212,62 @@ describe('buildMoreStats', () => {
 
     expect(more.hourOfDay[19]?.tokens).toBe(150);
     expect(more.hourOfDay[0]?.tokens).toBe(0);
+  });
+
+  it('returns empty projectBreakdown when no events have projectId', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 150,
+          cost: 0.1,
+          sessionId: 'session-no-project',
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.sessionMetrics.projectBreakdown).toHaveLength(0);
+    expect(more.sessionMetrics.topProject).toBeNull();
+  });
+
+  it('limits projectBreakdown to 10 entries', () => {
+    const events: UsageEvent[] = Array.from({ length: 15 }, (_, i) => ({
+      provider: 'claude-code',
+      timestamp: `2026-03-01T${String(i).padStart(2, '0')}:00:00.000Z`,
+      date: '2026-03-01',
+      model: 'claude-3-opus',
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: (i + 1) * 100,
+      cost: 0.1,
+      sessionId: `session-${i}`,
+      projectId: `project-${i}`,
+    }));
+
+    const provider = createProvider({ events });
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.sessionMetrics.projectBreakdown).toHaveLength(10);
+    expect(more.sessionMetrics.projectBreakdown[0]!.tokens).toBeGreaterThanOrEqual(
+      more.sessionMetrics.projectBreakdown[9]!.tokens,
+    );
   });
 });
 
