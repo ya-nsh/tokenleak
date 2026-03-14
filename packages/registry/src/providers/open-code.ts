@@ -8,6 +8,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { normalizeModelName } from '../models/normalizer';
@@ -28,6 +29,7 @@ const CONFIG_DEFAULT_BASE_DIR = join(homedir(), '.config', 'opencode');
 
 interface SqliteRow {
   model: string;
+  session_id?: string;
   input_tokens: number;
   output_tokens: number;
   created_at: string | number;
@@ -51,9 +53,12 @@ interface CurrentJsonMessage {
   id?: string;
   role?: string;
   modelID?: string;
+  sessionID?: string;
+  providerID?: string;
   cost?: number;
   time?: {
     created?: string | number;
+    completed?: string | number;
   };
   tokens?: {
     input?: number;
@@ -67,12 +72,16 @@ interface CurrentJsonMessage {
 
 interface UsageRecord {
   date: string;
+  timestamp: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
   explicitCost?: number;
+  sessionId?: string;
+  projectId?: string;
+  durationMs?: number;
 }
 
 function resolveBaseDir(baseDir?: string): string {
@@ -115,6 +124,32 @@ function extractDate(createdAt: string | number): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+function toTimestampMillis(createdAt: string | number): number | null {
+  const timestamp =
+    typeof createdAt === 'number'
+      ? createdAt
+      : Number.isNaN(Number(createdAt))
+        ? Date.parse(createdAt)
+        : Number(createdAt);
+
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  const millis = Math.abs(timestamp) >= 1_000_000_000_000 ? timestamp : timestamp * 1000;
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function toIsoTimestamp(createdAt: string | number): string | null {
+  const millis = toTimestampMillis(createdAt);
+  if (millis === null) {
+    return null;
+  }
+
+  const date = new Date(millis);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function getRecordCost(record: UsageRecord): number {
   if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
     return record.explicitCost;
@@ -127,6 +162,29 @@ function getRecordCost(record: UsageRecord): number {
     record.cacheReadTokens,
     record.cacheWriteTokens,
   );
+}
+
+function toUsageEvent(record: UsageRecord): UsageEvent {
+  const totalTokens =
+    record.inputTokens +
+    record.outputTokens +
+    record.cacheReadTokens +
+    record.cacheWriteTokens;
+  return {
+    provider: PROVIDER_NAME,
+    timestamp: record.timestamp,
+    date: record.date,
+    model: normalizeModelName(record.model),
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    totalTokens,
+    cost: getRecordCost(record),
+    sessionId: record.sessionId,
+    projectId: record.projectId,
+    durationMs: record.durationMs,
+  };
 }
 
 function buildProviderData(records: UsageRecord[]): ProviderData {
@@ -204,6 +262,7 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
     totalTokens,
     totalCost,
     colors: COLORS,
+    events: records.map(toUsageEvent),
   };
 }
 
@@ -225,21 +284,24 @@ function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
 
     const rows = db
       .query(
-        "SELECT model, input_tokens, output_tokens, created_at FROM messages WHERE role = 'assistant'",
+        "SELECT model, session_id, input_tokens, output_tokens, created_at FROM messages WHERE role = 'assistant'",
       )
       .all() as SqliteRow[];
 
     const records: UsageRecord[] = [];
     for (const row of rows) {
       const date = extractDate(row.created_at);
-      if (date && isInRange(date, range)) {
+      const timestamp = toIsoTimestamp(row.created_at);
+      if (date && timestamp && isInRange(date, range)) {
         records.push({
           date,
+          timestamp,
           model: row.model,
           inputTokens: row.input_tokens,
           outputTokens: row.output_tokens,
           cacheReadTokens: 0,
           cacheWriteTokens: 0,
+          sessionId: row.session_id,
         });
       }
     }
@@ -270,14 +332,17 @@ function loadFromLegacyJson(sessionsDir: string, range: DateRange): UsageRecord[
         }
 
         const date = extractDate(msg.created_at);
-        if (date && isInRange(date, range)) {
+        const timestamp = toIsoTimestamp(msg.created_at);
+        if (date && timestamp && isInRange(date, range)) {
           records.push({
             date,
+            timestamp,
             model: msg.model,
             inputTokens: msg.usage.input_tokens,
             outputTokens: msg.usage.output_tokens,
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
+            sessionId: file,
           });
         }
       }
@@ -327,7 +392,8 @@ function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[
         }
 
         const date = extractDate(createdAt);
-        if (!date || !isInRange(date, range)) {
+        const timestamp = toIsoTimestamp(createdAt);
+        if (!date || !timestamp || !isInRange(date, range)) {
           continue;
         }
 
@@ -340,13 +406,25 @@ function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[
 
         const record: UsageRecord = {
           date,
+          timestamp,
           model,
           inputTokens,
           outputTokens,
           cacheReadTokens,
           cacheWriteTokens,
           explicitCost: typeof message.cost === 'number' ? message.cost : undefined,
+          sessionId:
+            (typeof message.sessionID === 'string' && message.sessionID) || sessionDir,
         };
+        const completedAt = message.time?.completed;
+        const completedMs =
+          typeof completedAt === 'string' || typeof completedAt === 'number'
+            ? toTimestampMillis(completedAt)
+            : null;
+        const createdMs = Date.parse(record.timestamp);
+        if (completedMs !== null && Number.isFinite(createdMs) && completedMs > createdMs) {
+          record.durationMs = completedMs - createdMs;
+        }
 
         const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
         if (

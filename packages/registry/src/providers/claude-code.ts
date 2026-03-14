@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { dirname, join, relative, sep } from 'path';
 import { homedir } from 'os';
 import type {
   DateRange,
@@ -7,6 +7,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
@@ -24,12 +25,15 @@ const CLAUDE_CODE_COLORS: ProviderColors = {
 
 interface UsageRecord {
   date: string;
+  timestamp: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
   messageId?: string;
+  sessionId?: string;
+  projectId?: string;
 }
 
 function resolveBaseDir(baseDir?: string): string {
@@ -121,6 +125,7 @@ function extractUsage(record: unknown): UsageRecord | null {
 
   return {
     date,
+    timestamp,
     model,
     inputTokens,
     outputTokens,
@@ -233,15 +238,20 @@ export class ClaudeCodeProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const files = collectJsonlFiles(this.baseDir);
     const allRecords: UsageRecord[] = [];
+    const allEvents: UsageEvent[] = [];
 
     for (const file of files) {
       const latestRecordsByMessageId = new Map<string, UsageRecord>();
       const anonymousRecords: UsageRecord[] = [];
+      const relativeFile = relative(this.baseDir, file).split(sep).join('/');
+      const projectId = relative(this.baseDir, dirname(file)).split(sep).join('/');
 
       try {
         for await (const record of splitJsonlRecords(file)) {
           const usage = extractUsage(record);
           if (usage !== null && isInRange(usage.date, range)) {
+            usage.sessionId = relativeFile;
+            usage.projectId = projectId;
             if (usage.messageId) {
               latestRecordsByMessageId.set(usage.messageId, usage);
             } else {
@@ -259,6 +269,34 @@ export class ClaudeCodeProvider implements IProvider {
     }
 
     const daily = buildDailyUsage(allRecords);
+    for (const record of allRecords) {
+      const normalizedModel = normalizeModelName(record.model);
+      const cost = estimateCost(
+        record.model,
+        record.inputTokens,
+        record.outputTokens,
+        record.cacheReadTokens,
+        record.cacheWriteTokens,
+      );
+      allEvents.push({
+        provider: this.name,
+        timestamp: record.timestamp,
+        date: record.date,
+        model: normalizedModel,
+        inputTokens: record.inputTokens,
+        outputTokens: record.outputTokens,
+        cacheReadTokens: record.cacheReadTokens,
+        cacheWriteTokens: record.cacheWriteTokens,
+        totalTokens:
+          record.inputTokens +
+          record.outputTokens +
+          record.cacheReadTokens +
+          record.cacheWriteTokens,
+        cost,
+        sessionId: record.sessionId,
+        projectId: record.projectId,
+      });
+    }
     const totalTokens = daily.reduce((sum, d) => sum + d.totalTokens, 0);
     const totalCost = daily.reduce((sum, d) => sum + d.cost, 0);
 
@@ -269,6 +307,7 @@ export class ClaudeCodeProvider implements IProvider {
       totalTokens,
       totalCost,
       colors: this.colors,
+      events: allEvents,
     };
   }
 }

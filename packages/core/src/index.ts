@@ -8,6 +8,17 @@ export type {
   AggregatedStats,
   DayOfWeekEntry,
   TopModelEntry,
+  UsageEvent,
+  InputOutputMetrics,
+  MonthlyBurnMetrics,
+  CacheEconomics,
+  HourOfDayEntry,
+  SessionSummary,
+  ProjectSummary,
+  SessionMetrics,
+  ModelMixShiftEntry,
+  CompareMore,
+  MoreStats,
   ProviderResult,
   TokenleakOutput,
   RenderOptions,
@@ -38,6 +49,8 @@ export {
   buildCompareOutput,
   parseCompareRange,
   computePreviousPeriod,
+  buildMoreStats,
+  computeModelMixShift,
 } from './aggregation';
 
 export {

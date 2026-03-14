@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { homedir } from 'node:os';
 import type {
   DateRange,
@@ -7,6 +7,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
@@ -42,11 +43,14 @@ const DEFAULT_SESSIONS_DIR = join(
 
 interface CodexUsageRecord {
   date: string;
+  timestamp: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  sessionId?: string;
+  projectId?: string;
 }
 
 interface SessionContext {
@@ -287,6 +291,7 @@ function parseTokenCountUsage(
 
   return {
     date,
+    timestamp,
     model: context.model,
     inputTokens,
     outputTokens: usage.outputTokens,
@@ -325,6 +330,7 @@ function parseUsageRecord(
 
   return {
     date,
+    timestamp: legacyEvent.timestamp,
     model: compactModelDateSuffix(legacyEvent.model),
     inputTokens: legacyEvent.usage.input_tokens,
     outputTokens: legacyEvent.usage.output_tokens,
@@ -364,12 +370,15 @@ export class CodexProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
     const files = collectJsonlFiles(this.sessionsDir);
+    const events: UsageEvent[] = [];
 
     for (const file of files) {
       const context: SessionContext = {
         model: 'gpt-5',
         previousTotals: null,
       };
+      const relativeFile = relative(this.sessionsDir, file).split(sep).join('/');
+      const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
 
       try {
         for await (const record of splitJsonlRecords(file)) {
@@ -381,6 +390,9 @@ export class CodexProvider implements IProvider {
           if (!isInRange(usage.date, range)) {
             continue;
           }
+
+          usage.sessionId = relativeFile;
+          usage.projectId = projectDir === '.' ? undefined : projectDir;
 
           const normalizedModel = normalizeModelName(
             compactModelDateSuffix(usage.model),
@@ -396,6 +408,20 @@ export class CodexProvider implements IProvider {
             cacheReadTokens,
             cacheWriteTokens,
           );
+          events.push({
+            provider: this.name,
+            timestamp: usage.timestamp,
+            date: usage.date,
+            model: normalizedModel,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheWriteTokens,
+            totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+            cost,
+            sessionId: usage.sessionId,
+            projectId: usage.projectId,
+          });
 
           if (!dailyMap.has(usage.date)) {
             dailyMap.set(usage.date, new Map());
@@ -472,6 +498,7 @@ export class CodexProvider implements IProvider {
       totalTokens,
       totalCost,
       colors: this.colors,
+      events,
     };
   }
 }

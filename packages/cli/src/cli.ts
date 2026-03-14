@@ -10,6 +10,7 @@ import {
   buildCompareOutput,
   parseCompareRange,
   computePreviousPeriod,
+  buildMoreStats,
 } from '@tokenleak/core';
 import type {
   DateRange,
@@ -117,6 +118,7 @@ function buildHelpText(): string {
     '  -w, --width <number>    Terminal render width',
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --compare <range>   Compare against YYYY-MM-DD..YYYY-MM-DD or auto',
+    '      --more             Add expanded PNG/SVG stats and unlock compare cards',
     '      --clipboard         Copy rendered output to the clipboard',
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
@@ -258,6 +260,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   width: number;
   noColor: boolean;
   noInsights: boolean;
+  more: boolean;
   compare?: string;
   provider?: string;
   claude: boolean;
@@ -285,6 +288,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: number;
     noColor: boolean;
     noInsights: boolean;
+    more: boolean;
     claude: boolean;
     codex: boolean;
     openCode: boolean;
@@ -301,6 +305,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     width: 80,
     noColor: false,
     noInsights: false,
+    more: false,
     claude: false,
     codex: false,
     openCode: false,
@@ -324,6 +329,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   if (fileConfig.width !== undefined) merged.width = fileConfig.width;
   if (fileConfig.noColor !== undefined) merged.noColor = fileConfig.noColor;
   if (fileConfig.noInsights !== undefined) merged.noInsights = fileConfig.noInsights;
+  if (fileConfig.more !== undefined) merged.more = fileConfig.more;
 
   // Env overrides
   if (envConfig.format) merged.format = envConfig.format;
@@ -367,6 +373,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['noInsights'] !== undefined) {
     result.noInsights = cliArgs['noInsights'] as boolean;
+  }
+  if (cliArgs['more'] !== undefined) {
+    result.more = cliArgs['more'] as boolean;
   }
   if (cliArgs['compare'] !== undefined) {
     result.compare = cliArgs['compare'] as string;
@@ -456,7 +465,11 @@ async function runCompare(
   currentRange: DateRange,
   _registry: ProviderRegistry,
   available: IProvider[],
-): Promise<CompareOutput> {
+): Promise<{
+  compareOutput: CompareOutput;
+  currentData: ProviderData[];
+  previousData: ProviderData[];
+}> {
   let previousRange: DateRange;
 
   if (compareStr === 'auto' || compareStr === 'true' || compareStr === '') {
@@ -476,10 +489,14 @@ async function runCompare(
     loadAndAggregate(previousRange, available),
   ]);
 
-  return buildCompareOutput(
+  return {
+    compareOutput: buildCompareOutput(
     { range: currentRange, stats: currentResult.stats },
     { range: previousRange, stats: previousResult.stats },
-  );
+    ),
+    currentData: currentResult.data,
+    previousData: previousResult.data,
+  };
 }
 
 /** Main execution function, exported for testing. */
@@ -533,18 +550,54 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Handle --compare mode (currently only supports JSON output)
   if (config.compare) {
-    if (config.format !== 'json' && config.format !== 'terminal') {
-      process.stderr.write(
-        `Warning: --compare only supports JSON output. Ignoring --format ${config.format}.\n`,
-      );
-    }
-    const compareOutput = await runCompare(
+    const compareResult = await runCompare(
       config.compare,
       dateRange,
       registry,
       available,
     );
-    const rendered = JSON.stringify(compareOutput, null, 2);
+
+    if (config.more && (config.format === 'png' || config.format === 'svg')) {
+      const compareOutput: TokenleakOutput = {
+        schemaVersion: SCHEMA_VERSION,
+        generated: new Date().toISOString(),
+        dateRange,
+        providers: compareResult.currentData,
+        aggregated: compareResult.compareOutput.periodA.stats,
+        more: buildMoreStats(compareResult.currentData, dateRange, {
+          previousRange: compareResult.compareOutput.periodB.range,
+          previousProviders: compareResult.previousData,
+        }),
+      };
+
+      const renderer = getRenderer(config.format);
+      const renderOptions: RenderOptions = {
+        format: config.format,
+        theme: config.theme,
+        width: config.width,
+        showInsights: !config.noInsights,
+        noColor: config.noColor,
+        output: config.output,
+        more: true,
+      };
+
+      const rendered = await renderer.render(compareOutput, renderOptions);
+      if (config.output) {
+        const data = typeof rendered === 'string' ? rendered : Buffer.from(rendered);
+        writeFileSync(config.output, data);
+      } else {
+        const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
+        process.stdout.write(text + '\n');
+      }
+      return;
+    }
+
+    if (config.format !== 'json' && config.format !== 'terminal') {
+      process.stderr.write(
+        `Warning: --compare only supports JSON output. Ignoring --format ${config.format}.\n`,
+      );
+    }
+    const rendered = JSON.stringify(compareResult.compareOutput, null, 2);
     if (config.output) {
       writeFileSync(config.output, rendered);
     } else {
@@ -582,6 +635,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     dateRange,
     providers: providerDataList,
     aggregated: stats,
+    more: config.more ? buildMoreStats(providerDataList, dateRange) : null,
   };
 
   // Live server mode
@@ -604,6 +658,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       showInsights: !config.noInsights,
       noColor: config.noColor,
       output: config.output,
+      more: config.more,
     };
     const { port } = await startLiveServer(output, renderOptions);
     // Keep process alive until interrupted
@@ -628,6 +683,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     showInsights: !config.noInsights,
     noColor: config.noColor,
     output: config.output,
+    more: config.more,
   };
 
   const rendered = await renderer.render(output, renderOptions);
@@ -725,6 +781,11 @@ const main = defineCommand({
       description: 'Hide insights panel',
       default: false,
     },
+    more: {
+      type: 'boolean',
+      description: 'Add expanded PNG/SVG stats and compare cards',
+      default: false,
+    },
     compare: {
       type: 'string',
       description: 'Compare two date ranges (YYYY-MM-DD..YYYY-MM-DD)',
@@ -793,6 +854,7 @@ const main = defineCommand({
       if (args.width !== undefined) cliArgs['width'] = Number(args.width);
       if (args.noColor) cliArgs['noColor'] = true;
       if (args.noInsights) cliArgs['noInsights'] = true;
+      if (args.more) cliArgs['more'] = true;
       if (args.compare !== undefined) cliArgs['compare'] = args.compare;
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
       if (args.claude) cliArgs['claude'] = true;

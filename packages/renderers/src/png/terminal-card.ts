@@ -156,6 +156,52 @@ function formatStreak(n: number): string {
   return `${n} day${n !== 1 ? 's' : ''}`;
 }
 
+function formatRatio(value: number | null, suffix: string = 'x'): string {
+  if (value === null || !Number.isFinite(value)) {
+    return 'n/a';
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)}${suffix}`;
+}
+
+function formatPercentPoints(value: number): string {
+  const prefix = value >= 0 ? '+' : '';
+  return `${prefix}${(value * 100).toFixed(1)}pp`;
+}
+
+function formatHour(hour: number): string {
+  return `${hour.toString().padStart(2, '0')}:00`;
+}
+
+function formatDuration(durationMs: number | null | undefined): string {
+  if (durationMs === null || durationMs === undefined || durationMs <= 0) {
+    return 'n/a';
+  }
+
+  const totalMinutes = Math.round(durationMs / 60_000);
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function formatSessionSummary(
+  summary: NonNullable<NonNullable<TokenleakOutput['more']>['sessionMetrics']['longestSession']>,
+): string {
+  const duration = formatDuration(summary.durationMs);
+  if (duration === 'n/a') {
+    return truncateText(summary.label, 20);
+  }
+
+  return truncateText(`${summary.label} · ${duration}`, 24);
+}
+
 // ── Heatmap renderer for a single provider ────────────────────────────
 interface HeatmapResult {
   svg: string;
@@ -239,6 +285,136 @@ function renderProviderHeatmap(
 
   const svg = [dayLabels, ...monthLabels, ...cells].join('\n');
   return { svg, gridWidth, height };
+}
+
+function renderMetricCard(
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  lines: Array<{ label: string; value: string; accent?: boolean }>,
+  theme: CardTheme,
+  cardAccent: string,
+): string {
+  const parts: string[] = [];
+  const height = 38 + lines.length * 22;
+
+  parts.push(
+    `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+  );
+  parts.push(
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">${escapeXml(title)}</text>`,
+  );
+
+  lines.forEach((line, index) => {
+    const lineY = y + 48 + index * 22;
+    parts.push(
+      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(line.label)}</text>`,
+    );
+    parts.push(
+      `<text x="${x + width - 18}" y="${lineY}" fill="${escapeXml(line.accent ? cardAccent : theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" text-anchor="end">${escapeXml(line.value)}</text>`,
+    );
+  });
+
+  return parts.join('\n');
+}
+
+function renderHourOfDayChart(
+  x: number,
+  y: number,
+  width: number,
+  hourOfDay: NonNullable<TokenleakOutput['more']>['hourOfDay'],
+  theme: CardTheme,
+  cardAccent: string,
+): { svg: string; height: number } {
+  const chartHeight = 140;
+  const innerHeight = 72;
+  const baselineY = y + 92;
+  const barAreaX = x + 18;
+  const barAreaWidth = width - 36;
+  const barGap = 4;
+  const barWidth = (barAreaWidth - barGap * 23) / 24;
+  const maxTokens = Math.max(...hourOfDay.map((entry) => entry.tokens), 0);
+  const busiest = hourOfDay.reduce(
+    (best, entry) => (best === null || entry.tokens > best.tokens ? entry : best),
+    null as (typeof hourOfDay)[number] | null,
+  );
+
+  const bars: string[] = [
+    `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">HOUR OF DAY</text>`,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+      busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
+    )}</text>`,
+  ];
+
+  hourOfDay.forEach((entry, index) => {
+    const barHeight = maxTokens > 0 ? Math.max(4, (entry.tokens / maxTokens) * innerHeight) : 4;
+    const barX = barAreaX + index * (barWidth + barGap);
+    const barY = baselineY - barHeight;
+
+    bars.push(
+      `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="${escapeXml(cardAccent)}" opacity="${0.25 + (maxTokens > 0 ? entry.tokens / maxTokens : 0) * 0.75}"/>`,
+    );
+  });
+
+  [0, 6, 12, 18, 23].forEach((hour) => {
+    const labelX = barAreaX + hour * (barWidth + barGap) + barWidth / 2;
+    bars.push(
+      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
+        hour.toString().padStart(2, '0'),
+      )}</text>`,
+    );
+  });
+
+  return {
+    svg: bars.join('\n'),
+    height: chartHeight,
+  };
+}
+
+function renderModelMixShift(
+  x: number,
+  y: number,
+  width: number,
+  more: NonNullable<TokenleakOutput['more']>,
+  theme: CardTheme,
+  cardAccent: string,
+): { svg: string; height: number } {
+  if (!more.compare || more.compare.modelMixShift.length === 0) {
+    return { svg: '', height: 0 };
+  }
+
+  const rows = more.compare.modelMixShift.slice(0, 4);
+  const height = 38 + rows.length * 24;
+  const parts: string[] = [
+    `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+      `${more.compare.previousRange.since} → ${more.compare.previousRange.until}`,
+    )}</text>`,
+  ];
+
+  rows.forEach((row, index) => {
+    const lineY = y + 48 + index * 24;
+    parts.push(
+      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(
+        truncateText(row.model, 28),
+      )}</text>`,
+    );
+    parts.push(
+      `<text x="${x + width - 18}" y="${lineY}" fill="${escapeXml(row.deltaShare >= 0 ? cardAccent : '#f97316')}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" text-anchor="end">${escapeXml(
+        formatPercentPoints(row.deltaShare),
+      )}</text>`,
+    );
+    parts.push(
+      `<text x="${x + width - 110}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+        `${(row.previousShare * 100).toFixed(1)}% → ${(row.currentShare * 100).toFixed(1)}%`,
+      )}</text>`,
+    );
+  });
+
+  return { svg: parts.join('\n'), height };
 }
 
 // ── Main render function ──────────────────────────────────────────────
@@ -463,6 +639,178 @@ export function renderTerminalCardSvg(
     );
 
     y += 32;
+  }
+
+  if (options.more && output.more) {
+    const more = output.more;
+    const cardGap = 16;
+    const detailCardWidth = (contentWidth - cardGap) / 2;
+
+    y += 8;
+    sections.push(
+      `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+    );
+    y += 28;
+    sections.push(
+      `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('MORE')}</text>`,
+    );
+    y += 24;
+
+    const efficiencyLines = [
+      {
+        label: 'Input / Output',
+        value: more.inputOutput.inputPerOutput === null
+          ? 'n/a'
+          : `${more.inputOutput.inputPerOutput.toFixed(2)} : 1`,
+        accent: true,
+      },
+      {
+        label: 'Output / Input',
+        value: formatRatio(more.inputOutput.outputPerInput),
+      },
+      {
+        label: 'Output Share',
+        value: formatPercentage(more.inputOutput.outputShare),
+      },
+    ];
+    sections.push(
+      renderMetricCard(
+        pad,
+        y,
+        detailCardWidth,
+        'INPUT / OUTPUT',
+        efficiencyLines,
+        theme,
+        cardAccent,
+      ),
+    );
+
+    const burnLines = [
+      {
+        label: 'Projected Cost',
+        value: formatCost(more.monthlyBurn.projectedCost),
+        accent: true,
+      },
+      {
+        label: 'Projected Tokens',
+        value: formatNumber(more.monthlyBurn.projectedTokens),
+      },
+      {
+        label: 'Based On',
+        value: `${more.monthlyBurn.observedDays} / ${more.monthlyBurn.calendarDays} days`,
+      },
+    ];
+    sections.push(
+      renderMetricCard(
+        pad + detailCardWidth + cardGap,
+        y,
+        detailCardWidth,
+        'PROJECTED MONTHLY BURN',
+        burnLines,
+        theme,
+        cardAccent,
+      ),
+    );
+    y += 38 + Math.max(efficiencyLines.length, burnLines.length) * 22 + 16;
+
+    const cacheLines = [
+      {
+        label: 'Cache Reads',
+        value: formatNumber(more.cacheEconomics.readTokens),
+        accent: true,
+      },
+      {
+        label: 'Cache Writes',
+        value: formatNumber(more.cacheEconomics.writeTokens),
+      },
+      {
+        label: 'Read Coverage',
+        value: formatPercentage(more.cacheEconomics.readCoverage),
+      },
+      {
+        label: 'Reuse Ratio',
+        value: formatRatio(more.cacheEconomics.reuseRatio),
+      },
+    ];
+    sections.push(
+      renderMetricCard(
+        pad,
+        y,
+        detailCardWidth,
+        'CACHE ECONOMICS',
+        cacheLines,
+        theme,
+        cardAccent,
+      ),
+    );
+
+    const sessionLines = [
+      {
+        label: 'Sessions',
+        value: String(more.sessionMetrics.totalSessions),
+        accent: true,
+      },
+      {
+        label: 'Avg Tokens',
+        value: formatNumber(more.sessionMetrics.averageTokens),
+      },
+      {
+        label: 'Avg Messages',
+        value: more.sessionMetrics.averageMessages.toFixed(1),
+      },
+      {
+        label: 'Avg Duration',
+        value: formatDuration(more.sessionMetrics.averageDurationMs),
+      },
+      {
+        label: 'Longest Session',
+        value: more.sessionMetrics.longestSession
+          ? formatSessionSummary(more.sessionMetrics.longestSession)
+          : 'n/a',
+      },
+      {
+        label: 'Top Project',
+        value: more.sessionMetrics.topProject
+          ? truncateText(more.sessionMetrics.topProject.name, 20)
+          : 'n/a',
+      },
+    ];
+    sections.push(
+      renderMetricCard(
+        pad + detailCardWidth + cardGap,
+        y,
+        detailCardWidth,
+        'SESSION STATS',
+        sessionLines,
+        theme,
+        cardAccent,
+      ),
+    );
+    y += 38 + Math.max(cacheLines.length, sessionLines.length) * 22 + 16;
+
+    const hourChart = renderHourOfDayChart(
+      pad,
+      y,
+      contentWidth,
+      more.hourOfDay,
+      theme,
+      cardAccent,
+    );
+    sections.push(hourChart.svg);
+    y += hourChart.height + 16;
+
+    const mixShift = renderModelMixShift(
+      pad,
+      y,
+      contentWidth,
+      more,
+      theme,
+      cardAccent,
+    );
+    if (mixShift.height > 0) {
+      sections.push(mixShift.svg);
+      y += mixShift.height + 12;
+    }
   }
 
   // ── Final padding ─────────────────────────────────────────────────
