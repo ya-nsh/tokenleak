@@ -1,15 +1,17 @@
 import type { TokenleakOutput, RenderOptions } from '@tokenleak/core';
+import { buildDashboardModel } from './dashboard-model';
 import { formatTokens, formatCost } from './dashboard';
 
-/**
- * Renders a single-line summary of the tokenleak output.
- * Uses emoji for quick visual scanning.
- */
-export function renderOneliner(output: TokenleakOutput, _options: RenderOptions): string {
+export function renderOneliner(output: TokenleakOutput, options: RenderOptions): string {
+  const model = buildDashboardModel(output, options);
   const streak = output.aggregated.currentStreak;
   const tokens = formatTokens(output.aggregated.totalTokens);
   const cost = formatCost(output.aggregated.totalCost);
-  const providerCount = output.providers.length;
+  const providerCount = model.activeProviders.length;
 
-  return `\uD83D\uDD25 ${streak}d streak | ${tokens} tokens | ${cost} | ${providerCount} provider${providerCount !== 1 ? 's' : ''}`;
+  if (providerCount === 0) {
+    return `no activity | ${tokens} tokens | ${cost}`;
+  }
+
+  return `${streak}d streak | ${tokens} tokens | ${cost} | ${providerCount} active`;
 }

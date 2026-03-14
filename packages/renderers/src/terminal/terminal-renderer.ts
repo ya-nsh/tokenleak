@@ -1,9 +1,11 @@
 import type { TokenleakOutput, RenderOptions } from '@tokenleak/core';
 import type { IRenderer } from '../renderer';
-import { renderDashboard } from './dashboard';
+import { renderCompactDashboard } from './compact';
+import { renderDashboardModel } from './dashboard';
+import { buildDashboardModel } from './dashboard-model';
 import { renderOneliner } from './oneliner';
 
-const MIN_DASHBOARD_WIDTH = 40;
+const MIN_COMPACT_WIDTH = 32;
 
 export class TerminalRenderer implements IRenderer {
   readonly format = 'terminal' as const;
@@ -13,11 +15,16 @@ export class TerminalRenderer implements IRenderer {
       ...options,
       noColor: options.noColor,
     };
+    const model = buildDashboardModel(output, effectiveOptions);
 
-    if (effectiveOptions.width < MIN_DASHBOARD_WIDTH) {
+    if (effectiveOptions.width < MIN_COMPACT_WIDTH) {
       return renderOneliner(output, effectiveOptions);
     }
 
-    return renderDashboard(output, effectiveOptions);
+    if (model.mode === 'compact') {
+      return renderCompactDashboard(model, effectiveOptions);
+    }
+
+    return renderDashboardModel(model, effectiveOptions);
   }
 }

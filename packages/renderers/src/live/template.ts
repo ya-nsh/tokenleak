@@ -1,11 +1,11 @@
 import type {
   TokenleakOutput,
   RenderOptions,
-  DailyUsage,
   ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
 import { formatNumber, formatCost } from '../svg/utils';
+import { buildHeatmapModel } from '../shared/heatmap-model';
 import {
   CELL_SIZE,
   CELL_GAP,
@@ -45,25 +45,6 @@ function formatStreak(n: number): string {
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// ── Heatmap quantile logic ────────────────────────────────────────────
-function computeQuantiles(values: number[]): number[] {
-  const nonZero = values.filter((v) => v > 0).sort((a, b) => a - b);
-  if (nonZero.length === 0) return [0, 0, 0];
-  const q = (p: number): number => {
-    const idx = Math.floor(p * (nonZero.length - 1));
-    return nonZero[idx] ?? 0;
-  };
-  return [q(0.25), q(0.5), q(0.75)];
-}
-
-function getLevel(tokens: number, quantiles: number[]): number {
-  if (tokens <= 0) return 0;
-  if (tokens <= quantiles[0]) return 1;
-  if (tokens <= quantiles[1]) return 2;
-  if (tokens <= quantiles[2]) return 3;
-  return 4;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -108,50 +89,32 @@ interface HeatmapCell {
 }
 
 function buildHeatmapCells(
-  daily: DailyUsage[],
+  provider: ProviderData,
   since: string,
   until: string,
 ): { cells: HeatmapCell[]; months: { label: string; col: number }[]; totalCols: number } {
-  const tokenMap = new Map<string, number>();
-  for (const d of daily) {
-    tokenMap.set(d.date, (tokenMap.get(d.date) ?? 0) + d.totalTokens);
+  const model = buildHeatmapModel(provider.daily, { since, until });
+  if (!model) {
+    return { cells: [], months: [], totalCols: 0 };
   }
-
-  const dates = daily.map((d) => d.date).sort();
-  const endStr = until ?? dates[dates.length - 1] ?? new Date().toISOString().slice(0, 10);
-  const startStr = since ?? dates[0] ?? endStr;
-
-  const end = new Date(endStr + 'T00:00:00Z');
-  const start = new Date(startStr + 'T00:00:00Z');
-  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
-
-  const allTokens = Array.from(tokenMap.values());
-  const quantiles = computeQuantiles(allTokens);
-
   const cells: HeatmapCell[] = [];
   const months: { label: string; col: number }[] = [];
-  let lastMonth = -1;
-  let col = 0;
-  const current = new Date(start);
-
-  while (current <= end) {
-    const row = current.getUTCDay();
-    const dateStr = current.toISOString().slice(0, 10);
-    const tokens = tokenMap.get(dateStr) ?? 0;
-    const level = getLevel(tokens, quantiles);
-    cells.push({ date: dateStr, tokens, level, row, col });
-
-    const month = current.getUTCMonth();
-    if (month !== lastMonth && row === 0) {
-      lastMonth = month;
-      months.push({ label: MONTH_NAMES[month] ?? '', col });
+  for (const marker of model.monthMarkers) {
+    months.push({ label: marker.label, col: marker.weekIndex });
+  }
+  for (const week of model.weeks) {
+    for (const day of week.days) {
+      cells.push({
+        date: day.date,
+        tokens: day.tokens,
+        level: day.level,
+        row: day.dayIndex,
+        col: week.index,
+      });
     }
-
-    if (row === 6) col++;
-    current.setUTCDate(current.getUTCDate() + 1);
   }
 
-  return { cells, months, totalCols: col + 1 };
+  return { cells, months, totalCols: model.weeks.length };
 }
 
 function renderProviderHeatmapHtml(
@@ -162,7 +125,7 @@ function renderProviderHeatmapHtml(
   emptyCell: string,
 ): string {
   const heatmapColors = buildHeatmapScale(provider.colors, isDark);
-  const { cells, months, totalCols } = buildHeatmapCells(provider.daily, since, until);
+  const { cells, months, totalCols } = buildHeatmapCells(provider, since, until);
 
   const heatmapWidth = DAY_LABEL_WIDTH + totalCols * (CELL_SIZE + CELL_GAP);
   const heatmapHeight = MONTH_LABEL_HEIGHT + 7 * (CELL_SIZE + CELL_GAP);
