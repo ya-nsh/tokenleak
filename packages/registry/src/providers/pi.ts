@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import type {
@@ -29,6 +30,7 @@ interface PiUsageRecord {
   date: string;
   timestamp: string;
   model: string;
+  normalizedModel: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -50,18 +52,17 @@ function getSessionsDir(agentDir: string): string {
   return join(agentDir, 'sessions');
 }
 
-function collectJsonlFiles(dir: string): string[] {
+async function collectJsonlFiles(dir: string): Promise<string[]> {
   if (!existsSync(dir)) {
     return [];
   }
 
   const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      files.push(...collectJsonlFiles(fullPath));
-    } else if (entry.endsWith('.jsonl')) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectJsonlFiles(fullPath));
+    } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
       files.push(fullPath);
     }
   }
@@ -159,11 +160,13 @@ function parseUsageRecord(
     typeof usageObj['cost'] === 'object' && usageObj['cost'] !== null
       ? (usageObj['cost'] as Record<string, unknown>)['total']
       : undefined;
+  const normalizedModel = normalizeModelName(compactModelDateSuffix(model));
 
   return {
     date,
     timestamp,
     model,
+    normalizedModel,
     inputTokens,
     outputTokens,
     cacheReadTokens,
@@ -180,7 +183,7 @@ function getRecordCost(record: PiUsageRecord): number {
   }
 
   return estimateCost(
-    compactModelDateSuffix(record.model),
+    record.normalizedModel,
     record.inputTokens,
     record.outputTokens,
     record.cacheReadTokens,
@@ -199,7 +202,7 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     provider: PROVIDER_NAME,
     timestamp: record.timestamp,
     date: record.date,
-    model: normalizeModelName(compactModelDateSuffix(record.model)),
+    model: record.normalizedModel,
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     cacheReadTokens: record.cacheReadTokens,
@@ -296,7 +299,7 @@ export class PiProvider implements IProvider {
 
   async isAvailable(): Promise<boolean> {
     try {
-      return collectJsonlFiles(getSessionsDir(this.agentDir)).length > 0;
+      return existsSync(getSessionsDir(this.agentDir));
     } catch {
       return false;
     }
@@ -304,7 +307,7 @@ export class PiProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const sessionsDir = getSessionsDir(this.agentDir);
-    const files = collectJsonlFiles(sessionsDir);
+    const files = await collectJsonlFiles(sessionsDir);
     const records: PiUsageRecord[] = [];
 
     for (const file of files) {

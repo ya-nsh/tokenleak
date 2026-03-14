@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DateRange } from '@tokenleak/core';
 import { PiProvider } from './pi';
@@ -23,9 +25,21 @@ describe('PiProvider', () => {
     expect(await provider.isAvailable()).toBe(false);
   });
 
-  it('returns true when the sessions directory exists', async () => {
+  it('returns true when the sessions directory exists and contains session files', async () => {
     const provider = new PiProvider(FIXTURES_DIR);
     expect(await provider.isAvailable()).toBe(true);
+  });
+
+  it('returns true when the sessions directory exists even if it is empty', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'pi-empty-'));
+    mkdirSync(join(tempRoot, 'sessions'));
+
+    try {
+      const provider = new PiProvider(tempRoot);
+      expect(await provider.isAvailable()).toBe(true);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it('loads assistant usage from pi-mono session JSONL files', async () => {
@@ -65,6 +79,15 @@ describe('PiProvider', () => {
     expect(data.daily).toHaveLength(1);
     expect(data.daily[0]!.date).toBe('2026-03-11');
     expect(data.totalTokens).toBe(1100);
+  });
+
+  it('normalizes dashed-date model suffixes from pi session logs', async () => {
+    const provider = new PiProvider(FIXTURES_DIR);
+    const data = await provider.load(FULL_RANGE);
+
+    const allModels = data.daily.flatMap((day) => day.models.map((model) => model.model));
+    expect(allModels).toContain('o4-mini');
+    expect(allModels).not.toContain('o4-mini-2025-04-16');
   });
 
   it('preserves session file path and project cwd on events', async () => {
