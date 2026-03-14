@@ -349,6 +349,7 @@ function renderHourOfDayChart(
   hourOfDay: NonNullable<TokenleakOutput['more']>['hourOfDay'],
   theme: CardTheme,
   cardAccent: string,
+  barAccentColor: string,
 ): { svg: string; height: number } {
   const chartHeight = 140;
   const innerHeight = 72;
@@ -370,8 +371,8 @@ function renderHourOfDayChart(
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
     // Bar gradient definition (bottom → top)
     `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
-    `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.15"/>` +
-    `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
+    `<stop offset="0%" stop-color="${escapeXml(barAccentColor)}" stop-opacity="0.15"/>` +
+    `<stop offset="100%" stop-color="${escapeXml(barAccentColor)}" stop-opacity="1"/>` +
     `</linearGradient></defs>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
@@ -391,7 +392,7 @@ function renderHourOfDayChart(
     // Glow behind peak bar
     if (isPeak) {
       bars.push(
-        `<rect x="${barX - 2}" y="${barY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(cardAccent)}" opacity="0.15" filter="url(#peakGlow)"/>`,
+        `<rect x="${barX - 2}" y="${barY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(barAccentColor)}" opacity="0.15" filter="url(#peakGlow)"/>`,
       );
     }
 
@@ -482,6 +483,11 @@ export function renderTerminalCardSvg(
 
   // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
+  // For multi-provider: bars/charts use a dark neutral fill instead of the colored accent
+  const isMultiProvider = providers.length > 1;
+  const barAccent = isMultiProvider
+    ? (isDark ? '#1e1e24' : '#d4d4d8')
+    : cardAccent;
 
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
@@ -679,18 +685,14 @@ export function renderTerminalCardSvg(
     );
 
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
-    const multiProviderFill = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.15)';
-    const barFill = providers.length === 1
-      ? `url(#${escapeXml(gradId)})`
-      : multiProviderFill;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(barAccent)}44"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(barAccent)}"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(barFill)}"/>`,
+      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="url(#${escapeXml(gradId)})"/>`,
     );
 
     sections.push(
@@ -852,6 +854,7 @@ export function renderTerminalCardSvg(
       more.hourOfDay,
       theme,
       cardAccent,
+      barAccent,
     );
     sections.push(hourChart.svg);
     y += hourChart.height + 16;
