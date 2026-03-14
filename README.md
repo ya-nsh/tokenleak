@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, and **Open Code**, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
+See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, and **Open Code**, and can ingest imported **Pi** usage JSONL, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
 
 ![Tokenleak preview card](./docs/preview.png)
 
@@ -12,7 +12,7 @@ Tokenleak requires [Bun](https://bun.sh) (v1.0+).
 bun install -g tokenleak
 ```
 
-After installing, run `tokenleak` in your terminal. It will automatically detect which AI coding tools you have installed and display your usage.
+After installing, run `tokenleak` in your terminal. It will automatically detect which AI coding tools you have installed and display your usage. Pi support is opt-in and appears when you provide an import directory.
 In an interactive TTY, plain `tokenleak` now opens a launcher where you can move with arrow keys or press number shortcuts.
 
 ### From source
@@ -80,8 +80,11 @@ tokenleak --provider claude-code
 # Only Codex
 tokenleak --provider codex
 
+# Only Pi
+tokenleak --provider pi
+
 # Multiple providers (comma-separated)
-tokenleak --provider claude-code,codex
+tokenleak --provider claude-code,codex,pi
 ```
 
 ### Compare mode
@@ -192,6 +195,32 @@ Reads usage data from the Open Code SQLite database. Falls back to legacy JSON s
 | **Data location** | `~/.local/share/opencode/storage/message/<session>/*.json` (primary), `~/.opencode/opencode.db` or `~/.opencode/sessions.db` (legacy), `~/.opencode/sessions/*.json` (legacy fallback) |
 | **Provider name** | `open-code`                                                                                                                                                                            |
 
+### Pi
+
+Reads imported Pi usage JSONL files. Pi is opt-in and only becomes available when `TOKENLEAK_PI_USAGE_DIR` points at a directory containing one or more `.jsonl` import files.
+
+|                   |                                                           |
+| ----------------- | --------------------------------------------------------- |
+| **Data location** | Any directory of imported `.jsonl` files                  |
+| **Override**      | Set `TOKENLEAK_PI_USAGE_DIR` environment variable         |
+| **Provider name** | `pi`                                                      |
+
+Each JSONL line should look like:
+
+```json
+{
+  "timestamp": "2026-03-14T10:15:00Z",
+  "model": "pi-3.1-preview",
+  "input_tokens": 1200,
+  "output_tokens": 300,
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "cost_usd": 0.0021,
+  "session_id": "optional-session",
+  "project_id": "optional-project"
+}
+```
+
 ## Output formats
 
 ### `terminal` (default)
@@ -296,10 +325,11 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
 | `CLAUDE_CONFIG_DIR`                | `~/.claude`        | Claude Code configuration directory                     |
 | `CODEX_HOME`                       | `~/.codex`         | Codex home directory                                    |
+| `TOKENLEAK_PI_USAGE_DIR`           | unset              | Directory containing imported Pi usage JSONL files      |
 
 ## What Tokenleak tracks
 
-Tokenleak reads your **local** log files only. It never sends data anywhere (unless you explicitly use `--upload`).
+Tokenleak reads your **local** log files and imported Pi usage files only. It never sends data anywhere (unless you explicitly use `--upload`).
 
 For each day of usage, it tracks:
 

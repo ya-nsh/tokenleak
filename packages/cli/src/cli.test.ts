@@ -15,15 +15,18 @@ function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => vo
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cli-fixtures-'));
   const claudeConfigDir = join(fixtureRoot, 'claude-config');
   const codexHome = join(fixtureRoot, 'codex-home');
+  const piUsageDir = join(fixtureRoot, 'pi-usage');
 
   cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), { recursive: true });
   cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), { recursive: true });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'pi'), piUsageDir, { recursive: true });
 
   return {
     env: {
       ...process.env,
       CLAUDE_CONFIG_DIR: claudeConfigDir,
       CODEX_HOME: codexHome,
+      TOKENLEAK_PI_USAGE_DIR: piUsageDir,
     },
     cleanup: () => rmSync(fixtureRoot, { recursive: true, force: true }),
   };
@@ -244,6 +247,7 @@ describe('resolveConfig', () => {
     expect(config.output).toBeNull();
     expect(config.claude).toBe(false);
     expect(config.codex).toBe(false);
+    expect(config.pi).toBe(false);
     expect(config.openCode).toBe(false);
     expect(config.allProviders).toBe(false);
     expect(config.listProviders).toBe(false);
@@ -291,9 +295,10 @@ describe('resolveConfig', () => {
   });
 
   test('passes provider shortcut flags through', () => {
-    const config = resolveConfig({ claude: true, codex: true, openCode: true });
+    const config = resolveConfig({ claude: true, codex: true, pi: true, openCode: true });
     expect(config.claude).toBe(true);
     expect(config.codex).toBe(true);
+    expect(config.pi).toBe(true);
     expect(config.openCode).toBe(true);
   });
 
@@ -440,6 +445,7 @@ describe('CLI invocation', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('tokenleak');
     expect(stdout).toContain('Provider Shortcuts');
+    expect(stdout).toContain('--pi');
     expect(stdout).toContain('--open-code');
     expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('--more');
@@ -482,6 +488,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('Registered providers:');
     expect(stdout).toContain('claude-code');
     expect(stdout).toContain('codex');
+    expect(stdout).toContain('pi');
     expect(stdout).toContain('open-code');
   });
 
@@ -512,6 +519,26 @@ describe('CLI invocation', () => {
       expect(exitCode).toBe(0);
       expect(stdout).toContain('"provider": "claude-code"');
       expect(stdout).toContain('"provider": "codex"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--provider pi loads imported Pi usage when configured', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"provider": "pi"');
+      expect(stdout).toContain('"displayName": "Pi"');
     } finally {
       cleanup();
     }

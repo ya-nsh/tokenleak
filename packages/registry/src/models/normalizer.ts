@@ -7,6 +7,14 @@
  */
 
 const DATE_SUFFIX_PATTERN = /-\d{8}$/;
+const PI_ALIASES: Readonly<Record<string, string>> = {
+  'pi (3.0)': 'pi-3.0',
+  'pi 3.0': 'pi-3.0',
+  'pi-3': 'pi-3.0',
+  'pi (3.1-preview)': 'pi-3.1-preview',
+  'pi 3.1 preview': 'pi-3.1-preview',
+  'pi-3.1-preview': 'pi-3.1-preview',
+};
 
 /**
  * Normalizes a model name by stripping a trailing `-YYYYMMDD` date suffix.
@@ -17,5 +25,6 @@ const DATE_SUFFIX_PATTERN = /-\d{8}$/;
  * normalizeModelName('')                          // => ''
  */
 export function normalizeModelName(model: string): string {
-  return model.replace(DATE_SUFFIX_PATTERN, '');
+  const normalized = model.trim().toLowerCase().replace(DATE_SUFFIX_PATTERN, '');
+  return PI_ALIASES[normalized] ?? normalized;
 }

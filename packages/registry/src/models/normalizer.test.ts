@@ -48,6 +48,16 @@ describe('normalizeModelName', () => {
   test('strips date from claude-opus-4 variant', () => {
     expect(normalizeModelName('claude-opus-4-20250715')).toBe('claude-opus-4');
   });
+
+  test('normalizes Pi preview naming variants', () => {
+    expect(normalizeModelName('Pi (3.1-Preview)')).toBe('pi-3.1-preview');
+    expect(normalizeModelName('pi 3.1 preview')).toBe('pi-3.1-preview');
+  });
+
+  test('normalizes Pi 3 variants', () => {
+    expect(normalizeModelName('Pi (3.0)')).toBe('pi-3.0');
+    expect(normalizeModelName('pi-3')).toBe('pi-3.0');
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,2 @@
+{"timestamp":"2026-03-11T09:00:00Z","model":"Pi (3.0)","input_tokens":800,"output_tokens":300,"cache_write_tokens":50,"cost_usd":0.35,"session_id":"session-002","project_id":"work"}
+{"timestamp":"2026-03-12T08:30:00Z","model":"pi experimental","input_tokens":120,"output_tokens":60,"session_id":"session-003"}

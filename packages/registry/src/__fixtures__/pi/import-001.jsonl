@@ -1,0 +1,2 @@
+{"timestamp":"2026-03-10T10:15:00Z","model":"Pi (3.1-Preview)","input_tokens":1000,"output_tokens":200,"cache_read_tokens":100,"cost_usd":0.42,"session_id":"session-001","project_id":"personal-assistant"}
+{"timestamp":"2026-03-10T11:00:00Z","model":"pi 3.1 preview","input_tokens":500,"output_tokens":100,"cost_usd":0.21,"session_id":"session-001","project_id":"personal-assistant"}
