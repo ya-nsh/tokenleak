@@ -5,9 +5,29 @@ import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
 import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clipOutputLines } from './interactive';
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+const REGISTRY_FIXTURES_DIR = join(import.meta.dir, '..', '..', 'registry', 'src', '__fixtures__');
+
+function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => void } {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cli-fixtures-'));
+  const claudeConfigDir = join(fixtureRoot, 'claude-config');
+  const codexHome = join(fixtureRoot, 'codex-home');
+
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), { recursive: true });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), { recursive: true });
+
+  return {
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+      CODEX_HOME: codexHome,
+    },
+    cleanup: () => rmSync(fixtureRoot, { recursive: true, force: true }),
+  };
+}
 
 // ─── inferFormatFromPath ────────────────────────────────────────────────
 
@@ -471,15 +491,22 @@ describe('CLI invocation', () => {
   });
 
   test('--provider tolerates spaces after commas', async () => {
-    const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
+    const { env, cleanup } = createProviderFixtureEnv();
 
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain('"provider": "claude-code"');
-    expect(stdout).toContain('"provider": "codex"');
+    try {
+      const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"provider": "claude-code"');
+      expect(stdout).toContain('"provider": "codex"');
+    } finally {
+      cleanup();
+    }
   });
 });
