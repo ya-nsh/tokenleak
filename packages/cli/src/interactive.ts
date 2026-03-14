@@ -1,5 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
+import type { TimeRange } from '@tokenleak/renderers';
+import { computeDateRange } from './date-range.js';
 import { buildCliPreview } from './flags.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
@@ -70,6 +72,14 @@ type InteractiveContext = {
 type InteractiveState = {
   selectedIndex: number;
 };
+
+const TAB_RANGE_DAY_COUNTS: Record<TimeRange, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  '365d': 365,
+};
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
@@ -820,12 +830,112 @@ async function promptCompareSetting(): Promise<string | null> {
   return ask('Previous range YYYY-MM-DD..YYYY-MM-DD');
 }
 
+function inferDashboardTimeRange(rangeArgs: CliArgs): TimeRange {
+  const days = typeof rangeArgs['days'] === 'number' ? rangeArgs['days'] : null;
+  if (days !== null) {
+    if (days <= 7) return '7d';
+    if (days <= 30) return '30d';
+    if (days <= 90) return '90d';
+    return '365d';
+  }
+
+  const since = typeof rangeArgs['since'] === 'string' ? rangeArgs['since'].trim() : '';
+  if (!since) return '30d';
+
+  const rawUntil = typeof rangeArgs['until'] === 'string' ? rangeArgs['until'].trim() : '';
+  const until = rawUntil || new Date().toISOString().slice(0, 10);
+  const sinceMs = Date.parse(`${since}T00:00:00.000Z`);
+  const untilMs = Date.parse(`${until}T00:00:00.000Z`);
+  if (!Number.isFinite(sinceMs) || !Number.isFinite(untilMs) || sinceMs > untilMs) {
+    return '30d';
+  }
+
+  const spanDays = Math.max(1, Math.ceil((untilMs - sinceMs) / DAY_MS));
+  if (spanDays <= 7) return '7d';
+  if (spanDays <= 30) return '30d';
+  if (spanDays <= 90) return '90d';
+  return '365d';
+}
+
+export function buildTabbedDashboardOptions(
+  rangeArgs: CliArgs,
+  providers: readonly string[],
+  width: number | null,
+  noInsights: boolean,
+  noColor: boolean,
+): TabbedDashboardOptions {
+  const options: TabbedDashboardOptions = {
+    initialTimeRange: inferDashboardTimeRange(rangeArgs),
+    noColor,
+    noInsights,
+  };
+
+  const rawSince = typeof rangeArgs['since'] === 'string' ? rangeArgs['since'].trim() : '';
+  const rawUntil = typeof rangeArgs['until'] === 'string' ? rangeArgs['until'].trim() : '';
+  const since = rawSince || undefined;
+  const until = rawUntil || undefined;
+  if (since) {
+    options.initialRange = computeDateRange({ since, until });
+    options.until = options.initialRange.until;
+  } else if (until) {
+    options.until = computeDateRange({ until }).until;
+  }
+  if (providers.length > 0) {
+    options.providerNames = [...providers];
+  }
+  if (width !== null) {
+    options.width = width;
+  }
+
+  return options;
+}
+
+function createTabbedDashboardRequest(options: TabbedDashboardOptions): InteractiveRunRequest {
+  const args: CliArgs = {};
+  const initialDays = options.initialTimeRange
+    ? TAB_RANGE_DAY_COUNTS[options.initialTimeRange]
+    : undefined;
+
+  if (options.initialRange) {
+    args['since'] = options.initialRange.since;
+    args['until'] = options.initialRange.until;
+  } else {
+    if (initialDays !== undefined) args['days'] = initialDays;
+    if (options.until) args['until'] = options.until;
+  }
+  if (options.providerNames && options.providerNames.length > 0) {
+    args['provider'] = options.providerNames.join(',');
+  }
+  if (options.width !== undefined) args['width'] = options.width;
+  if (options.noInsights) args['noInsights'] = true;
+  if (options.noColor) args['noColor'] = true;
+
+  return {
+    args,
+    preview: buildCliPreview(args),
+    title: 'Launch Dashboard',
+    loadingTitle: 'Starting dashboard',
+    loadingDetail: 'Launching the interactive terminal dashboard',
+    executionMode: 'inherit',
+  };
+}
+
 async function buildDashboardPreset(): Promise<InteractiveCommand> {
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection();
+  const width = await promptWidth();
+  const noInsights = await askYesNo('Hide insights panel', false);
   const noColor = await askYesNo('Disable ANSI colors', false);
 
   return {
     type: 'tabbed-dashboard',
-    options: { noColor },
+    options: buildTabbedDashboardOptions(
+      rangeArgs,
+      providers,
+      width,
+      noInsights,
+      noColor,
+    ),
   };
 }
 
@@ -1313,13 +1423,31 @@ export async function startInteractiveCli(
 
       if (command.type === 'tabbed-dashboard') {
         if (launchTabbedDashboard) {
+          const request = createTabbedDashboardRequest(command.options);
+          let dashboardError: unknown = null;
           leaveAltScreen();
           try {
             ignoreSigint = true;
             await launchTabbedDashboard(command.options);
+          } catch (error: unknown) {
+            dashboardError = error;
           } finally {
             ignoreSigint = false;
             enterAltScreen();
+          }
+          if (dashboardError) {
+            const message = dashboardError instanceof Error
+              ? dashboardError.message
+              : String(dashboardError);
+            const next = await showExecutionResult(request, {
+              ok: false,
+              summary: message,
+              stdout: '',
+              stderr: message,
+            });
+            if (next === 'exit') {
+              return;
+            }
           }
         }
         continue;

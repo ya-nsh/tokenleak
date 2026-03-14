@@ -65,6 +65,22 @@ describe('renderDowView', () => {
     const result = renderDowView(output, 80, true);
     expect(stripAnsi(result)).toBe(result);
   });
+
+  it('does not render a filled bar for zero-token days', () => {
+    const output = createOutput({
+      aggregated: createPopulatedStats({
+        dayOfWeek: [
+          { day: 0, label: 'Sunday', tokens: 100, cost: 1, count: 1 },
+          { day: 1, label: 'Monday', tokens: 0, cost: 0, count: 0 },
+        ],
+      }),
+    });
+    const result = stripAnsi(renderDowView(output, 80, false));
+
+    expect(result).toContain('Mon');
+    expect(result).toContain('0%');
+    expect(result).not.toContain('Mon   █');
+  });
 });
 
 describe('renderTodView', () => {

@@ -142,21 +142,25 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
     const key = event.sessionId?.trim() || `${event.provider}:${event.timestamp}`;
     const timestamp = Date.parse(event.timestamp);
     const safeTime = Number.isFinite(timestamp) ? timestamp : 0;
+    const projectId = event.projectId?.trim() || undefined;
 
     let session = sessions.get(key);
     if (!session) {
       session = {
-        label: event.projectId?.trim() || event.sessionId?.trim() || key,
+        label: projectId || event.sessionId?.trim() || key,
         tokens: 0,
         cost: 0,
         count: 0,
-        projectId: event.projectId?.trim() || undefined,
+        projectId,
         firstTimestamp: safeTime,
         lastTimestamp: safeTime,
         explicitDurationMs: 0,
         hasExplicitDuration: false,
       };
       sessions.set(key, session);
+    } else if (!session.projectId && projectId) {
+      session.projectId = projectId;
+      session.label = projectId || event.sessionId?.trim() || key;
     }
 
     session.tokens += event.totalTokens;
@@ -170,8 +174,8 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
       session.hasExplicitDuration = true;
     }
 
-    if (event.projectId?.trim()) {
-      projects.set(event.projectId, (projects.get(event.projectId) ?? 0) + event.totalTokens);
+    if (projectId) {
+      projects.set(projectId, (projects.get(projectId) ?? 0) + event.totalTokens);
     }
   }
 

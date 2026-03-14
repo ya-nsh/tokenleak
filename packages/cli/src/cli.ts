@@ -32,6 +32,7 @@ import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
 import { loadTokenleakData } from './data-loader.js';
+import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildCliArgTokens } from './flags.js';
@@ -40,6 +41,8 @@ import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 import { startTabbedDashboard } from './tabbed-dashboard.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
+
+export { computeDateRange };
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
@@ -337,55 +340,6 @@ export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[numb
     default:
       return null;
   }
-}
-
-const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Validate that a date string is YYYY-MM-DD and represents a real date. */
-function isValidDate(dateStr: string): boolean {
-  if (!DATE_FORMAT.test(dateStr)) return false;
-  const d = new Date(dateStr + 'T00:00:00Z');
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
-}
-
-/** Compute the date range from CLI flags. */
-export function computeDateRange(args: {
-  since?: string;
-  until?: string;
-  days?: number;
-}): DateRange {
-  const until = args.until ?? new Date().toISOString().slice(0, 10);
-
-  if (args.until && !isValidDate(args.until)) {
-    throw new TokenleakError(
-      `Invalid --until date: "${args.until}". Use YYYY-MM-DD format.`,
-    );
-  }
-
-  if (args.since && !isValidDate(args.since)) {
-    throw new TokenleakError(
-      `Invalid --since date: "${args.since}". Use YYYY-MM-DD format.`,
-    );
-  }
-
-  let since: string;
-
-  if (args.since) {
-    since = args.since;
-  } else {
-    const daysBack = args.days ?? DEFAULT_DAYS;
-    const d = new Date(until);
-    d.setDate(d.getDate() - daysBack);
-    since = d.toISOString().slice(0, 10);
-  }
-
-  if (since > until) {
-    throw new TokenleakError(
-      `--since (${since}) must not be after --until (${until}).`,
-    );
-  }
-
-  return { since, until };
 }
 
 /** Resolve effective config by merging config file, env vars, and CLI flags. */
@@ -1054,7 +1008,16 @@ if (isDirectExecution) {
     const available = await registry.getAvailable();
 
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
-      await startTabbedDashboard(available, opts);
+      const requested = new Set(opts.providerNames ?? []);
+      const scopedProviders = requested.size > 0
+        ? available.filter((provider) => providerMatchesFilter(provider, requested))
+        : available;
+
+      if (scopedProviders.length === 0) {
+        throw new TokenleakError('No provider data found');
+      }
+
+      await startTabbedDashboard(scopedProviders, opts);
     };
 
     await startInteractiveCli({
