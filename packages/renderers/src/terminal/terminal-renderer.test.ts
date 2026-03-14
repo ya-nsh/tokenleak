@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { aggregate, mergeProviderData } from '@tokenleak/core';
 import type {
+  CompareDeltas,
   DailyUsage,
   ProviderData,
 } from '@tokenleak/core';
@@ -202,5 +203,62 @@ describe('TerminalRenderer', () => {
     const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true }));
 
     expect(result).toContain('No provider activity in the selected range.');
+  });
+
+  it('appends compare data for terminal compare runs', async () => {
+    const deltas: CompareDeltas = {
+      tokens: 15000,
+      cost: 1.25,
+      streak: 2,
+      activeDays: 4,
+      averageDailyTokens: 600,
+      cacheHitRate: 0.12,
+    };
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = {
+      ...(output.more ?? {
+        inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
+        monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
+        cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
+        hourOfDay: [],
+        sessionMetrics: {
+          totalSessions: 0,
+          averageTokens: 0,
+          averageCost: 0,
+          averageMessages: 0,
+          averageDurationMs: null,
+          longestSession: null,
+          projectCount: 0,
+          topProject: null,
+          projectBreakdown: [],
+        },
+        compare: null,
+      }),
+      compare: {
+        previousRange: { since: '2026-02-15', until: '2026-02-28' },
+        previousStats: aggregate(mergeProviderData([
+          createProvider('claude-code', 'Claude Code', createDailyUsageSequence(4, '2026-02-15', 1200)),
+        ]), '2026-02-28'),
+        deltas,
+        modelMixShift: [
+          {
+            model: 'claude-sonnet-4',
+            currentShare: 0.62,
+            previousShare: 0.41,
+            deltaShare: 0.21,
+            currentTokens: 24000,
+            previousTokens: 12000,
+          },
+        ],
+      },
+    };
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true }));
+
+    expect(result).toContain('Overview');
+    expect(result).toContain('Compare');
+    expect(result).toContain('Model Mix Shift');
   });
 });

@@ -7,16 +7,12 @@ import {
   SCHEMA_VERSION,
   aggregate,
   mergeProviderData,
-  buildCompareOutput,
-  parseCompareRange,
-  computePreviousPeriod,
   buildMoreStats,
 } from '@tokenleak/core';
 import type {
   DateRange,
   RenderOptions,
   TokenleakOutput,
-  CompareOutput,
   ProviderData,
 } from '@tokenleak/core';
 import {
@@ -31,7 +27,7 @@ import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServ
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
-import { loadTokenleakData } from './data-loader.js';
+import { loadCompareTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
@@ -531,73 +527,6 @@ function getRenderer(format: string): IRenderer {
   }
 }
 
-/**
- * Load provider data for a date range and aggregate.
- * Shared helper for normal and compare modes.
- */
-async function loadAndAggregate(
-  range: DateRange,
-  providers: IProvider[],
-): Promise<{ data: ProviderData[]; stats: ReturnType<typeof aggregate> }> {
-  const results = await Promise.all(
-    providers.map(async (p) => {
-      try {
-        return await p.load(range);
-      } catch {
-        return null;
-      }
-    }),
-  );
-  const data = results.filter((r): r is ProviderData => r !== null);
-  const merged = data.length > 0 ? mergeProviderData(data) : [];
-  const stats = aggregate(merged, range.until);
-  return { data, stats };
-}
-
-/**
- * Run compare mode: load data for two periods, compute deltas.
- * If compareStr is a range "YYYY-MM-DD..YYYY-MM-DD", use it as the previous period.
- * If compareStr is "auto" or "true", compute the previous period automatically.
- */
-async function runCompare(
-  compareStr: string,
-  currentRange: DateRange,
-  _registry: ProviderRegistry,
-  available: IProvider[],
-): Promise<{
-  compareOutput: CompareOutput;
-  currentData: ProviderData[];
-  previousData: ProviderData[];
-}> {
-  let previousRange: DateRange;
-
-  if (compareStr === 'auto' || compareStr === 'true' || compareStr === '') {
-    previousRange = computePreviousPeriod(currentRange);
-  } else {
-    const parsed = parseCompareRange(compareStr);
-    if (!parsed) {
-      throw new TokenleakError(
-        `Invalid --compare format: "${compareStr}". Use YYYY-MM-DD..YYYY-MM-DD or "auto".`,
-      );
-    }
-    previousRange = parsed;
-  }
-
-  const [currentResult, previousResult] = await Promise.all([
-    loadAndAggregate(currentRange, available),
-    loadAndAggregate(previousRange, available),
-  ]);
-
-  return {
-    compareOutput: buildCompareOutput(
-    { range: currentRange, stats: currentResult.stats },
-    { range: previousRange, stats: previousResult.stats },
-    ),
-    currentData: currentResult.data,
-    previousData: previousResult.data,
-  };
-}
-
 /** Main execution function, exported for testing. */
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
@@ -648,28 +577,11 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     throw new TokenleakError('No provider data found');
   }
 
-  // Handle --compare mode (currently only supports JSON output)
+  // Handle --compare mode.
   if (config.compare) {
-    const compareResult = await runCompare(
-      config.compare,
-      dateRange,
-      registry,
-      available,
-    );
+    const compareResult = await loadCompareTokenleakData(available, dateRange, config.compare);
 
     if (config.more && (config.format === 'png' || config.format === 'svg')) {
-      const compareOutput: TokenleakOutput = {
-        schemaVersion: SCHEMA_VERSION,
-        generated: new Date().toISOString(),
-        dateRange,
-        providers: compareResult.currentData,
-        aggregated: compareResult.compareOutput.periodA.stats,
-        more: buildMoreStats(compareResult.currentData, dateRange, {
-          previousRange: compareResult.compareOutput.periodB.range,
-          previousProviders: compareResult.previousData,
-        }),
-      };
-
       const renderer = getRenderer(config.format);
       const renderOptions: RenderOptions = {
         format: config.format,
@@ -681,7 +593,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
         more: true,
       };
 
-      const rendered = await renderer.render(compareOutput, renderOptions);
+      const rendered = await renderer.render(compareResult.output, renderOptions);
       if (config.output) {
         const data = typeof rendered === 'string' ? rendered : Buffer.from(rendered);
         writeFileSync(config.output, data);
@@ -692,7 +604,28 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       return;
     }
 
-    if (config.format !== 'json' && config.format !== 'terminal') {
+    if (config.format === 'terminal') {
+      const renderer = getRenderer('terminal');
+      const renderOptions: RenderOptions = {
+        format: 'terminal',
+        theme: config.theme,
+        width: config.width,
+        showInsights: !config.noInsights,
+        noColor: config.noColor,
+        output: config.output,
+        more: true,
+      };
+
+      const rendered = await renderer.render(compareResult.output, renderOptions);
+      if (config.output) {
+        writeFileSync(config.output, rendered);
+      } else {
+        process.stdout.write(`${rendered}\n`);
+      }
+      return;
+    }
+
+    if (config.format !== 'json') {
       process.stderr.write(
         `Warning: --compare only supports JSON output. Ignoring --format ${config.format}.\n`,
       );

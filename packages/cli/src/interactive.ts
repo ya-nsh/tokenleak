@@ -863,6 +863,7 @@ export function buildTabbedDashboardOptions(
   width: number | null,
   noInsights: boolean,
   noColor: boolean,
+  compare: string | null = 'auto',
 ): TabbedDashboardOptions {
   const options: TabbedDashboardOptions = {
     initialTimeRange: inferDashboardTimeRange(rangeArgs),
@@ -886,6 +887,9 @@ export function buildTabbedDashboardOptions(
   if (width !== null) {
     options.width = width;
   }
+  if (compare) {
+    options.compare = compare;
+  }
 
   return options;
 }
@@ -906,6 +910,7 @@ function createTabbedDashboardRequest(options: TabbedDashboardOptions): Interact
   if (options.providerNames && options.providerNames.length > 0) {
     args['provider'] = options.providerNames.join(',');
   }
+  if (options.compare) args['compare'] = options.compare;
   if (options.width !== undefined) args['width'] = options.width;
   if (options.noInsights) args['noInsights'] = true;
   if (options.noColor) args['noColor'] = true;

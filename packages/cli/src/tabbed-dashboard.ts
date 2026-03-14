@@ -3,6 +3,8 @@ import type { IProvider } from '@tokenleak/registry';
 import {
   renderTabBar,
   renderOverviewView,
+  renderCompareView,
+  renderProviderView,
   renderDowView,
   renderTodView,
   renderSessionView,
@@ -13,7 +15,7 @@ import {
   METRIC_TABS,
 } from '@tokenleak/renderers';
 import type { TimeRange, MetricTab } from '@tokenleak/renderers';
-import { loadTokenleakData } from './data-loader.js';
+import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { clampScrollOffset } from './interactive.js';
 
 const HOME_CLEAR = '\x1b[H\x1b[J';
@@ -37,6 +39,7 @@ interface TabbedState {
   inflightLoads: Map<TimeRange, Promise<TokenleakOutput>>;
   noColor: boolean;
   noInsights: boolean;
+  compare: string | null;
   baseUntil: string;
   initialRange: DateRange | null;
   width: number | null;
@@ -80,7 +83,9 @@ async function loadForRange(
   if (inflight) return inflight;
 
   const range = resolveRange(state, timeRange);
-  const loadPromise = loadTokenleakData(providers, range)
+  const loadPromise = (state.compare
+    ? loadCompareTokenleakData(providers, range, state.compare).then((result) => result.output)
+    : loadTokenleakData(providers, range))
     .then((output) => {
       state.dataCache.set(timeRange, output);
       return output;
@@ -127,6 +132,8 @@ function renderActiveView(
 
   switch (tab) {
     case 'overview': return renderOverviewView(output, options);
+    case 'delta': return renderCompareView(output, width, noColor);
+    case 'provider': return renderProviderView(output, width, noColor);
     case 'sess': return renderSessionView(output, width, noColor);
     case 'tok': return renderTokenView(output, width, noColor);
     case 'model': return renderModelView(output, width, noColor);
@@ -217,6 +224,7 @@ function resumeRawMode(): void {
 export interface TabbedDashboardOptions {
   noColor: boolean;
   noInsights?: boolean;
+  compare?: string;
   width?: number;
   until?: string;
   initialTimeRange?: TimeRange;
@@ -237,6 +245,7 @@ export async function startTabbedDashboard(
     inflightLoads: new Map(),
     noColor: options.noColor,
     noInsights: options.noInsights ?? false,
+    compare: options.compare ?? 'auto',
     baseUntil: options.until ?? new Date().toISOString().slice(0, 10),
     initialRange: options.initialRange ?? null,
     width: options.width ?? null,

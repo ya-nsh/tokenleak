@@ -18,6 +18,8 @@ export {
 export {
   renderTabBar,
   renderOverviewView,
+  renderCompareView,
+  renderProviderView,
   renderDowView,
   renderTodView,
   renderSessionView,

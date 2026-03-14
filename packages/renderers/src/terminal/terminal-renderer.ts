@@ -4,6 +4,7 @@ import { renderCompactDashboard } from './compact';
 import { renderDashboardModel } from './dashboard';
 import { buildDashboardModel } from './dashboard-model';
 import { renderOneliner } from './oneliner';
+import { renderCompareView } from './tab-views';
 
 const MIN_COMPACT_WIDTH = 32;
 
@@ -26,6 +27,11 @@ export class TerminalRenderer implements IRenderer {
       return renderCompactDashboard(model, effectiveOptions);
     }
 
-    return renderDashboardModel(model, effectiveOptions);
+    const rendered = renderDashboardModel(model, effectiveOptions);
+    if (!output.more?.compare) {
+      return rendered;
+    }
+
+    return `${rendered}\n\n${renderCompareView(output, effectiveOptions.width, effectiveOptions.noColor)}`;
   }
 }

@@ -90,6 +90,7 @@ describe('interactive launcher', () => {
       true,
       true,
     )).toEqual({
+      compare: 'auto',
       initialTimeRange: '7d',
       noColor: true,
       noInsights: true,
@@ -107,6 +108,7 @@ describe('interactive launcher', () => {
       false,
       false,
     )).toMatchObject({
+      compare: 'auto',
       initialTimeRange: '90d',
       initialRange: {
         since: '2026-01-01',
@@ -125,6 +127,7 @@ describe('interactive launcher', () => {
       null,
       false,
       false,
+      null,
     )).toThrow('must not be after');
 
     expect(() => buildTabbedDashboardOptions(
@@ -133,6 +136,7 @@ describe('interactive launcher', () => {
       null,
       false,
       false,
+      null,
     )).toThrow('Invalid --since date');
   });
 });
@@ -593,6 +597,27 @@ describe('CLI invocation', () => {
       expect(exitCode).toBe(0);
       expect(stdout).toContain('"provider": "pi"');
       expect(stdout).toContain('"displayName": "Pi"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--format terminal --compare auto renders a terminal compare dashboard', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, '--format', 'terminal', '--compare', 'auto', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('Tokenleak');
+      expect(stdout).toContain('Compare');
+      expect(stdout).not.toContain('"periodA"');
     } finally {
       cleanup();
     }

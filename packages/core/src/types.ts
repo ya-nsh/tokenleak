@@ -151,6 +151,8 @@ export interface ModelMixShiftEntry {
 
 export interface CompareMore {
   previousRange: DateRange;
+  previousStats: AggregatedStats;
+  deltas: CompareDeltas;
   modelMixShift: ModelMixShiftEntry[];
 }
 
