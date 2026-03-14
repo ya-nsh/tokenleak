@@ -85,8 +85,9 @@ export function buildHeatmapModel(
   const startDate = alignToSunday(new Date(`${since}T00:00:00Z`));
   const endDate = new Date(`${until}T00:00:00Z`);
   const usageMap = buildUsageMap(daily);
-  const quantiles = computeQuantiles(Array.from(usageMap.values()));
-  const maxTokens = Math.max(...usageMap.values(), 0);
+  const usageValues = Array.from(usageMap.values());
+  const quantiles = computeQuantiles(usageValues);
+  const maxTokens = usageValues.reduce((max, value) => (value > max ? value : max), 0);
   const weeks: HeatmapWeek[] = [];
   const monthMarkers: HeatmapMonthMarker[] = [];
   let weekIndex = 0;
