@@ -412,44 +412,74 @@ function renderHourOfDayChart(
     `<line x1="${barAreaX}" y1="${baselineY}" x2="${barAreaX + barAreaWidth}" y2="${baselineY}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   ];
 
+  // Glow filter (shared by both modes)
+  bars.push(
+    `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
+    `<feGaussianBlur stdDeviation="4" result="blur"/>` +
+    `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+    `</filter></defs>`,
+  );
+
   if (isMulti) {
-    // Stacked bars — each provider gets its own colored segment
+    // Per-provider vertical gradients: dim at base → vibrant at top
+    for (let bi = 0; bi < providerBuckets.length; bi++) {
+      const gradId = `hod-prov-${bi}`;
+      bars.push(
+        `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
+        `<stop offset="0%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="0.3"/>` +
+        `<stop offset="60%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="0.75"/>` +
+        `<stop offset="100%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="1"/>` +
+        `</linearGradient></defs>`,
+      );
+    }
+
+    // Stacked bars with gradients and rounded top
     hourOfDay.forEach((entry, index) => {
       if (entry.tokens <= 0) return;
-      const totalBarHeight = Math.max(4, (entry.tokens / maxTokens) * innerHeight);
+      const totalRatio = entry.tokens / maxTokens;
+      const totalBarHeight = Math.max(4, totalRatio * innerHeight);
       const colX = barAreaX + index * (barWidth + barGap);
-      let offsetY = 0;
+      const isPeak = busiest !== null && entry.hour === busiest.hour;
 
-      for (const bucket of providerBuckets) {
-        const tokens = bucket.hours[index] ?? 0;
+      // Glow behind peak column
+      if (isPeak) {
+        const topY = baselineY - totalBarHeight;
+        bars.push(
+          `<rect x="${colX - 2}" y="${topY - 2}" width="${barWidth + 4}" height="${totalBarHeight + 4}" rx="5" fill="${escapeXml(providerBuckets[0]?.color ?? cardAccent)}" opacity="0.12" filter="url(#peakGlow)"/>`,
+        );
+      }
+
+      // Clip path for rounded top on the full stacked column
+      const clipId = `hod-clip-${index}`;
+      const topY = baselineY - totalBarHeight;
+      bars.push(
+        `<defs><clipPath id="${escapeXml(clipId)}">` +
+        `<rect x="${colX}" y="${topY}" width="${barWidth}" height="${totalBarHeight}" rx="3"/>` +
+        `</clipPath></defs>`,
+      );
+
+      // Render segments bottom-up inside the clip
+      let offsetY = 0;
+      for (let bi = 0; bi < providerBuckets.length; bi++) {
+        const tokens = providerBuckets[bi].hours[index] ?? 0;
         if (tokens <= 0) continue;
         const segHeight = (tokens / entry.tokens) * totalBarHeight;
         const segY = baselineY - offsetY - segHeight;
         bars.push(
-          `<rect x="${colX}" y="${segY}" width="${barWidth}" height="${segHeight}" fill="${escapeXml(bucket.color)}" opacity="0.85"/>`,
+          `<rect x="${colX}" y="${segY}" width="${barWidth}" height="${segHeight}" fill="url(#hod-prov-${bi})" clip-path="url(#${escapeXml(clipId)})"/>`,
         );
         offsetY += segHeight;
       }
-      // Round the top of the stacked bar
-      const topY = baselineY - totalBarHeight;
-      bars.push(
-        `<rect x="${colX}" y="${topY}" width="${barWidth}" height="${Math.min(6, totalBarHeight)}" rx="3" fill="${escapeXml(providerBuckets[0]?.color ?? cardAccent)}" opacity="0"/>`,
-      );
     });
   } else {
-    // Single provider — gradient bars with peak glow
+    // Single provider — rich gradient with bright midpoint
     const hodGradId = 'hod-bar-grad';
     bars.push(
       `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.15"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.1"/>` +
+      `<stop offset="40%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.6"/>` +
       `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
       `</linearGradient></defs>`,
-    );
-    bars.push(
-      `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
-      `<feGaussianBlur stdDeviation="4" result="blur"/>` +
-      `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
-      `</filter></defs>`,
     );
 
     hourOfDay.forEach((entry, index) => {
@@ -466,7 +496,7 @@ function renderHourOfDayChart(
       }
 
       bars.push(
-        `<rect x="${colX}" y="${colY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.3 + ratio * 0.7}"/>`,
+        `<rect x="${colX}" y="${colY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.35 + ratio * 0.65}"/>`,
       );
     });
   }
