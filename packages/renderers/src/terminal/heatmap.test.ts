@@ -3,20 +3,24 @@ import { renderTerminalHeatmap } from './heatmap';
 import { createDailyUsage } from '../__test-fixtures__';
 
 describe('renderTerminalHeatmap', () => {
-  it('renders a visible empty-cell grid in noColor mode', () => {
+  it('renders a visible big-cell grid and legends in noColor mode', () => {
     const output = renderTerminalHeatmap(
       [
         createDailyUsage('2026-03-01', 1000),
         createDailyUsage('2026-03-03', 3000),
         createDailyUsage('2026-03-06', 5000),
       ],
-      { width: 40, noColor: true },
+      { width: 64, noColor: true },
     );
 
-    expect(output).toContain('Mar 2026');
+    expect(output).toContain('Mar');
     expect(output).toContain('Sun');
-    expect(output).toContain('·');
-    expect(output).toContain('Less ·░▒▓█ More');
+    expect(output).toContain('██');
+    expect(output).toContain('Intensity');
+    expect(output).toContain('Models');
+    expect(output).toContain('Claude');
+    expect(output).toContain('Story');
+    expect(output).toContain('Pulse');
   });
 
   it('keeps rows within the requested visible width', () => {
@@ -32,6 +36,25 @@ describe('renderTerminalHeatmap', () => {
     for (const line of output.split('\n')) {
       expect(line.length).toBeLessThanOrEqual(24);
     }
+  });
+
+  it('shows multiple model-family labels when visible days use different families', () => {
+    const output = renderTerminalHeatmap(
+      [
+        {
+          ...createDailyUsage('2026-03-01', 1000),
+          models: [{ ...createDailyUsage('2026-03-01', 1000).models[0]!, model: 'claude-3-opus' }],
+        },
+        {
+          ...createDailyUsage('2026-03-02', 2000),
+          models: [{ ...createDailyUsage('2026-03-02', 2000).models[0]!, model: 'gpt-4o' }],
+        },
+      ],
+      { width: 48, noColor: true },
+    );
+
+    expect(output).toContain('Claude');
+    expect(output).toContain('GPT');
   });
 
   it('uses a caption instead of ambiguous partial month labels on very short grids', () => {
