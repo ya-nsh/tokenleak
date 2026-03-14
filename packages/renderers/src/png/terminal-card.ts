@@ -386,9 +386,25 @@ function renderHourOfDayChart(
   const isMulti = providers.length > 1;
   const providerBuckets = isMulti ? buildProviderHourBuckets(providers) : [];
 
+  // Build inline legend for multi-provider (placed next to title)
+  let legendSvg = '';
+  if (isMulti && providerBuckets.length > 0) {
+    const titleWidth = 105; // approx width of "HOUR OF DAY" text
+    let legendX = x + 18 + titleWidth + 12;
+    const legendY = y + 22;
+    for (const bucket of providerBuckets) {
+      const displayName = providers.find((p) => p.provider === bucket.provider)?.displayName ?? bucket.provider;
+      legendSvg +=
+        `<rect x="${legendX}" y="${legendY - 8}" width="8" height="8" rx="2" fill="${escapeXml(bucket.color)}" opacity="0.85"/>` +
+        `<text x="${legendX + 12}" y="${legendY - 1}" fill="${escapeXml(theme.fg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(displayName)}</text>`;
+      legendX += 12 + displayName.length * 5.5 + 16;
+    }
+  }
+
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
+    legendSvg,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
     )}</text>`,
@@ -465,27 +481,9 @@ function renderHourOfDayChart(
     );
   });
 
-  // Legend row for multi-provider
-  let finalHeight = chartHeight;
-  if (isMulti && providerBuckets.length > 0) {
-    const legendY = y + chartHeight - 8;
-    let legendX = barAreaX;
-    for (const bucket of providerBuckets) {
-      const displayName = providers.find((p) => p.provider === bucket.provider)?.displayName ?? bucket.provider;
-      bars.push(
-        `<rect x="${legendX}" y="${legendY}" width="8" height="8" rx="2" fill="${escapeXml(bucket.color)}" opacity="0.85"/>`,
-      );
-      bars.push(
-        `<text x="${legendX + 12}" y="${legendY + 7}" fill="${escapeXml(theme.fg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(displayName)}</text>`,
-      );
-      legendX += 12 + displayName.length * 5.5 + 16;
-    }
-    finalHeight += 16;
-  }
-
   return {
     svg: bars.join('\n'),
-    height: finalHeight,
+    height: chartHeight,
   };
 }
 
@@ -696,7 +694,7 @@ export function renderTerminalCardSvg(
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.5">${escapeXml(stat.label)}</text>`,
       );
-      const valueColor = stat.accent ? cardAccent : theme.fg;
+      const valueColor = stat.accent && providers.length === 1 ? cardAccent : theme.fg;
       sections.push(
         `<text x="${x}" y="${startY + 28}" fill="${escapeXml(valueColor)}" font-size="22" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(stat.value)}</text>`,
       );
