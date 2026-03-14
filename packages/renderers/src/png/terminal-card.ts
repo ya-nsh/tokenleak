@@ -47,14 +47,14 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
   if (mode === 'dark') {
     return {
       bg: '#09090b',
-      fg: '#ffffff',
-      muted: '#52525b',
-      labelFg: '#a1a1aa',
-      border: 'rgba(255,255,255,0.06)',
-      accent: '#10b981',
-      heatmapEmpty: '#141418',
-      barTrack: '#0e0e11',
-      titlebarBorder: 'rgba(255,255,255,0.06)',
+      fg: '#f0f0f0',
+      muted: '#6b7280',
+      labelFg: '#b0b8c4',
+      border: 'rgba(255,255,255,0.08)',
+      accent: '#34d399',
+      heatmapEmpty: '#1a1a22',
+      barTrack: '#151520',
+      titlebarBorder: 'rgba(255,255,255,0.08)',
     };
   }
   return {
@@ -84,7 +84,7 @@ function buildHeatmapScale(
 
   // For dark theme: levels go from very dim to bright
   // For light theme: levels go from very light to saturated
-  const opacities = isDark ? [0.15, 0.35, 0.6, 1.0] : [0.2, 0.4, 0.65, 1.0];
+  const opacities = isDark ? [0.25, 0.5, 0.75, 1.0] : [0.2, 0.4, 0.65, 1.0];
 
   return [
     'transparent',
@@ -369,6 +369,7 @@ function renderHourOfDayChart(
   theme: CardTheme,
   cardAccent: string,
   providers: ProviderData[],
+  isDark: boolean,
 ): { svg: string; height: number } {
   const chartHeight = 140;
   const innerHeight = 72;
@@ -422,12 +423,14 @@ function renderHourOfDayChart(
 
   if (isMulti) {
     // Per-provider vertical gradients: dim at base → vibrant at top
+    const provBaseOpacity = isDark ? '0.45' : '0.3';
+    const provMidOpacity = isDark ? '0.85' : '0.75';
     for (let bi = 0; bi < providerBuckets.length; bi++) {
       const gradId = `hod-prov-${bi}`;
       bars.push(
         `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
-        `<stop offset="0%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="0.3"/>` +
-        `<stop offset="60%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="0.75"/>` +
+        `<stop offset="0%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="${provBaseOpacity}"/>` +
+        `<stop offset="60%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="${provMidOpacity}"/>` +
         `<stop offset="100%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="1"/>` +
         `</linearGradient></defs>`,
       );
@@ -474,10 +477,12 @@ function renderHourOfDayChart(
   } else {
     // Single provider — rich gradient with bright midpoint
     const hodGradId = 'hod-bar-grad';
+    const hodBaseOpacity = isDark ? '0.25' : '0.1';
+    const hodMidOpacity = isDark ? '0.75' : '0.6';
     bars.push(
       `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.1"/>` +
-      `<stop offset="40%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.6"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="${hodBaseOpacity}"/>` +
+      `<stop offset="40%" stop-color="${escapeXml(cardAccent)}" stop-opacity="${hodMidOpacity}"/>` +
       `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
       `</linearGradient></defs>`,
     );
@@ -575,8 +580,8 @@ export function renderTerminalCardSvg(
 
   // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
-  // For multi-provider top model bars: pure black fill regardless of theme
-  const barAccent = providers.length > 1 ? '#000000' : cardAccent;
+  // For multi-provider top model bars: bright cool white in dark, black in light
+  const barAccent = providers.length > 1 ? (isDark ? '#c4d0e0' : '#000000') : cardAccent;
 
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
@@ -767,8 +772,8 @@ export function renderTerminalCardSvg(
       `<text x="${pad + rankWidth}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(model.model)}</text>`,
     );
 
-    // Bar track — near-black so it almost disappears into the bg
-    const trackColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
+    // Bar track — subtle but visible
+    const trackColor = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';
     sections.push(
       `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(trackColor)}"/>`,
     );
@@ -776,8 +781,8 @@ export function renderTerminalCardSvg(
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(barAccent)}44"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(barAccent)}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(barAccent)}" stop-opacity="${isDark ? '0.45' : '0.27'}"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(barAccent)}" stop-opacity="1"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
@@ -944,6 +949,7 @@ export function renderTerminalCardSvg(
       theme,
       cardAccent,
       providers,
+      isDark,
     );
     sections.push(hourChart.svg);
     y += hourChart.height + 16;

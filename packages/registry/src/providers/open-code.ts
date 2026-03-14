@@ -16,7 +16,7 @@ import { estimateCost } from '../models/cost';
 import { isInRange } from '../utils';
 
 const PROVIDER_NAME = 'open-code';
-const DISPLAY_NAME = 'Open Code';
+const DISPLAY_NAME = 'OpenCode';
 const COLORS: ProviderColors = {
   primary: '#6366f1',
   secondary: '#a78bfa',
