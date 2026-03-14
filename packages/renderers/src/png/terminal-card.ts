@@ -35,6 +35,7 @@ interface CardTheme {
   bg: string;
   fg: string;
   muted: string;
+  labelFg: string;
   border: string;
   accent: string;
   heatmapEmpty: string;
@@ -48,6 +49,7 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
       bg: '#09090b',
       fg: '#ffffff',
       muted: '#52525b',
+      labelFg: '#a1a1aa',
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
       heatmapEmpty: '#141418',
@@ -59,6 +61,7 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
     bg: '#fafafa',
     fg: '#18181b',
     muted: '#a1a1aa',
+    labelFg: '#71717a',
     border: 'rgba(0,0,0,0.08)',
     accent: '#059669',
     heatmapEmpty: '#e4e4e7',
@@ -287,6 +290,24 @@ function renderProviderHeatmap(
   return { svg, gridWidth, height };
 }
 
+function renderSectionHeader(
+  x: number,
+  y: number,
+  title: string,
+  theme: CardTheme,
+  cardAccent: string,
+): string {
+  const parts: string[] = [];
+  // Accent bar before header
+  parts.push(
+    `<rect x="${x}" y="${y - 8}" width="3" height="10" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.6"/>`,
+  );
+  parts.push(
+    `<text x="${x + 12}" y="${y}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.8">${escapeXml(title)}</text>`,
+  );
+  return parts.join('\n');
+}
+
 function renderMetricCard(
   x: number,
   y: number,
@@ -299,17 +320,23 @@ function renderMetricCard(
   const parts: string[] = [];
   const height = 38 + lines.length * 22;
 
+  // Card background
   parts.push(
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   );
+  // Left accent stripe
   parts.push(
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">${escapeXml(title)}</text>`,
+    `<rect x="${x}" y="${y + 8}" width="3" height="${height - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
+  );
+  // Card title
+  parts.push(
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">${escapeXml(title)}</text>`,
   );
 
   lines.forEach((line, index) => {
     const lineY = y + 48 + index * 22;
     parts.push(
-      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(line.label)}</text>`,
+      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(line.label)}</text>`,
     );
     parts.push(
       `<text x="${x + width - 18}" y="${lineY}" fill="${escapeXml(line.accent ? cardAccent : theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" text-anchor="end">${escapeXml(line.value)}</text>`,
@@ -342,8 +369,9 @@ function renderHourOfDayChart(
 
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">HOUR OF DAY</text>`,
-    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+    `<rect x="${x}" y="${y + 8}" width="3" height="${chartHeight - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
     )}</text>`,
   ];
@@ -361,7 +389,7 @@ function renderHourOfDayChart(
   [0, 6, 12, 18, 23].forEach((hour) => {
     const labelX = barAreaX + hour * (barWidth + barGap) + barWidth / 2;
     bars.push(
-      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
+      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
         hour.toString().padStart(2, '0'),
       )}</text>`,
     );
@@ -389,8 +417,9 @@ function renderModelMixShift(
   const height = 38 + rows.length * 24;
   const parts: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
-    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+    `<rect x="${x}" y="${y + 8}" width="3" height="${height - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       `${more.compare.previousRange.since} → ${more.compare.previousRange.until}`,
     )}</text>`,
   ];
@@ -408,7 +437,7 @@ function renderModelMixShift(
       )}</text>`,
     );
     parts.push(
-      `<text x="${x + width - 110}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+      `<text x="${x + width - 110}" y="${lineY}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
         `${(row.previousShare * 100).toFixed(1)}% → ${(row.currentShare * 100).toFixed(1)}%`,
       )}</text>`,
     );
@@ -597,23 +626,28 @@ export function renderTerminalCardSvg(
   );
   y += 28;
 
-  sections.push(
-    `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('TOP MODELS')}</text>`,
-  );
+  sections.push(renderSectionHeader(pad, y, 'TOP MODELS', theme, cardAccent));
   y += 24;
 
   const topModels = stats.topModels.slice(0, 3);
+  const rankWidth = 28;
   const modelNameWidth = MODEL_NAME_WIDTH;
   const barGap = MODEL_BAR_GAP;
   const percentX = cardWidth - pad;
-  const barX = pad + modelNameWidth;
+  const barX = pad + rankWidth + modelNameWidth;
   const barMaxWidth = Math.max(48, percentX - barX - barGap);
 
   for (const [index, model] of topModels.entries()) {
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
+    // Rank number
     sections.push(
-      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
+      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(cardAccent)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" opacity="0.7">${escapeXml(String(index + 1))}</text>`,
+    );
+
+    // Model name - brighter and bolder
+    sections.push(
+      `<text x="${pad + rankWidth}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(model.model)}</text>`,
     );
 
     sections.push(
@@ -635,7 +669,7 @@ export function renderTerminalCardSvg(
     );
 
     sections.push(
-      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
 
     y += 32;
@@ -651,9 +685,7 @@ export function renderTerminalCardSvg(
       `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
     );
     y += 28;
-    sections.push(
-      `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('MORE')}</text>`,
-    );
+    sections.push(renderSectionHeader(pad, y, 'MORE', theme, cardAccent));
     y += 24;
 
     const efficiencyLines = [
