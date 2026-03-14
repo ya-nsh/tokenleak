@@ -4,7 +4,7 @@ import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
-import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clipOutputLines } from './interactive';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines } from './interactive';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -132,14 +132,21 @@ describe('interactive helpers', () => {
     expect(stripAnsi(truncateVisible('\x1b[32mhello-world\x1b[0m', 8))).toBe('hello...');
   });
 
-  test('clipOutputLines keeps lines under the limit unchanged', () => {
-    expect(clipOutputLines(['a', 'b'], 3)).toEqual(['a', 'b']);
+  test('clampScrollOffset keeps the offset inside the visible range', () => {
+    expect(clampScrollOffset(-5, 20, 8)).toBe(0);
+    expect(clampScrollOffset(3, 20, 8)).toBe(3);
+    expect(clampScrollOffset(50, 20, 8)).toBe(12);
   });
 
-  test('clipOutputLines appends an overflow indicator when truncated', () => {
-    const clipped = clipOutputLines(['a', 'b', 'c', 'd'], 3);
-    expect(clipped).toHaveLength(3);
-    expect(stripAnsi(clipped[2]!)).toContain('more lines hidden');
+  test('buildOutputSectionLines preserves all lines instead of clipping them', () => {
+    expect(buildOutputSectionLines('Output', 'a\nb\nc\nd', 20)).toEqual([
+      expect.stringContaining('Output'),
+      'a',
+      'b',
+      'c',
+      'd',
+      '',
+    ]);
   });
 });
 
