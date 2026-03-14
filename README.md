@@ -2,6 +2,8 @@
 
 See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, and **Open Code**, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
 
+![Tokenleak preview card](./docs/preview.png)
+
 ## Install
 
 Tokenleak requires [Bun](https://bun.sh) (v1.0+).
@@ -311,19 +313,6 @@ It then computes:
 - **Top models** — models ranked by total token consumption
 - **Daily averages** — mean tokens and cost per day
 
-### Supported models and pricing
-
-Tokenleak includes pricing for these model families:
-
-| Family     | Models                                               |
-| ---------- | ---------------------------------------------------- |
-| Claude 3   | `claude-3-haiku`, `claude-3-sonnet`, `claude-3-opus` |
-| Claude 3.5 | `claude-3.5-haiku`, `claude-3.5-sonnet`              |
-| Claude 4   | `claude-sonnet-4`, `claude-opus-4`                   |
-| GPT-4o     | `gpt-4o`, `gpt-4o-mini`                              |
-| o-series   | `o1`, `o1-mini`, `o3`, `o3-mini`, `o4-mini`          |
-
-Model names with date suffixes (e.g. `claude-sonnet-4-20250514`) are automatically normalised. Unknown models show `$0.00` cost but tokens are still tracked.
 
 ## Project structure
 
