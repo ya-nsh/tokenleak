@@ -32,6 +32,7 @@ import type { IRenderer } from '@tokenleak/renderers';
 import { loadConfig } from './config.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
+import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
@@ -153,54 +154,6 @@ function buildVersionText(): string {
   return `tokenleak ${VERSION}\nschema ${SCHEMA_VERSION}\n`;
 }
 
-const CLI_ARG_ORDER = [
-  'format',
-  'theme',
-  'since',
-  'until',
-  'days',
-  'output',
-  'width',
-  'provider',
-  'compare',
-  'upload',
-  'claude',
-  'codex',
-  'openCode',
-  'allProviders',
-  'listProviders',
-  'more',
-  'clipboard',
-  'open',
-  'liveServer',
-  'noColor',
-  'noInsights',
-] as const;
-
-const CLI_ARG_FLAGS: Record<string, string> = {
-  format: '--format',
-  theme: '--theme',
-  since: '--since',
-  until: '--until',
-  days: '--days',
-  output: '--output',
-  width: '--width',
-  provider: '--provider',
-  compare: '--compare',
-  upload: '--upload',
-  claude: '--claude',
-  codex: '--codex',
-  openCode: '--open-code',
-  allProviders: '--all-providers',
-  listProviders: '--list-providers',
-  more: '--more',
-  clipboard: '--clipboard',
-  open: '--open',
-  liveServer: '--live-server',
-  noColor: '--no-color',
-  noInsights: '--no-insights',
-};
-
 function normalizeCliArg(arg: string): string {
   const flagMap: Record<string, string> = {
     '--all-providers': '--allProviders',
@@ -214,28 +167,7 @@ function normalizeCliArg(arg: string): string {
   return flagMap[arg] ?? arg;
 }
 
-function serializeCliArgs(cliArgs: Record<string, unknown>): string[] {
-  const tokens: string[] = [];
-
-  for (const key of CLI_ARG_ORDER) {
-    const value = cliArgs[key];
-    if (value === undefined || value === false || value === null) {
-      continue;
-    }
-
-    const flag = CLI_ARG_FLAGS[key];
-    if (!flag) continue;
-
-    tokens.push(flag);
-    if (value !== true) {
-      tokens.push(String(value));
-    }
-  }
-
-  return tokens;
-}
-
-function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: boolean, exitCode: number): string {
+export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: boolean, exitCode: number): string {
   if (!ok) {
     return `Command exited with code ${exitCode}.`;
   }
@@ -280,7 +212,7 @@ async function executeInteractiveCommand(
       };
     }
 
-    const command = [process.execPath, cliPath, ...serializeCliArgs(request.args)];
+    const command = [process.execPath, cliPath, ...buildCliArgTokens(request.args)];
 
     if (request.executionMode === 'inherit') {
       const proc = Bun.spawn(command, {
@@ -1081,25 +1013,22 @@ if (isDirectExecution) {
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   const argv = normalizedArgv;
 
-  await (async () => {
-    if (argv.includes('--help') || argv.includes('-h')) {
-      process.stdout.write(buildHelpText());
-      process.exit(0);
-    }
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(buildHelpText());
+    process.exit(0);
+  }
 
-    if (argv.includes('--version') || argv.includes('-v')) {
-      process.stdout.write(buildVersionText());
-      process.exit(0);
-    }
+  if (argv.includes('--version') || argv.includes('-v')) {
+    process.stdout.write(buildVersionText());
+    process.exit(0);
+  }
 
-    if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
-      await startInteractiveCli({
-        version: VERSION,
-        helpText: buildHelpText(),
-      }, executeInteractiveCommand);
-      return;
-    }
-
+  if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+    await startInteractiveCli({
+      version: VERSION,
+      helpText: buildHelpText(),
+    }, executeInteractiveCommand);
+  } else {
     await runMain(main);
-  })();
+  }
 }

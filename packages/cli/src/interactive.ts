@@ -1,5 +1,6 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
+import { buildCliPreview } from './flags.js';
 
 export const INTERACTIVE_FLAG_LINES = [
   '-f, --format <format>   terminal | png | svg | json',
@@ -81,78 +82,57 @@ const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
 const ALT_SCREEN_ON = '\x1b[?1049h';
 const ALT_SCREEN_OFF = '\x1b[?1049l';
-
-const PREVIEW_FLAG_ORDER = [
-  'format',
-  'theme',
-  'since',
-  'until',
-  'days',
-  'output',
-  'width',
-  'provider',
-  'compare',
-  'upload',
-  'claude',
-  'codex',
-  'openCode',
-  'allProviders',
-  'listProviders',
-  'more',
-  'clipboard',
-  'open',
-  'liveServer',
-  'noColor',
-  'noInsights',
-] as const;
-
-const PREVIEW_FLAG_NAMES: Record<string, string> = {
-  format: '--format',
-  theme: '--theme',
-  since: '--since',
-  until: '--until',
-  days: '--days',
-  output: '--output',
-  width: '--width',
-  provider: '--provider',
-  compare: '--compare',
-  upload: '--upload',
-  claude: '--claude',
-  codex: '--codex',
-  openCode: '--open-code',
-  allProviders: '--all-providers',
-  listProviders: '--list-providers',
-  more: '--more',
-  clipboard: '--clipboard',
-  open: '--open',
-  liveServer: '--live-server',
-  noColor: '--no-color',
-  noInsights: '--no-insights',
-};
+const LOADING_TICK_MS = 120;
 
 function color(text: string, code: string): string {
   return `${code}${text}${RESET}`;
 }
 
-function stripAnsi(text: string): string {
+export function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 }
 
-function visibleLength(text: string): number {
+export function visibleLength(text: string): number {
   return stripAnsi(text).length;
 }
 
-function padVisible(text: string, width: number): string {
+export function padVisible(text: string, width: number): string {
   const padding = Math.max(0, width - visibleLength(text));
   return text + ' '.repeat(padding);
 }
 
-function truncateVisible(text: string, width: number): string {
+export function truncateVisible(text: string, width: number): string {
   if (width <= 0) return '';
   const plain = stripAnsi(text);
   if (plain.length <= width) return text;
-  if (width <= 3) return plain.slice(0, width);
-  return `${plain.slice(0, width - 3)}...`;
+
+  const limit = width <= 3 ? width : width - 3;
+  let visibleCount = 0;
+  let index = 0;
+  let result = '';
+  let sawAnsi = false;
+
+  while (index < text.length && visibleCount < limit) {
+    if (text[index] === '\x1b') {
+      const match = text.slice(index).match(/^\x1b\[[0-9;?]*[A-Za-z]/);
+      if (match) {
+        result += match[0];
+        index += match[0].length;
+        sawAnsi = true;
+        continue;
+      }
+    }
+
+    result += text[index]!;
+    index += 1;
+    visibleCount += 1;
+  }
+
+  if (width <= 3) {
+    return sawAnsi ? `${result}${RESET}` : result;
+  }
+
+  return sawAnsi ? `${result}...${RESET}` : `${result}...`;
 }
 
 function joinColumns(left: string[], right: string[], totalWidth: number): string[] {
@@ -173,27 +153,6 @@ function joinColumns(left: string[], right: string[], totalWidth: number): strin
 
 function renderRule(width: number): string {
   return color('-'.repeat(width), DIM);
-}
-
-function buildPreview(args: CliArgs): string {
-  const parts = ['tokenleak'];
-
-  for (const key of PREVIEW_FLAG_ORDER) {
-    const value = args[key];
-    if (value === undefined || value === false || value === null) {
-      continue;
-    }
-
-    const flag = PREVIEW_FLAG_NAMES[key];
-    if (!flag) continue;
-
-    parts.push(flag);
-    if (value !== true) {
-      parts.push(String(value));
-    }
-  }
-
-  return parts.join(' ');
 }
 
 function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | 'loadingTitle' | 'loadingDetail' | 'executionMode'> {
@@ -266,7 +225,7 @@ function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | '
   }
 }
 
-function finalizeCliArgs(args: CliArgs): CliArgs {
+export function finalizeCliArgs(args: CliArgs): CliArgs {
   const finalized: CliArgs = { ...args };
   const format = finalized['format'];
 
@@ -296,7 +255,7 @@ function createRunCommand(args: CliArgs): InteractiveCommand {
     type: 'run',
     request: {
       args: finalizedArgs,
-      preview: buildPreview(finalizedArgs),
+      preview: buildCliPreview(finalizedArgs),
       ...describeRequest(finalizedArgs),
     },
   };
@@ -413,7 +372,7 @@ function renderLoading(request: InteractiveRunRequest, frame = 0, startedAt = Da
   return `${HOME_CLEAR}${HIDE_CURSOR}${lines.join('\n')}`;
 }
 
-function clipOutputLines(lines: string[], limit: number): string[] {
+export function clipOutputLines(lines: string[], limit: number): string[] {
   if (limit <= 0) return [];
   if (lines.length <= limit) return lines;
 
@@ -483,7 +442,6 @@ function suspendRawMode(): void {
 }
 
 function resumeRawMode(): void {
-  emitKeypressEvents(process.stdin);
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
   }
@@ -812,7 +770,13 @@ async function promptWidth(): Promise<number | null> {
 
   while (true) {
     try {
-      return parsePositiveInteger(await ask('Custom width'));
+      const parsed = parsePositiveInteger(await ask('Custom width'));
+      if (parsed !== null) {
+        return parsed;
+      }
+
+      paint(`${HOME_CLEAR}${SHOW_CURSOR}${color('Width required', RED)}\n${color('Enter a positive whole number to continue.', DIM)}\n\nPress Enter to try again.`);
+      await ask('');
     } catch (error: unknown) {
       paint(`${HOME_CLEAR}${SHOW_CURSOR}${color('Invalid width', RED)}\n${color(error instanceof Error ? error.message : String(error), DIM)}\n\nPress Enter to try again.`);
       await ask('');
@@ -1170,8 +1134,8 @@ async function promptForMenuCommand(
             return;
           }
 
-          cleanup();
           resolving = true;
+          cleanup();
           try {
             const command = await options[nextIndex]!.select();
             resolve(command);
@@ -1187,8 +1151,8 @@ async function promptForMenuCommand(
       }
 
       if (key.name === 'return' || key.name === 'enter') {
-        cleanup();
         resolving = true;
+        cleanup();
         try {
           const command = await options[state.selectedIndex]!.select();
           resolve(command);
@@ -1244,6 +1208,7 @@ export async function startInteractiveCli(
     interrupted = true;
   };
 
+  emitKeypressEvents(process.stdin);
   enterAltScreen();
   process.on('SIGINT', onSigint);
 
@@ -1268,7 +1233,7 @@ export async function startInteractiveCli(
       const loadingTicker = setInterval(() => {
         loadingFrame += 1;
         paint(renderLoading(command.request, loadingFrame, startedAt));
-      }, 120);
+      }, LOADING_TICK_MS);
 
       let result: InteractiveExecutionResult;
       try {
