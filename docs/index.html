@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tokenleak — see where your AI tokens go</title>
+  <meta name="description" content="Read local usage logs from Claude Code, Codex, and Open Code. Render heatmaps, dashboards, and shareable cards — all from your terminal." />
+  <meta property="og:title" content="tokenleak" />
+  <meta property="og:description" content="See where your AI tokens actually go." />
+  <meta property="og:image" content="./preview_single.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0b0b;
+      --bg2:       #111111;
+      --bg3:       #161616;
+      --border:    #222222;
+      --muted:     #444444;
+      --subtle:    #666666;
+      --text:      #e8e8e8;
+      --text-dim:  #aaaaaa;
+      --orange:    #f97316;
+      --orange-dim: #c2511a;
+      --green:     #22c55e;
+      --purple:    #a78bfa;
+      --blue:      #38bdf8;
+      --yellow:    #fbbf24;
+      --mono:      'JetBrains Mono', 'Fira Code', monospace;
+      --sans:      'Inter', system-ui, sans-serif;
+      --radius:    8px;
+      --radius-lg: 16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      background: rgba(11,11,11,0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.03em;
+    }
+    .nav-logo span { color: var(--orange); }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      background: var(--orange);
+      color: #000 !important;
+      font-weight: 600 !important;
+      padding: 0.4rem 1rem;
+      border-radius: var(--radius);
+      transition: background 0.15s !important;
+    }
+    .nav-cta:hover { background: #fb923c !important; color: #000 !important; }
+
+    /* ── HERO ── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 7rem 2rem 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -120px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 500px;
+      background: radial-gradient(ellipse at center, rgba(249,115,22,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(249,115,22,0.1);
+      border: 1px solid rgba(249,115,22,0.25);
+      border-radius: 999px;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.8rem;
+      color: var(--orange);
+      font-family: var(--mono);
+      margin-bottom: 1.75rem;
+      letter-spacing: 0.02em;
+    }
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .hero h1 {
+      font-family: var(--mono);
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      line-height: 1.05;
+      margin-bottom: 1.5rem;
+      color: var(--text);
+    }
+    .hero h1 .dollar { color: var(--orange); }
+    .hero h1 .cursor {
+      color: var(--orange);
+      animation: blink 1.1s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--text-dim);
+      max-width: 560px;
+      margin-bottom: 2.5rem;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 4rem;
+    }
+
+    .install-cmd {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      position: relative;
+    }
+    .install-cmd:hover { border-color: var(--muted); }
+    .install-cmd .prompt { color: var(--muted); }
+    .install-cmd .cmd-text { color: var(--orange); }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      color: var(--subtle);
+      cursor: pointer;
+      padding: 0.1rem;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s;
+      font-size: 0.8rem;
+    }
+    .copy-btn:hover { color: var(--text); }
+    .copy-btn.copied { color: var(--green); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem 1.2rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+    /* ── HERO SCREENSHOT ── */
+    .hero-screenshot {
+      width: 100%;
+      max-width: 440px;
+      position: relative;
+      margin-bottom: -2px;
+    }
+
+    .screenshot-window {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg3);
+    }
+    .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green { background: #28c840; }
+    .window-title {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--subtle);
+      margin-left: auto;
+      margin-right: auto;
+      padding-right: 2.5rem;
+    }
+
+    .screenshot-window img {
+      display: block;
+      width: 100%;
+    }
+
+    /* ── SOCIAL PROOF ── */
+    .social-proof {
+      width: 100%;
+      padding: 2rem 2rem 5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .sp-label {
+      font-size: 0.75rem;
+      color: var(--subtle);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .provider-chips {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .provider-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+    .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    /* ── SECTION LAYOUT ── */
+    section {
+      padding: 6rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--orange);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    .section-sub {
+      font-size: 1rem;
+      color: var(--text-dim);
+      max-width: 580px;
+      line-height: 1.7;
+    }
+
+    /* ── DASHBOARD SHOWCASE ── */
+    .dashboard-section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem 6rem;
+    }
+
+    .dashboard-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.45rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--subtle);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab:hover { border-color: var(--muted); color: var(--text-dim); }
+    .tab.active {
+      background: rgba(249,115,22,0.1);
+      border-color: rgba(249,115,22,0.4);
+      color: var(--orange);
+    }
+
+    .tab-panels { position: relative; }
+
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.active { display: block; }
+
+    .tab-screenshot {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+
+    .tab-screenshot-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.7rem 1rem;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab-screenshot img {
+      display: block;
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .two-up {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 720px) {
+      .two-up { grid-template-columns: 1fr; }
+    }
+
+    /* ── FEATURES GRID ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-top: 3rem;
+    }
+
+    .feature-card {
+      background: var(--bg);
+      padding: 1.75rem;
+      transition: background 0.2s;
+    }
+    .feature-card:hover { background: var(--bg2); }
+
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: var(--text);
+    }
+
+    .feature-card p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* ── STATS STRIP ── */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin: 4rem 0;
+    }
+
+    .stat-item {
+      background: var(--bg2);
+      padding: 2rem 1.5rem;
+      text-align: center;
+    }
+
+    .stat-number {
+      font-family: var(--mono);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--orange);
+      line-height: 1;
+      margin-bottom: 0.4rem;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    @media (max-width: 600px) {
+      .stats-strip { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ── CODE BLOCKS ── */
+    .code-window {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .code-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.7rem 1rem;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-bar-title {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--subtle);
+      margin-left: 0.5rem;
+    }
+
+    pre {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.7;
+      padding: 1.5rem;
+      overflow-x: auto;
+      color: var(--text-dim);
+    }
+
+    pre .comment { color: var(--subtle); }
+    pre .cmd { color: var(--text); }
+    pre .flag { color: var(--orange); }
+    pre .val { color: var(--green); }
+    pre .out { color: var(--text-dim); }
+    pre .dim { color: var(--muted); }
+
+    /* ── COMPARE SECTION ── */
+    .compare-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+      margin-top: 3rem;
+    }
+
+    @media (max-width: 768px) {
+      .compare-layout { grid-template-columns: 1fr; }
+    }
+
+    .compare-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+
+    .compare-header {
+      color: var(--subtle);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .compare-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .compare-row:last-child { border-bottom: none; }
+    .compare-row .label { color: var(--subtle); font-size: 0.75rem; }
+
+    .delta-pos { color: var(--green); }
+    .delta-neg { color: #f87171; }
+
+    /* ── PROVIDERS DETAIL ── */
+    .providers-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    @media (max-width: 720px) {
+      .providers-grid { grid-template-columns: 1fr; }
+    }
+
+    .provider-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      transition: border-color 0.2s;
+    }
+
+    .provider-card:hover { border-color: var(--muted); }
+
+    .provider-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .provider-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .provider-card .path {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--subtle);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+      word-break: break-all;
+    }
+
+    .provider-card p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* ── OUTPUT FORMATS ── */
+    .formats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    @media (max-width: 600px) {
+      .formats-grid { grid-template-columns: 1fr; }
+    }
+
+    .format-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+    .format-card:hover { border-color: var(--muted); }
+
+    .format-tag {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 1rem;
+    }
+
+    .format-card h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .format-card p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .format-card ul {
+      list-style: none;
+      margin-top: 0.75rem;
+    }
+    .format-card li {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      padding: 0.2rem 0;
+      padding-left: 1rem;
+      position: relative;
+    }
+    .format-card li::before {
+      content: '–';
+      position: absolute;
+      left: 0;
+      color: var(--muted);
+    }
+
+    /* ── INSTALL SECTION ── */
+    .install-section {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .install-section section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      .install-section section { grid-template-columns: 1fr; gap: 2rem; }
+    }
+
+    .install-steps {
+      list-style: none;
+      counter-reset: steps;
+    }
+
+    .install-steps li {
+      counter-increment: steps;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .install-steps li:last-child { border-bottom: none; }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(249,115,22,0.15);
+      border: 1px solid rgba(249,115,22,0.3);
+      color: var(--orange);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .step-content h4 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .step-content p {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+    .step-content code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--orange);
+      background: rgba(249,115,22,0.08);
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+    }
+
+    /* ── FLAGS TABLE ── */
+    .flags-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+      font-size: 0.82rem;
+    }
+
+    .flags-table th {
+      text-align: left;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .flags-table td {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid rgba(34,34,34,0.6);
+      color: var(--text-dim);
+      vertical-align: top;
+    }
+
+    .flags-table tr:last-child td { border-bottom: none; }
+
+    .flags-table tr:hover td { background: var(--bg2); }
+
+    .flags-table .flag-name {
+      font-family: var(--mono);
+      color: var(--orange);
+      white-space: nowrap;
+    }
+    .flags-table .alias {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--subtle);
+    }
+    .flags-table .default {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: gap;
+      gap: 1rem;
+    }
+
+    .footer-logo {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.03em;
+    }
+    .footer-logo span { color: var(--orange); }
+
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+    .footer-links a {
+      color: var(--subtle);
+      text-decoration: none;
+      font-size: 0.82rem;
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    .footer-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    /* ── TERMINAL ANIMATION ── */
+    .terminal-demo {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      margin-top: 2rem;
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.7rem 1rem;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .terminal-body {
+      padding: 1.25rem 1.5rem;
+      line-height: 2;
+      color: var(--text-dim);
+    }
+
+    .t-prompt { color: var(--orange); }
+    .t-cmd { color: var(--text); }
+    .t-flag { color: var(--blue); }
+    .t-output { color: var(--subtle); }
+    .t-value { color: var(--green); }
+    .t-header { color: var(--orange); font-weight: 700; }
+    .t-sep { color: var(--muted); }
+
+    /* ── DIVIDER ── */
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      nav { padding: 0 1rem; }
+      .nav-links { display: none; }
+      .hero { padding: 4rem 1rem 0; }
+      section { padding: 4rem 1rem; }
+      .hero-screenshot { max-width: 100%; }
+    }
+
+    /* ── GLOW ACCENT LINE ── */
+    .accent-line {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, var(--orange) 50%, transparent 100%);
+      opacity: 0.3;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="nav-logo"><span>$</span>tokenleak<span style="color:var(--orange)">_</span></a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#providers">Providers</a></li>
+      <li><a href="#formats">Formats</a></li>
+      <li><a href="#flags">Flags</a></li>
+      <li><a href="https://github.com/ya-nsh/tokenleak" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="#install" class="nav-cta">Install</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-badge">v1.0 · open source · local-first</div>
+
+    <h1>
+      <span class="dollar">$</span>tokenleak<span class="cursor">_</span>
+    </h1>
+
+    <p class="hero-sub">
+      See where your AI tokens actually go. Reads local usage logs from
+      <strong style="color:var(--orange)">Claude Code</strong>,
+      <strong style="color:var(--green)">Codex</strong>, and
+      <strong style="color:var(--purple)">Open Code</strong> —
+      renders heatmaps, dashboards, and shareable cards from your terminal.
+    </p>
+
+    <div class="hero-actions">
+      <div class="install-cmd" onclick="copyInstall(this)" title="Copy to clipboard">
+        <span class="prompt">$</span>
+        <span class="cmd-text">bun install -g tokenleak</span>
+        <button class="copy-btn" aria-label="Copy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <a href="https://github.com/ya-nsh/tokenleak" target="_blank" rel="noopener" class="btn-secondary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="hero-screenshot">
+      <div class="screenshot-window">
+        <div class="window-bar">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+          <span class="window-title">tokenleak — zsh</span>
+        </div>
+        <img src="./preview_single.png" alt="Tokenleak terminal dashboard showing Claude Code usage heatmap" loading="eager" />
+      </div>
+    </div>
+  </header>
+
+  <div class="social-proof">
+    <p class="sp-label">Supports all major AI coding tools</p>
+    <div class="provider-chips">
+      <div class="provider-chip">
+        <div class="chip-dot" style="background:#f97316"></div>
+        Claude Code
+      </div>
+      <div class="provider-chip">
+        <div class="chip-dot" style="background:#22c55e"></div>
+        Codex
+      </div>
+      <div class="provider-chip">
+        <div class="chip-dot" style="background:#a78bfa"></div>
+        Open Code
+      </div>
+    </div>
+  </div>
+
+  <div class="accent-line"></div>
+
+  <!-- DASHBOARD SHOWCASE -->
+  <div class="dashboard-section">
+    <div style="max-width:1100px;margin:0 auto;padding-top:5rem;">
+      <div class="section-label">// dashboard</div>
+      <h2 class="section-title">One command. Full picture.</h2>
+      <p class="section-sub">Run <code style="font-family:var(--mono);color:var(--orange);font-size:0.9rem">tokenleak</code> and get a full breakdown of your AI usage — heatmaps, streaks, costs, models, cache economics, and more.</p>
+    </div>
+
+    <div style="margin-top:2.5rem;">
+      <div class="dashboard-tabs">
+        <button class="tab active" onclick="switchTab(event, 'tab-multi')">Multi-provider · dark</button>
+        <button class="tab" onclick="switchTab(event, 'tab-single')">Single provider · dark</button>
+        <button class="tab" onclick="switchTab(event, 'tab-light')">Light theme</button>
+      </div>
+
+      <div class="tab-panels">
+        <div class="tab-panel active" id="tab-multi">
+          <div class="tab-screenshot">
+            <div class="tab-screenshot-bar">
+              <div class="dot dot-red"></div>
+              <div class="dot dot-yellow"></div>
+              <div class="dot dot-green"></div>
+            </div>
+            <img src="./preview_dark.png" alt="Multi-provider dark theme dashboard" loading="lazy" style="max-width:440px;width:100%;display:block;margin:0 auto;" />
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-single">
+          <div class="tab-screenshot">
+            <div class="tab-screenshot-bar">
+              <div class="dot dot-red"></div>
+              <div class="dot dot-yellow"></div>
+              <div class="dot dot-green"></div>
+            </div>
+            <img src="./preview_single.png" alt="Single provider dark theme dashboard" loading="lazy" style="max-width:440px;width:100%;display:block;margin:0 auto;" />
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-light">
+          <div class="tab-screenshot">
+            <div class="tab-screenshot-bar">
+              <div class="dot dot-red"></div>
+              <div class="dot dot-yellow"></div>
+              <div class="dot dot-green"></div>
+            </div>
+            <img src="./preview_light.png" alt="Light theme dashboard" loading="lazy" style="max-width:440px;width:100%;display:block;margin:0 auto;" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="section-label">// features</div>
+    <h2 class="section-title">Everything you need to understand your usage</h2>
+    <p class="section-sub">Tokenleak computes deep stats from your local log files — no telemetry, no cloud, no API keys.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(249,115,22,0.12)">🔥</div>
+        <h3>GitHub-style Heatmap</h3>
+        <p>A full-year heatmap using Unicode block chars — see your coding streaks, peak days, and gaps at a glance.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(34,197,94,0.12)">📊</div>
+        <h3>Deep Stats Panel</h3>
+        <p>Current streak, longest streak, 30-day rolling window, total cost, cache hit rate, daily averages — all live from logs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(167,139,250,0.12)">⚡</div>
+        <h3>Compare Mode</h3>
+        <p>Split your range in half with <code style="font-family:var(--mono);color:var(--orange)">--compare auto</code> or pick two custom ranges to see exactly how usage changed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(56,189,248,0.12)">🧠</div>
+        <h3>Model Breakdown</h3>
+        <p>Top N models ranked by token consumption with visual bar charts. Spot when you drifted from Haiku to Opus.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(251,191,36,0.12)">💰</div>
+        <h3>Cost Tracking</h3>
+        <p>Estimated USD cost per day, per model, and rolling projections. Know your monthly burn rate before the invoice.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(249,115,22,0.12)">📦</div>
+        <h3>Cache Economics</h3>
+        <p>Cache reads, writes, read coverage %, and reuse ratio. Understand how well prompt caching is working for you.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(34,197,94,0.12)">📅</div>
+        <h3>Day-of-Week Analysis</h3>
+        <p>Which days of the week do you code most? See your Monday vs Friday AI usage patterns.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(167,139,250,0.12)">🕐</div>
+        <h3>Hour-of-Day Breakdown</h3>
+        <p>A bar chart of your peak coding hours across the day — are you a morning or late-night developer?</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(56,189,248,0.12)">🔗</div>
+        <h3>Sharing &amp; Export</h3>
+        <p><code style="font-family:var(--mono);color:var(--orange)">--clipboard</code>, <code style="font-family:var(--mono);color:var(--orange)">--open</code>, and <code style="font-family:var(--mono);color:var(--orange)">--upload gist</code> to share your stats anywhere.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPARE MODE -->
+  <section style="padding-top:0">
+    <div class="section-label">// compare</div>
+    <h2 class="section-title">Track how your usage changes over time</h2>
+    <p class="section-sub">Compare two time periods to see deltas across tokens, cost, streaks, active days, and cache hit rate.</p>
+
+    <div class="compare-layout">
+      <div>
+        <div class="terminal-demo">
+          <div class="terminal-bar">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+          </div>
+          <div class="terminal-body">
+            <div><span class="t-prompt">$</span> <span class="t-cmd">tokenleak</span> <span class="t-flag">--compare</span> <span class="t-cmd">auto</span> <span class="t-flag">--format</span> <span class="t-cmd">json</span></div>
+            <div style="margin-top:0.5rem;color:var(--muted)"># auto splits your --days range in half</div>
+            <div style="margin-top:0.5rem;color:var(--muted)"># compares current period vs. prior period</div>
+            <br/>
+            <div><span class="t-cmd">tokenleak</span> <span class="t-flag">--compare</span> <span class="t-cmd">2025-01-01..2025-03-31</span></div>
+            <div style="color:var(--muted)"># compare against a specific date range</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="compare-card">
+          <div class="compare-header">// deltas</div>
+          <div class="compare-row">
+            <span class="label">totalTokens</span>
+            <span class="delta-pos">+127M</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">totalCost</span>
+            <span class="delta-pos">+$284</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">currentStreak</span>
+            <span class="delta-pos">+3 days</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">activeDays</span>
+            <span class="delta-pos">+8 days</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">avgDailyTokens</span>
+            <span class="delta-pos">+4.2M</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">cacheHitRate</span>
+            <span class="delta-neg">-1.2%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROVIDERS -->
+  <div class="divider"></div>
+  <section id="providers">
+    <div class="section-label">// providers</div>
+    <h2 class="section-title">All your AI coding tools in one place</h2>
+    <p class="section-sub">Tokenleak auto-detects which tools you have installed. All data is read locally — nothing is sent anywhere.</p>
+
+    <div class="providers-grid">
+      <div class="provider-card">
+        <div class="provider-logo" style="background:rgba(249,115,22,0.12)">🟠</div>
+        <h3 style="color:var(--orange)">Claude Code</h3>
+        <span class="path">~/.claude/projects/*/*.jsonl</span>
+        <p>Reads JSONL conversation logs. Parses every assistant message with a <code style="font-family:var(--mono);color:var(--orange)">usage</code> field for input, output, and cache token counts.</p>
+      </div>
+      <div class="provider-card">
+        <div class="provider-logo" style="background:rgba(34,197,94,0.12)">🟢</div>
+        <h3 style="color:var(--green)">Codex</h3>
+        <span class="path">~/.codex/sessions/YYYY/MM/DD/</span>
+        <p>Reads JSONL session logs. Parses <code style="font-family:var(--mono);color:var(--orange)">response</code> events for token usage with cumulative delta extraction.</p>
+      </div>
+      <div class="provider-card">
+        <div class="provider-logo" style="background:rgba(167,139,250,0.12)">🟣</div>
+        <h3 style="color:var(--purple)">Open Code</h3>
+        <span class="path">~/.local/share/opencode/storage/</span>
+        <p>Reads from the SQLite database or legacy JSON session files, with automatic fallback between storage formats.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- OUTPUT FORMATS -->
+  <section id="formats" style="padding-top:0">
+    <div class="section-label">// output formats</div>
+    <h2 class="section-title">Terminal. SVG. PNG. JSON.</h2>
+    <p class="section-sub">Four output formats for every use case — from live terminal dashboards to shareable year-in-review cards.</p>
+
+    <div class="formats-grid">
+      <div class="format-card">
+        <span class="format-tag" style="background:rgba(249,115,22,0.1);color:var(--orange)">--format terminal</span>
+        <h3>Terminal Dashboard</h3>
+        <p>Full ANSI dashboard in your terminal. Adapts to width — falls back to a compact one-liner on narrow terminals.</p>
+        <ul>
+          <li>GitHub-style heatmap with Unicode block chars (░▒▓█)</li>
+          <li>Stats panel, day-of-week chart, hour-of-day bars</li>
+          <li>Top models ranked by usage</li>
+          <li><code style="font-family:var(--mono);color:var(--orange)">--no-color</code> mode for piping</li>
+        </ul>
+      </div>
+      <div class="format-card">
+        <span class="format-tag" style="background:rgba(56,189,248,0.1);color:var(--blue)">--format svg</span>
+        <h3>SVG Heatmap</h3>
+        <p>Self-contained SVG with heatmap grid, stats panel, insights, day-of-week chart, and model breakdown. Dark + light themes.</p>
+        <ul>
+          <li>Quantile-based colour intensity</li>
+          <li>Month and day-of-week labels</li>
+          <li>Embeds in READMEs and docs</li>
+          <li>Badge variant for streak counts</li>
+        </ul>
+      </div>
+      <div class="format-card">
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);color:var(--green)">--format png</span>
+        <h3>PNG Image</h3>
+        <p>Same layout as SVG rendered to a sharp PNG via the <code style="font-family:var(--mono);color:var(--orange)">sharp</code> library. 1200×630 Wrapped card for year-in-review sharing.</p>
+        <ul>
+          <li>Perfect for social media sharing</li>
+          <li>Shareable year-in-review card</li>
+          <li><code style="font-family:var(--mono);color:var(--orange)">--upload gist</code> to GitHub Gist</li>
+        </ul>
+      </div>
+      <div class="format-card">
+        <span class="format-tag" style="background:rgba(167,139,250,0.1);color:var(--purple)">--format json</span>
+        <h3>Structured JSON</h3>
+        <p>Schema-versioned JSON with daily usage, model breakdowns, and all aggregated stats. Pipe into your own tools.</p>
+        <ul>
+          <li>Daily usage per provider</li>
+          <li>Model-level token + cost breakdown</li>
+          <li>All aggregated stats (streaks, rolling, peaks)</li>
+          <li>Compare mode outputs deltas</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS STRIP -->
+  <div style="max-width:1100px;margin:0 auto;padding:0 2rem 5rem;">
+    <div class="stats-strip">
+      <div class="stat-item">
+        <div class="stat-number">257</div>
+        <div class="stat-label">tests passing</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">3</div>
+        <div class="stat-label">AI providers</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">26+</div>
+        <div class="stat-label">models priced</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">4</div>
+        <div class="stat-label">output formats</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INSTALL -->
+  <div class="install-section" id="install">
+    <section>
+      <div>
+        <div class="section-label">// install</div>
+        <h2 class="section-title">Get started in seconds</h2>
+        <p class="section-sub" style="margin-bottom:2rem">Requires <a href="https://bun.sh" target="_blank" rel="noopener" style="color:var(--orange);text-decoration:none">Bun</a> v1.0+. One global install, then just run <code style="font-family:var(--mono);color:var(--orange)">tokenleak</code>.</p>
+
+        <ol class="install-steps">
+          <li>
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h4>Install Bun (if needed)</h4>
+              <p><code>curl -fsSL https://bun.sh/install | bash</code></p>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h4>Install Tokenleak globally</h4>
+              <p><code>bun install -g tokenleak</code></p>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h4>Run in your terminal</h4>
+              <p>Just <code>tokenleak</code>. It auto-detects providers and opens the interactive launcher.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div>
+        <div class="code-window">
+          <div class="code-bar">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+            <span class="code-bar-title">quick examples</span>
+          </div>
+          <pre><span class="comment"># Interactive launcher (TTY)</span>
+<span class="cmd">tokenleak</span>
+
+<span class="comment"># Terminal dashboard, last 30 days</span>
+<span class="cmd">tokenleak</span> <span class="flag">--days</span> <span class="val">30</span>
+
+<span class="comment"># Export SVG heatmap</span>
+<span class="cmd">tokenleak</span> <span class="flag">-o</span> <span class="val">usage.svg</span>
+
+<span class="comment"># Only Claude Code, light theme</span>
+<span class="cmd">tokenleak</span> <span class="flag">--provider</span> <span class="val">claude-code</span> <span class="flag">--theme</span> <span class="val">light</span>
+
+<span class="comment"># Compare last 60 days vs. prior 60</span>
+<span class="cmd">tokenleak</span> <span class="flag">--compare</span> <span class="val">auto</span> <span class="flag">--days</span> <span class="val">120</span>
+
+<span class="comment"># Copy JSON to clipboard</span>
+<span class="cmd">tokenleak</span> <span class="flag">--format</span> <span class="val">json</span> <span class="flag">--clipboard</span>
+
+<span class="comment"># Upload PNG to GitHub Gist</span>
+<span class="cmd">tokenleak</span> <span class="flag">-o</span> <span class="val">card.png</span> <span class="flag">--upload</span> <span class="val">gist</span></pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- FLAGS TABLE -->
+  <section id="flags">
+    <div class="section-label">// flags</div>
+    <h2 class="section-title">All flags</h2>
+    <p class="section-sub">Every flag is also available via environment variable (<code style="font-family:var(--mono);color:var(--orange)">TOKENLEAK_FORMAT</code>, etc.) or <code style="font-family:var(--mono);color:var(--orange)">~/.tokenleakrc</code>. CLI flags always win.</p>
+
+    <table class="flags-table">
+      <thead>
+        <tr>
+          <th>Flag</th>
+          <th>Alias</th>
+          <th>Default</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="flag-name">--format</td><td class="alias">-f</td><td class="default">terminal</td><td>Output format: <code style="font-family:var(--mono);color:var(--text-dim)">json</code>, <code style="font-family:var(--mono);color:var(--text-dim)">svg</code>, <code style="font-family:var(--mono);color:var(--text-dim)">png</code>, <code style="font-family:var(--mono);color:var(--text-dim)">terminal</code></td></tr>
+        <tr><td class="flag-name">--theme</td><td class="alias">-t</td><td class="default">dark</td><td>Colour theme: <code style="font-family:var(--mono);color:var(--text-dim)">dark</code>, <code style="font-family:var(--mono);color:var(--text-dim)">light</code></td></tr>
+        <tr><td class="flag-name">--days</td><td class="alias">-d</td><td class="default">90</td><td>Number of days to look back</td></tr>
+        <tr><td class="flag-name">--since</td><td class="alias">-s</td><td class="default">—</td><td>Start date (YYYY-MM-DD). Overrides <code style="font-family:var(--mono);color:var(--text-dim)">--days</code></td></tr>
+        <tr><td class="flag-name">--until</td><td class="alias">-u</td><td class="default">today</td><td>End date (YYYY-MM-DD)</td></tr>
+        <tr><td class="flag-name">--output</td><td class="alias">-o</td><td class="default">stdout</td><td>Output file path. Format is inferred from extension</td></tr>
+        <tr><td class="flag-name">--provider</td><td class="alias">-p</td><td class="default">all</td><td>Filter to specific provider(s), comma-separated</td></tr>
+        <tr><td class="flag-name">--compare</td><td class="alias">—</td><td class="default">—</td><td>Compare two ranges: <code style="font-family:var(--mono);color:var(--text-dim)">auto</code> or <code style="font-family:var(--mono);color:var(--text-dim)">YYYY-MM-DD..YYYY-MM-DD</code></td></tr>
+        <tr><td class="flag-name">--width</td><td class="alias">-w</td><td class="default">80</td><td>Terminal width for dashboard layout</td></tr>
+        <tr><td class="flag-name">--no-color</td><td class="alias">—</td><td class="default">false</td><td>Strip ANSI escape codes from terminal output</td></tr>
+        <tr><td class="flag-name">--no-insights</td><td class="alias">—</td><td class="default">false</td><td>Hide the insights panel</td></tr>
+        <tr><td class="flag-name">--clipboard</td><td class="alias">—</td><td class="default">false</td><td>Copy output to clipboard after rendering</td></tr>
+        <tr><td class="flag-name">--open</td><td class="alias">—</td><td class="default">false</td><td>Open output file in default app (requires <code style="font-family:var(--mono);color:var(--text-dim)">--output</code>)</td></tr>
+        <tr><td class="flag-name">--upload</td><td class="alias">—</td><td class="default">—</td><td>Upload to a service. Supported: <code style="font-family:var(--mono);color:var(--text-dim)">gist</code></td></tr>
+        <tr><td class="flag-name">--version</td><td class="alias">—</td><td class="default">—</td><td>Print version number</td></tr>
+        <tr><td class="flag-name">--help</td><td class="alias">—</td><td class="default">—</td><td>Print usage information</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <span class="footer-logo"><span>$</span>tokenleak<span style="color:var(--orange)">_</span></span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/ya-nsh/tokenleak" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://github.com/ya-nsh/tokenleak/issues" target="_blank" rel="noopener">Issues</a></li>
+      <li><a href="https://github.com/ya-nsh/tokenleak/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
+      <li><a href="https://www.npmjs.com/package/tokenleak" target="_blank" rel="noopener">npm</a></li>
+    </ul>
+    <span class="footer-note">MIT license · local-first · no telemetry</span>
+  </footer>
+
+  <script>
+    // Tab switching
+    function switchTab(event, panelId) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById(panelId).classList.add('active');
+    }
+
+    // Copy install command
+    function copyInstall(el) {
+      const text = 'bun install -g tokenleak';
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = el.querySelector('.copy-btn');
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
