@@ -351,8 +351,8 @@ export async function startTabbedDashboard(
           return;
         }
 
-        // Number keys 1-7 to jump to specific tab
-        const digit = key.sequence?.match(/^[1-7]$/)?.[0];
+        // Number keys 1-9 to jump to specific tab
+        const digit = key.sequence?.match(/^[1-9]$/)?.[0];
         if (digit) {
           const tabIdx = Number(digit) - 1;
           if (tabIdx < METRIC_TABS.length) {

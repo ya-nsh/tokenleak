@@ -261,4 +261,92 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('Compare');
     expect(result).toContain('Model Mix Shift');
   });
+
+  it('keeps compare data visible in compact mode', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = {
+      ...(output.more ?? {
+        inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
+        monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
+        cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
+        hourOfDay: [],
+        sessionMetrics: {
+          totalSessions: 0,
+          averageTokens: 0,
+          averageCost: 0,
+          averageMessages: 0,
+          averageDurationMs: null,
+          longestSession: null,
+          projectCount: 0,
+          topProject: null,
+          projectBreakdown: [],
+        },
+        compare: null,
+      }),
+      compare: {
+        previousRange: { since: '2026-02-15', until: '2026-02-28' },
+        previousStats: createZeroedStats(),
+        deltas: {
+          tokens: 15000,
+          cost: 1.25,
+          streak: 2,
+          activeDays: 4,
+          averageDailyTokens: 600,
+          cacheHitRate: 0.12,
+        },
+        modelMixShift: [],
+      },
+    };
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 50, noColor: true }));
+
+    expect(result).toContain('Compare');
+    expect(result).toContain('Total Tokens');
+  });
+
+  it('keeps compare data visible in oneliner mode', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = {
+      ...(output.more ?? {
+        inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
+        monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
+        cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
+        hourOfDay: [],
+        sessionMetrics: {
+          totalSessions: 0,
+          averageTokens: 0,
+          averageCost: 0,
+          averageMessages: 0,
+          averageDurationMs: null,
+          longestSession: null,
+          projectCount: 0,
+          topProject: null,
+          projectBreakdown: [],
+        },
+        compare: null,
+      }),
+      compare: {
+        previousRange: { since: '2026-02-15', until: '2026-02-28' },
+        previousStats: createZeroedStats(),
+        deltas: {
+          tokens: 15000,
+          cost: 1.25,
+          streak: 2,
+          activeDays: 4,
+          averageDailyTokens: 600,
+          cacheHitRate: 0.12,
+        },
+        modelMixShift: [],
+      },
+    };
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 28, noColor: true }));
+
+    expect(result).toContain('Compare');
+    expect(result).toContain('streak');
+  });
 });
