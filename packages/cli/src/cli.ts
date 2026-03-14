@@ -163,6 +163,39 @@ function normalizeCliArg(arg: string): string {
   return flagMap[arg] ?? arg;
 }
 
+export function normalizeCliArgv(argv: string[]): string[] {
+  const normalized = argv.map(normalizeCliArg);
+  const result: string[] = [];
+
+  for (let i = 0; i < normalized.length; i++) {
+    const arg = normalized[i]!;
+
+    if (arg === '--provider' || arg === '-p') {
+      result.push(arg);
+
+      const providerParts: string[] = [];
+      let j = i + 1;
+      while (j < normalized.length) {
+        const next = normalized[j]!;
+        if (next.startsWith('-')) break;
+        providerParts.push(next);
+        j++;
+      }
+
+      if (providerParts.length > 0) {
+        result.push(providerParts.join(' '));
+        i = j - 1;
+      }
+
+      continue;
+    }
+
+    result.push(arg);
+  }
+
+  return result;
+}
+
 function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
@@ -882,7 +915,7 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
-  const normalizedArgv = process.argv.slice(2).map(normalizeCliArg);
+  const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   const argv = normalizedArgv;
   if (argv.includes('--help') || argv.includes('-h')) {

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { resolveConfig, computeDateRange, inferFormatFromPath, run } from './cli';
+import { resolveConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
@@ -28,6 +28,18 @@ describe('inferFormatFromPath', () => {
 
   test('returns null for no extension', () => {
     expect(inferFormatFromPath('output')).toBeNull();
+  });
+});
+
+describe('normalizeCliArgv', () => {
+  test('keeps comma-separated provider list as a single argument when spaced', () => {
+    const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--format', 'json']);
+    expect(argv).toEqual(['--provider', 'claude, codex', '--format', 'json']);
+  });
+
+  test('normalizes kebab-case flags while preserving provider values', () => {
+    const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--live-server']);
+    expect(argv).toEqual(['--provider', 'claude, codex', '--liveServer']);
   });
 });
 
@@ -307,7 +319,7 @@ describe('CLI invocation', () => {
     const exitCode = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('1.0.1');
+    expect(stdout).toContain('1.0.2');
     expect(stdout).toContain('schema');
   });
 
@@ -347,5 +359,18 @@ describe('CLI invocation', () => {
 
     expect(exitCode).toBe(1);
     expect(stderr).toContain('--all-providers');
+  });
+
+  test('--provider tolerates spaces after commas', async () => {
+    const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('"provider": "claude-code"');
+    expect(stdout).toContain('"provider": "codex"');
   });
 });
