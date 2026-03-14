@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, and **Open Code**, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
+See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, **Pi**, and **Open Code**, then renders heatmaps, dashboards, and shareable cards — all from your terminal.
 
 ![Tokenleak preview card](./docs/preview.png)
 
@@ -80,8 +80,11 @@ tokenleak --provider claude-code
 # Only Codex
 tokenleak --provider codex
 
+# Only Pi
+tokenleak --provider pi
+
 # Multiple providers (comma-separated)
-tokenleak --provider claude-code,codex
+tokenleak --provider claude-code,codex,pi
 ```
 
 ### Compare mode
@@ -192,6 +195,16 @@ Reads usage data from the Open Code SQLite database. Falls back to legacy JSON s
 | **Data location** | `~/.local/share/opencode/storage/message/<session>/*.json` (primary), `~/.opencode/opencode.db` or `~/.opencode/sessions.db` (legacy), `~/.opencode/sessions/*.json` (legacy fallback) |
 | **Provider name** | `open-code`                                                                                                                                                                            |
 
+### Pi
+
+Reads local `pi-mono` session JSONL files. Assistant messages with `usage` metadata are aggregated from the on-disk session history.
+
+|                   |                                                  |
+| ----------------- | ------------------------------------------------ |
+| **Data location** | `~/.pi/agent/sessions/**/*.jsonl`                |
+| **Override**      | Set `PI_CODING_AGENT_DIR` environment variable   |
+| **Provider name** | `pi`                                             |
+
 ## Output formats
 
 ### `terminal` (default)
@@ -296,6 +309,7 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
 | `CLAUDE_CONFIG_DIR`                | `~/.claude`        | Claude Code configuration directory                     |
 | `CODEX_HOME`                       | `~/.codex`         | Codex home directory                                    |
+| `PI_CODING_AGENT_DIR`              | `~/.pi/agent`      | Pi coding agent directory (sessions under `sessions/`)  |
 
 ## What Tokenleak tracks
 
