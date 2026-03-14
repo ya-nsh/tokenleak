@@ -37,6 +37,8 @@ import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
+import { startTabbedDashboard } from './tabbed-dashboard.js';
+import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
@@ -1025,10 +1027,18 @@ if (isDirectExecution) {
   }
 
   if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+    const registry = new ProviderRegistry();
+    registerBuiltInProviders(registry);
+    const available = await registry.getAvailable();
+
+    const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
+      await startTabbedDashboard(available, opts);
+    };
+
     await startInteractiveCli({
       version: VERSION,
       helpText: buildHelpText(),
-    }, executeInteractiveCommand);
+    }, executeInteractiveCommand, launchTabbed);
   } else {
     await runMain(main);
   }

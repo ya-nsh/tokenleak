@@ -1,6 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { buildCliPreview } from './flags.js';
+import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export const INTERACTIVE_FLAG_LINES = [
   '-f, --format <format>   terminal | png | svg | json',
@@ -48,6 +49,7 @@ export type InteractiveExecutionResult = {
 
 type InteractiveCommand =
   | { type: 'run'; request: InteractiveRunRequest }
+  | { type: 'tabbed-dashboard'; options: TabbedDashboardOptions }
   | { type: 'show-help' }
   | { type: 'exit' };
 
@@ -817,19 +819,12 @@ async function promptCompareSetting(): Promise<string | null> {
 }
 
 async function buildDashboardPreset(): Promise<InteractiveCommand> {
-  const rangeArgs = await promptDateWindow();
-  const providers = await promptProviderSelection();
-  const width = await promptWidth();
-  const noInsights = await askYesNo('Hide insights panel', false);
   const noColor = await askYesNo('Disable ANSI colors', false);
 
-  const args: CliArgs = { ...rangeArgs };
-  applySelectedProviders(args, providers);
-  if (width) args['width'] = width;
-  if (noInsights) args['noInsights'] = true;
-  if (noColor) args['noColor'] = true;
-
-  return createRunCommand(args);
+  return {
+    type: 'tabbed-dashboard',
+    options: { noColor },
+  };
 }
 
 async function buildJsonPreset(): Promise<InteractiveCommand> {
@@ -1283,6 +1278,7 @@ export function shouldStartInteractiveCli(
 export async function startInteractiveCli(
   context: InteractiveContext,
   execute: (request: InteractiveRunRequest) => Promise<InteractiveExecutionResult>,
+  launchTabbedDashboard?: (options: TabbedDashboardOptions) => Promise<void>,
 ): Promise<void> {
   const options = createMenuOptions();
   const state: InteractiveState = { selectedIndex: 0 };
@@ -1310,6 +1306,20 @@ export async function startInteractiveCli(
         return;
       }
       if (command.type === 'show-help') {
+        continue;
+      }
+
+      if (command.type === 'tabbed-dashboard') {
+        if (launchTabbedDashboard) {
+          leaveAltScreen();
+          try {
+            ignoreSigint = true;
+            await launchTabbedDashboard(command.options);
+          } finally {
+            ignoreSigint = false;
+            enterAltScreen();
+          }
+        }
         continue;
       }
 
