@@ -324,6 +324,10 @@ function renderMetricCard(
   parts.push(
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   );
+  // Left accent stripe
+  parts.push(
+    `<rect x="${x + 2}" y="${y + 2}" width="3" height="${height - 4}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.55"/>`,
+  );
   // Card title
   parts.push(
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">${escapeXml(title)}</text>`,
