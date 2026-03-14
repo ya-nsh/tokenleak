@@ -1,37 +1,79 @@
 import type { DailyUsage } from '@tokenleak/core';
 import { buildHeatmapModel } from '../shared/heatmap-model';
 import { colorize, intensityColor, HEATMAP_BLOCKS } from './ansi';
+import { visibleLength } from './layout';
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const DAY_LABEL_WIDTH = 4;
-const WEEK_COLUMN_WIDTH = 2;
-const LEGEND_TEXT = 'Less';
-const LEGEND_TEXT_MORE = 'More';
+const DAY_LABEL_WIDTH = 5;
+const LABELED_DAYS: Record<number, string> = { 1: 'Mon', 3: 'Wed', 5: 'Fri' };
+const FULL_MODE_THRESHOLD = 40;
+
+type DisplayMode = 'full' | 'compact';
 
 interface HeatmapOptions {
   width: number;
   noColor: boolean;
 }
 
+function getDisplayMode(width: number): DisplayMode {
+  return width >= FULL_MODE_THRESHOLD ? 'full' : 'compact';
+}
+
+function getCellWidth(mode: DisplayMode): number {
+  return mode === 'full' ? 2 : 1;
+}
+
+function getGap(mode: DisplayMode): string {
+  return mode === 'full' ? ' ' : '';
+}
+
+function getWeekColumnWidth(mode: DisplayMode): number {
+  return getCellWidth(mode) + getGap(mode).length;
+}
+
+function renderCell(
+  level: number,
+  mode: DisplayMode,
+  noColor: boolean,
+): string {
+  const blocks = [
+    HEATMAP_BLOCKS.EMPTY,
+    HEATMAP_BLOCKS.LIGHT,
+    HEATMAP_BLOCKS.MEDIUM,
+    HEATMAP_BLOCKS.DARK,
+    HEATMAP_BLOCKS.FULL,
+  ];
+  const block = blocks[level] ?? HEATMAP_BLOCKS.EMPTY;
+  const cellWidth = getCellWidth(mode);
+  return cellWidth === 2 ? block + block : block;
+}
+
 function buildMonthHeader(
   model: NonNullable<ReturnType<typeof buildHeatmapModel>>,
   visibleStartWeek: number,
   displayWeekCount: number,
+  mode: DisplayMode,
 ): { caption: string | null; line: string | null } {
-  const header = Array.from({ length: displayWeekCount * WEEK_COLUMN_WIDTH }, () => ' ');
+  const weekColWidth = getWeekColumnWidth(mode);
+  const totalCols = displayWeekCount * weekColWidth;
+  const header = Array.from({ length: totalCols }, () => ' ');
   let nextFreeIndex = 0;
   let placedLabels = 0;
-  const visibleMarkers = model.monthMarkers.filter((marker) => marker.weekIndex >= visibleStartWeek);
+  const visibleMarkers = model.monthMarkers.filter(
+    (marker) => marker.weekIndex >= visibleStartWeek,
+  );
 
   for (const marker of visibleMarkers) {
-    const startIndex = Math.max((marker.weekIndex - visibleStartWeek) * WEEK_COLUMN_WIDTH, nextFreeIndex);
+    const startIndex = Math.max(
+      (marker.weekIndex - visibleStartWeek) * weekColWidth,
+      nextFreeIndex,
+    );
     const remaining = header.length - startIndex;
-    if (remaining < 3) {
-      continue;
-    }
+    if (remaining < 3) continue;
 
     for (let offset = 0; offset < marker.label.length; offset += 1) {
-      header[startIndex + offset] = marker.label[offset] ?? ' ';
+      if (startIndex + offset < header.length) {
+        header[startIndex + offset] = marker.label[offset] ?? ' ';
+      }
     }
     nextFreeIndex = startIndex + marker.label.length + 1;
     placedLabels += 1;
@@ -40,14 +82,33 @@ function buildMonthHeader(
   const line = header.some((cell) => cell !== ' ')
     ? `${' '.repeat(DAY_LABEL_WIDTH)}${header.join('')}`
     : null;
+
   const uniqueVisibleMonths = visibleMarkers
     .map((marker) => `${marker.label} ${String(marker.year)}`)
     .filter((value, index, values) => values.indexOf(value) === index);
-  const caption = placedLabels === 0 && uniqueVisibleMonths.length === 1
-    ? `  ${uniqueVisibleMonths[0]}`
-    : null;
+
+  const caption =
+    placedLabels === 0 && uniqueVisibleMonths.length === 1
+      ? `${' '.repeat(DAY_LABEL_WIDTH)}${uniqueVisibleMonths[0]}`
+      : null;
 
   return { caption, line };
+}
+
+function buildLegendLine(mode: DisplayMode, noColor: boolean): string {
+  const blocks = [
+    HEATMAP_BLOCKS.EMPTY,
+    HEATMAP_BLOCKS.LIGHT,
+    HEATMAP_BLOCKS.MEDIUM,
+    HEATMAP_BLOCKS.DARK,
+    HEATMAP_BLOCKS.FULL,
+  ];
+  const cellWidth = getCellWidth(mode);
+  const gap = getGap(mode);
+  const renderedBlocks = blocks.map((block) =>
+    cellWidth === 2 ? block + block : block,
+  );
+  return `${' '.repeat(DAY_LABEL_WIDTH)}Less ${renderedBlocks.join(gap)} More`;
 }
 
 export function renderTerminalHeatmap(
@@ -59,47 +120,39 @@ export function renderTerminalHeatmap(
     return '  No usage data available in the selected range.';
   }
 
-  const availableColumns = Math.max(WEEK_COLUMN_WIDTH, options.width - DAY_LABEL_WIDTH);
-  const maxWeeks = Math.max(1, Math.floor(availableColumns / WEEK_COLUMN_WIDTH));
+  const mode = getDisplayMode(options.width);
+  const weekColWidth = getWeekColumnWidth(mode);
+  const availableColumns = Math.max(weekColWidth, options.width - DAY_LABEL_WIDTH);
+  const maxWeeks = Math.max(1, Math.floor(availableColumns / weekColWidth));
   const displayWeeks = model.weeks.slice(Math.max(0, model.weeks.length - maxWeeks));
   const visibleStartWeek = model.weeks.length - displayWeeks.length;
-  const { caption, line } = buildMonthHeader(model, visibleStartWeek, displayWeeks.length);
+
+  const { caption, line } = buildMonthHeader(model, visibleStartWeek, displayWeeks.length, mode);
   const lines: string[] = [];
 
-  if (caption) {
-    lines.push(caption);
-  }
-  if (line) {
-    lines.push(line);
-  }
+  if (caption) lines.push(caption);
+  if (line) lines.push(line);
+
+  const gap = getGap(mode);
 
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-    const label = DAY_LABELS[dayIndex] ?? '   ';
-    let row = `${label} `.slice(0, DAY_LABEL_WIDTH);
+    const label = LABELED_DAYS[dayIndex] ?? '';
+    const paddedLabel = (label + ' '.repeat(DAY_LABEL_WIDTH)).slice(0, DAY_LABEL_WIDTH);
+    const cells: string[] = [];
 
     for (const week of displayWeeks) {
       const cell = week.days[dayIndex] ?? { level: 0, tokens: 0 };
-      const block = [
-        HEATMAP_BLOCKS.EMPTY,
-        HEATMAP_BLOCKS.LIGHT,
-        HEATMAP_BLOCKS.MEDIUM,
-        HEATMAP_BLOCKS.DARK,
-        HEATMAP_BLOCKS.FULL,
-      ][cell.level] ?? HEATMAP_BLOCKS.EMPTY;
       const color = intensityColor(cell.tokens, model.maxTokens);
-      row += `${colorize(block, color, options.noColor)} `;
+      const rendered = renderCell(cell.level, mode, options.noColor);
+      cells.push(colorize(rendered, color, options.noColor));
     }
 
+    const row = paddedLabel + cells.join(gap);
     lines.push(row.trimEnd());
   }
 
-  lines.push(`${' '.repeat(DAY_LABEL_WIDTH)}${LEGEND_TEXT} ${[
-    HEATMAP_BLOCKS.EMPTY,
-    HEATMAP_BLOCKS.LIGHT,
-    HEATMAP_BLOCKS.MEDIUM,
-    HEATMAP_BLOCKS.DARK,
-    HEATMAP_BLOCKS.FULL,
-  ].join('')} ${LEGEND_TEXT_MORE}`);
+  lines.push('');
+  lines.push(buildLegendLine(mode, options.noColor));
 
   return lines.join('\n');
 }
