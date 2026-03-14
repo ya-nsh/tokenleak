@@ -332,7 +332,7 @@ function renderMetricCard(
   lines.forEach((line, index) => {
     const lineY = y + 48 + index * 22;
     parts.push(
-      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(line.label)}</text>`,
+      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.fg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(line.label)}</text>`,
     );
     parts.push(
       `<text x="${x + width - 18}" y="${lineY}" fill="${escapeXml(line.accent ? cardAccent : theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" text-anchor="end">${escapeXml(line.value)}</text>`,
@@ -465,9 +465,27 @@ function renderHourOfDayChart(
     );
   });
 
+  // Legend row for multi-provider
+  let finalHeight = chartHeight;
+  if (isMulti && providerBuckets.length > 0) {
+    const legendY = y + chartHeight - 8;
+    let legendX = barAreaX;
+    for (const bucket of providerBuckets) {
+      const displayName = providers.find((p) => p.provider === bucket.provider)?.displayName ?? bucket.provider;
+      bars.push(
+        `<rect x="${legendX}" y="${legendY}" width="8" height="8" rx="2" fill="${escapeXml(bucket.color)}" opacity="0.85"/>`,
+      );
+      bars.push(
+        `<text x="${legendX + 12}" y="${legendY + 7}" fill="${escapeXml(theme.fg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(displayName)}</text>`,
+      );
+      legendX += 12 + displayName.length * 5.5 + 16;
+    }
+    finalHeight += 16;
+  }
+
   return {
     svg: bars.join('\n'),
-    height: chartHeight,
+    height: finalHeight,
   };
 }
 
@@ -529,10 +547,8 @@ export function renderTerminalCardSvg(
 
   // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
-  // For multi-provider top model bars: pure black fill
-  const barAccent = providers.length > 1
-    ? (isDark ? '#000000' : '#d4d4d8')
-    : cardAccent;
+  // For multi-provider top model bars: pure black fill regardless of theme
+  const barAccent = providers.length > 1 ? '#000000' : cardAccent;
 
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
