@@ -108,10 +108,9 @@ export function buildHeatmapModel(
       lastMonth = month;
     }
 
-    // The inner loop advances the outer cursor across a full week.
+    const dayCursor = new Date(cursor);
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-      const date = new Date(cursor);
-      const dateString = formatDate(date);
+      const dateString = formatDate(dayCursor);
       const tokens = usageMap.get(dateString) ?? 0;
       weekDays.push({
         date: dateString,
@@ -120,13 +119,15 @@ export function buildHeatmapModel(
         dayIndex,
         weekIndex,
       });
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      dayCursor.setUTCDate(dayCursor.getUTCDate() + 1);
     }
 
     weeks.push({
       index: weekIndex,
       days: weekDays,
     });
+
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
 
   return {

@@ -10,6 +10,7 @@ import type {
   TokenleakOutput,
 } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
+import { TokenleakError } from './errors.js';
 
 /**
  * Load provider data for a date range, merge, aggregate, and build
@@ -33,9 +34,11 @@ export async function loadTokenleakData(
     (r): r is ProviderData => r !== null,
   );
 
-  const mergedDaily = providerDataList.length > 0
-    ? mergeProviderData(providerDataList)
-    : [];
+  if (providerDataList.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const mergedDaily = mergeProviderData(providerDataList);
   const stats = aggregate(mergedDaily, range.until);
 
   return {

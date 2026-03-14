@@ -4,7 +4,7 @@ import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
-import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines } from './interactive';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions } from './interactive';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -77,6 +77,60 @@ describe('interactive launcher', () => {
     expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json');
     expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
     expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
+  });
+
+  test('buildTabbedDashboardOptions preserves dashboard scope inputs', () => {
+    expect(buildTabbedDashboardOptions(
+      { days: 7, until: '2026-03-14' },
+      ['claude-code', 'codex'],
+      120,
+      true,
+      true,
+    )).toEqual({
+      initialTimeRange: '7d',
+      noColor: true,
+      noInsights: true,
+      providerNames: ['claude-code', 'codex'],
+      until: '2026-03-14',
+      width: 120,
+    });
+  });
+
+  test('buildTabbedDashboardOptions maps custom ranges onto the nearest dashboard tab', () => {
+    expect(buildTabbedDashboardOptions(
+      { since: '2026-01-01', until: '2026-03-14' },
+      [],
+      null,
+      false,
+      false,
+    )).toMatchObject({
+      initialTimeRange: '90d',
+      initialRange: {
+        since: '2026-01-01',
+        until: '2026-03-14',
+      },
+      noColor: false,
+      noInsights: false,
+      until: '2026-03-14',
+    });
+  });
+
+  test('buildTabbedDashboardOptions validates custom dates before storing them', () => {
+    expect(() => buildTabbedDashboardOptions(
+      { since: '2026-03-14', until: '2026-03-01' },
+      [],
+      null,
+      false,
+      false,
+    )).toThrow('must not be after');
+
+    expect(() => buildTabbedDashboardOptions(
+      { since: 'not-a-date' },
+      [],
+      null,
+      false,
+      false,
+    )).toThrow('Invalid --since date');
   });
 });
 
