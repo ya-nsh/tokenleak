@@ -32,6 +32,8 @@ import type { IRenderer } from '@tokenleak/renderers';
 import { loadConfig } from './config.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
+import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
+import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
@@ -97,6 +99,7 @@ function buildHelpText(): string {
   return [
     `tokenleak ${VERSION}`,
     'Visualize AI coding assistant token usage across providers.',
+    'Running `tokenleak` with no flags opens an interactive launcher in a TTY.',
     '',
     'Usage:',
     '  tokenleak [flags]',
@@ -150,6 +153,54 @@ function buildVersionText(): string {
   return `tokenleak ${VERSION}\nschema ${SCHEMA_VERSION}\n`;
 }
 
+const CLI_ARG_ORDER = [
+  'format',
+  'theme',
+  'since',
+  'until',
+  'days',
+  'output',
+  'width',
+  'provider',
+  'compare',
+  'upload',
+  'claude',
+  'codex',
+  'openCode',
+  'allProviders',
+  'listProviders',
+  'more',
+  'clipboard',
+  'open',
+  'liveServer',
+  'noColor',
+  'noInsights',
+] as const;
+
+const CLI_ARG_FLAGS: Record<string, string> = {
+  format: '--format',
+  theme: '--theme',
+  since: '--since',
+  until: '--until',
+  days: '--days',
+  output: '--output',
+  width: '--width',
+  provider: '--provider',
+  compare: '--compare',
+  upload: '--upload',
+  claude: '--claude',
+  codex: '--codex',
+  openCode: '--open-code',
+  allProviders: '--all-providers',
+  listProviders: '--list-providers',
+  more: '--more',
+  clipboard: '--clipboard',
+  open: '--open',
+  liveServer: '--live-server',
+  noColor: '--no-color',
+  noInsights: '--no-insights',
+};
+
 function normalizeCliArg(arg: string): string {
   const flagMap: Record<string, string> = {
     '--all-providers': '--allProviders',
@@ -161,6 +212,117 @@ function normalizeCliArg(arg: string): string {
   };
 
   return flagMap[arg] ?? arg;
+}
+
+function serializeCliArgs(cliArgs: Record<string, unknown>): string[] {
+  const tokens: string[] = [];
+
+  for (const key of CLI_ARG_ORDER) {
+    const value = cliArgs[key];
+    if (value === undefined || value === false || value === null) {
+      continue;
+    }
+
+    const flag = CLI_ARG_FLAGS[key];
+    if (!flag) continue;
+
+    tokens.push(flag);
+    if (value !== true) {
+      tokens.push(String(value));
+    }
+  }
+
+  return tokens;
+}
+
+function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: boolean, exitCode: number): string {
+  if (!ok) {
+    return `Command exited with code ${exitCode}.`;
+  }
+
+  if (typeof cliArgs['output'] === 'string') {
+    const outputPath = cliArgs['output'];
+    const format = String(cliArgs['format'] ?? inferFormatFromPath(outputPath) ?? 'output').toUpperCase();
+    return `${format} written to ${outputPath}.`;
+  }
+
+  if (cliArgs['listProviders']) {
+    return 'Provider registry loaded.';
+  }
+
+  if (cliArgs['liveServer']) {
+    return 'Live dashboard stopped.';
+  }
+
+  if (cliArgs['compare']) {
+    return 'Compare report generated.';
+  }
+
+  const format = String(cliArgs['format'] ?? 'terminal');
+  if (format === 'terminal') {
+    return 'Terminal dashboard generated.';
+  }
+
+  return `${format.toUpperCase()} command finished successfully.`;
+}
+
+async function executeInteractiveCommand(
+  request: InteractiveRunRequest,
+): Promise<InteractiveExecutionResult> {
+  try {
+    const cliPath = process.argv[1];
+    if (!cliPath) {
+      return {
+        ok: false,
+        summary: 'Could not resolve the current tokenleak entrypoint.',
+        stdout: '',
+        stderr: 'Error: process.argv[1] is missing.',
+      };
+    }
+
+    const command = [process.execPath, cliPath, ...serializeCliArgs(request.args)];
+
+    if (request.executionMode === 'inherit') {
+      const proc = Bun.spawn(command, {
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit',
+      });
+      const exitCode = await proc.exited;
+      return {
+        ok: exitCode === 0,
+        summary: buildInteractiveSummary(request.args, exitCode === 0, exitCode),
+        stdout: '',
+        stderr: '',
+      };
+    }
+
+    const proc = Bun.spawn(command, {
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    return {
+      ok: exitCode === 0,
+      summary: buildInteractiveSummary(request.args, exitCode === 0, exitCode),
+      stdout,
+      stderr,
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      summary: 'Interactive command failed before it could finish.',
+      stdout: '',
+      stderr: error instanceof Error ? `Error: ${error.message}` : `Error: ${String(error)}`,
+    };
+  }
 }
 
 export function normalizeCliArgv(argv: string[]): string[] {
@@ -918,13 +1080,26 @@ if (isDirectExecution) {
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   const argv = normalizedArgv;
-  if (argv.includes('--help') || argv.includes('-h')) {
-    process.stdout.write(buildHelpText());
-    process.exit(0);
-  }
-  if (argv.includes('--version') || argv.includes('-v')) {
-    process.stdout.write(buildVersionText());
-    process.exit(0);
-  }
-  runMain(main);
+
+  await (async () => {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      process.stdout.write(buildHelpText());
+      process.exit(0);
+    }
+
+    if (argv.includes('--version') || argv.includes('-v')) {
+      process.stdout.write(buildVersionText());
+      process.exit(0);
+    }
+
+    if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+      await startInteractiveCli({
+        version: VERSION,
+        helpText: buildHelpText(),
+      }, executeInteractiveCommand);
+      return;
+    }
+
+    await runMain(main);
+  })();
 }

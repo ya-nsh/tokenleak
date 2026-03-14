@@ -3,6 +3,7 @@ import { resolveConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv,
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli } from './interactive';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,6 +41,21 @@ describe('normalizeCliArgv', () => {
   test('normalizes kebab-case flags while preserving provider values', () => {
     const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--live-server']);
     expect(argv).toEqual(['--provider', 'claude, codex', '--liveServer']);
+  });
+});
+
+describe('interactive launcher', () => {
+  test('starts only for bare tokenleak in a TTY', () => {
+    expect(shouldStartInteractiveCli([], true, true)).toBe(true);
+    expect(shouldStartInteractiveCli(['--help'], true, true)).toBe(false);
+    expect(shouldStartInteractiveCli([], false, true)).toBe(false);
+    expect(shouldStartInteractiveCli([], true, false)).toBe(false);
+  });
+
+  test('flag panel includes key interactive flags', () => {
+    expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json');
+    expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
+    expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
   });
 });
 
@@ -308,6 +324,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--open-code');
     expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('--more');
+    expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
 

@@ -13,6 +13,7 @@ bun install -g tokenleak
 ```
 
 After installing, run `tokenleak` in your terminal. It will automatically detect which AI coding tools you have installed and display your usage.
+In an interactive TTY, plain `tokenleak` now opens a launcher where you can move with arrow keys or press number shortcuts.
 
 ### From source
 
@@ -30,8 +31,11 @@ bun dist/tokenleak.js
 ## Usage
 
 ```bash
-# Show a terminal dashboard of your token usage (default)
+# Open the interactive launcher (TTY only)
 tokenleak
+
+# Skip the launcher and render directly with flags
+tokenleak --format terminal
 
 # Output as JSON
 tokenleak --format json
@@ -135,6 +139,8 @@ tokenleak --format json --upload gist
 ```
 
 ## All flags
+
+When you run bare `tokenleak` in a real terminal, the launcher shows these flags in-app before you run anything.
 
 | Flag            | Alias | Default    | Description                                                     |
 | --------------- | ----- | ---------- | --------------------------------------------------------------- |
