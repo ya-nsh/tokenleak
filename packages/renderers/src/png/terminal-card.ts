@@ -53,7 +53,7 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
       border: 'rgba(255,255,255,0.06)',
       accent: '#10b981',
       heatmapEmpty: '#141418',
-      barTrack: '#18181b',
+      barTrack: '#0e0e11',
       titlebarBorder: 'rgba(255,255,255,0.06)',
     };
   }
@@ -324,10 +324,6 @@ function renderMetricCard(
   parts.push(
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   );
-  // Left accent stripe
-  parts.push(
-    `<rect x="${x}" y="${y + 8}" width="3" height="${height - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
-  );
   // Card title
   parts.push(
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">${escapeXml(title)}</text>`,
@@ -369,7 +365,6 @@ function renderHourOfDayChart(
 
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<rect x="${x}" y="${y + 8}" width="3" height="${chartHeight - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
@@ -417,7 +412,6 @@ function renderModelMixShift(
   const height = 38 + rows.length * 24;
   const parts: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<rect x="${x}" y="${y + 8}" width="3" height="${height - 16}" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.35"/>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       `${more.compare.previousRange.since} → ${more.compare.previousRange.until}`,
@@ -657,7 +651,7 @@ export function renderTerminalCardSvg(
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
     const barFill = providers.length === 1
       ? `url(#${escapeXml(gradId)})`
-      : (isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.18)');
+      : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.22)');
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
       `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
