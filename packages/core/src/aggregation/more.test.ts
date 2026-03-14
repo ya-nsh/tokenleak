@@ -321,6 +321,48 @@ describe('buildMoreStats', () => {
       },
     ] satisfies ProjectSummary[]);
   });
+
+  it('upgrades session labels when a later event adds a project id', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 150,
+          cost: 0.1,
+          sessionId: 'session-upgrade',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T11:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 175,
+          cost: 0.1,
+          sessionId: 'session-upgrade',
+          projectId: 'project-upgraded',
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.sessionMetrics.longestSession?.label).toBe('project-upgraded');
+    expect(more.sessionMetrics.topProject?.name).toBe('project-upgraded');
+  });
 });
 
 describe('computeModelMixShift', () => {

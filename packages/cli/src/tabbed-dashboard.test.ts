@@ -55,10 +55,10 @@ describe('startTabbedDashboard', () => {
       writes.push(String(chunk));
       return true;
     }) as typeof process.stdout.write;
-    process.stdout.on = ((event: string, _handler: (...args: unknown[]) => void) => {
+    process.stdout.on = ((_event: string, _handler: (...args: unknown[]) => void) => {
       return process.stdout;
     }) as typeof process.stdout.on;
-    process.stdout.off = ((event: string, _handler: (...args: unknown[]) => void) => {
+    process.stdout.off = ((_event: string, _handler: (...args: unknown[]) => void) => {
       return process.stdout;
     }) as typeof process.stdout.off;
     process.stdin.on = ((event: string, handler: (...args: unknown[]) => void) => {
@@ -142,5 +142,46 @@ describe('startTabbedDashboard', () => {
     const lastScreen = screens.at(-1) ?? '';
     expect(lastScreen).toContain('2025-03-14 → 2026-03-14');
     expect(lastScreen).not.toContain('2026-03-07 → 2026-03-14');
+  });
+
+  it('ignores stale load failures after the user has already switched again', async () => {
+    const provider: IProvider = {
+      name: 'claude-code',
+      displayName: 'Claude Code',
+      colors: COLORS,
+      async isAvailable() {
+        return true;
+      },
+      async load(range: DateRange): Promise<ProviderData> {
+        if (range.since === '2026-03-07') {
+          await Bun.sleep(30);
+          throw new Error('stale failure');
+        }
+        if (range.since === '2025-03-14') {
+          await Bun.sleep(5);
+        }
+        return createProviderData('claude-code');
+      },
+    };
+
+    const dashboardPromise = startTabbedDashboard([provider], {
+      initialTimeRange: '30d',
+      noColor: true,
+      until: '2026-03-14',
+    });
+
+    await Bun.sleep(10);
+    expect(keypressHandler).not.toBeNull();
+
+    keypressHandler!('', { name: 'left', sequence: '\u001b[D' });
+    keypressHandler!('', { name: 'left', sequence: '\u001b[D' });
+
+    await Bun.sleep(50);
+    keypressHandler!('', { name: 'q', sequence: 'q' });
+
+    await expect(dashboardPromise).resolves.toBeUndefined();
+    const screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
+    const lastScreen = screens.at(-1) ?? '';
+    expect(lastScreen).toContain('2025-03-14 → 2026-03-14');
   });
 });

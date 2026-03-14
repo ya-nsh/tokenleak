@@ -158,6 +158,9 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
         hasExplicitDuration: false,
       };
       sessions.set(key, session);
+    } else if (!session.projectId && projectId) {
+      session.projectId = projectId;
+      session.label = projectId || event.sessionId?.trim() || key;
     }
 
     session.tokens += event.totalTokens;

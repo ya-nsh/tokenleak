@@ -114,6 +114,24 @@ describe('interactive launcher', () => {
       until: '2026-03-14',
     });
   });
+
+  test('buildTabbedDashboardOptions validates custom dates before storing them', () => {
+    expect(() => buildTabbedDashboardOptions(
+      { since: '2026-03-14', until: '2026-03-01' },
+      [],
+      null,
+      false,
+      false,
+    )).toThrow('must not be after');
+
+    expect(() => buildTabbedDashboardOptions(
+      { since: 'not-a-date' },
+      [],
+      null,
+      false,
+      false,
+    )).toThrow('Invalid --since date');
+  });
 });
 
 describe('flag serialization', () => {

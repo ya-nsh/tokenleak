@@ -1,6 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import type { TimeRange } from '@tokenleak/renderers';
+import { computeDateRange } from './date-range.js';
 import { buildCliPreview } from './flags.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
@@ -867,16 +868,15 @@ export function buildTabbedDashboardOptions(
     noInsights,
   };
 
-  const since = typeof rangeArgs['since'] === 'string' ? rangeArgs['since'].trim() : '';
-  const until = typeof rangeArgs['until'] === 'string' ? rangeArgs['until'].trim() : '';
+  const rawSince = typeof rangeArgs['since'] === 'string' ? rangeArgs['since'].trim() : '';
+  const rawUntil = typeof rangeArgs['until'] === 'string' ? rangeArgs['until'].trim() : '';
+  const since = rawSince || undefined;
+  const until = rawUntil || undefined;
   if (since) {
-    options.initialRange = {
-      since,
-      until: until || new Date().toISOString().slice(0, 10),
-    };
+    options.initialRange = computeDateRange({ since, until });
     options.until = options.initialRange.until;
   } else if (until) {
-    options.until = until;
+    options.until = computeDateRange({ until }).until;
   }
   if (providers.length > 0) {
     options.providerNames = [...providers];

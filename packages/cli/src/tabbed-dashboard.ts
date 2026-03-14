@@ -251,7 +251,15 @@ export async function startTabbedDashboard(
   const loadAndRender = async (timeRange: TimeRange): Promise<void> => {
     const loadId = ++activeLoadId;
     paint(renderLoading(state));
-    const output = await loadForRange(state, providers, timeRange);
+    let output: TokenleakOutput;
+    try {
+      output = await loadForRange(state, providers, timeRange);
+    } catch (error: unknown) {
+      if (shouldClose || loadId !== activeLoadId || state.timeRange !== timeRange) {
+        return;
+      }
+      throw error;
+    }
     if (shouldClose || loadId !== activeLoadId || state.timeRange !== timeRange) {
       return;
     }
