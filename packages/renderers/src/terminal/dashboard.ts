@@ -1,287 +1,215 @@
-import { aggregate } from '@tokenleak/core';
-import type { TokenleakOutput, RenderOptions, ProviderData, AggregatedStats } from '@tokenleak/core';
+import type { RenderOptions, TokenleakOutput } from '@tokenleak/core';
 import { colorize } from './ansi';
+import type {
+  DashboardModel,
+  MetricEntry,
+  PatternEntry,
+  ProviderDashboardModel,
+} from './dashboard-model';
+import {
+  buildDashboardModel,
+  formatCost,
+  formatTokens,
+} from './dashboard-model';
 import { renderTerminalHeatmap } from './heatmap';
+import { padVisible, renderColumns, truncateVisible, visibleLength } from './layout';
 
-const BOX_H = '\u2500'; // ─
-const BOX_V = '\u2502'; // │
-const BOX_TL = '\u250C'; // ┌
-const BOX_TR = '\u2510'; // ┐
-const BOX_BL = '\u2514'; // └
-const BOX_BR = '\u2518'; // ┘
+const BOX_H = '\u2500';
+const BOX_V = '\u2502';
+const BOX_TL = '\u250C';
+const BOX_TR = '\u2510';
+const BOX_BL = '\u2514';
+const BOX_BR = '\u2518';
+const BAR_CHAR = '\u2588';
+const TRACK_CHAR = '\u2591';
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-
-const BAR_CHAR = '\u2588'; // █
-const MAX_BAR_LENGTH = 20;
-
-/**
- * Formats a token count in a human-readable way (e.g. 150K, 1.2M).
- */
-export function formatTokens(count: number): string {
-  if (count >= 1_000_000) {
-    return `${(count / 1_000_000).toFixed(1)}M`;
-  }
-  if (count >= 1_000) {
-    return `${(count / 1_000).toFixed(0)}K`;
-  }
-  return String(count);
-}
-
-/**
- * Formats a cost value as a dollar string.
- */
-export function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
-
-/**
- * Formats a rate (0..1) as a display string.
- */
-function formatPercent(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
-}
-
-function formatSharePercent(percentage: number): string {
-  return `${percentage.toFixed(0)}%`;
-}
-
-/**
- * Creates a horizontal divider line.
- */
 function divider(width: number): string {
   return BOX_H.repeat(width);
 }
 
-/**
- * Creates a boxed header line.
- */
 function boxedHeader(title: string, width: number, noColor: boolean): string {
-  const inner = width - 2; // account for │ on each side
+  const inner = Math.max(1, width - 2);
   const padded = ` ${title} `;
   const remaining = Math.max(0, inner - padded.length);
   const left = Math.floor(remaining / 2);
   const right = remaining - left;
-  const content = `${BOX_H.repeat(left)}${padded}${BOX_H.repeat(right)}`;
-  const top = `${BOX_TL}${BOX_H.repeat(inner)}${BOX_TR}`;
-  const headerLine = `${BOX_V}${colorize(content, 'bold', noColor)}${BOX_V}`;
-  const bottom = `${BOX_BL}${BOX_H.repeat(inner)}${BOX_BR}`;
-  return [top, headerLine, bottom].join('\n');
+  const titleLine = `${BOX_V}${' '.repeat(left)}${colorize(padded, 'bold', noColor)}${' '.repeat(right)}${BOX_V}`;
+
+  return [
+    `${BOX_TL}${BOX_H.repeat(inner)}${BOX_TR}`,
+    titleLine,
+    `${BOX_BL}${BOX_H.repeat(inner)}${BOX_BR}`,
+  ].join('\n');
 }
 
-/**
- * Renders a simple horizontal bar for day-of-week breakdown.
- */
-function dayBar(tokens: number, maxTokens: number, noColor: boolean): string {
-  if (maxTokens <= 0) return '';
-  const length = Math.round((tokens / maxTokens) * MAX_BAR_LENGTH);
-  const bar = BAR_CHAR.repeat(length);
-  return colorize(bar, 'green', noColor);
+function renderSectionTitle(title: string, noColor: boolean): string {
+  return colorize(`  ${title}`, 'bold', noColor);
 }
 
-/**
- * Renders the stats section.
- */
-function renderStats(stats: AggregatedStats, width: number, noColor: boolean): string {
-  const lines: string[] = [];
-  const labelWidth = 20;
+function renderSummary(parts: string[], width: number, noColor: boolean): string[] {
+  if (parts.length === 0) return [];
 
-  const entries: [string, string][] = [
-    ['Current Streak', `${stats.currentStreak}d`],
-    ['Longest Streak', `${stats.longestStreak}d`],
-    ['Total Tokens', formatTokens(stats.totalTokens)],
-    ['Total Cost', formatCost(stats.totalCost)],
-    ['30d Tokens', formatTokens(stats.rolling30dTokens)],
-    ['30d Cost', formatCost(stats.rolling30dCost)],
-    ['7d Tokens', formatTokens(stats.rolling7dTokens)],
-    ['7d Cost', formatCost(stats.rolling7dCost)],
-    ['Avg Daily Tokens', formatTokens(stats.averageDailyTokens)],
-    ['Avg Daily Cost', formatCost(stats.averageDailyCost)],
-    ['Cache Hit Rate', formatPercent(stats.cacheHitRate)],
-    ['Active Days', `${stats.activeDays} / ${stats.totalDays}`],
+  const colored = parts.map((part, index) => colorize(part, index % 2 === 0 ? 'cyan' : 'green', noColor));
+  const line = colored.join(colorize('  |  ', 'dim', noColor));
+  return [truncateVisible(`  ${line}`, width)];
+}
+
+function renderTrend(trend: string, width: number, noColor: boolean): string[] {
+  if (!trend) return [];
+  return [
+    truncateVisible(`  ${colorize('Recent Trend', 'bold', noColor)}  ${colorize(trend, 'green', noColor)}`, width),
   ];
-
-  if (stats.peakDay) {
-    entries.push(['Peak Day', `${stats.peakDay.date} (${formatTokens(stats.peakDay.tokens)})`]);
-  }
-
-  for (const [label, value] of entries) {
-    const line = `  ${label.padEnd(labelWidth)} ${colorize(value, 'cyan', noColor)}`;
-    lines.push(line.length > width ? line.slice(0, width) : line);
-  }
-
-  return lines.join('\n');
 }
 
-/**
- * Renders the day-of-week breakdown.
- */
-function renderDayOfWeek(stats: AggregatedStats, width: number, noColor: boolean): string {
-  const lines: string[] = [];
-  const maxTokens = Math.max(...stats.dayOfWeek.map((d) => d.tokens), 0);
-
-  for (const entry of stats.dayOfWeek) {
-    const label = DAY_NAMES[entry.day] ?? `Day${entry.day}`;
-    const bar = dayBar(entry.tokens, maxTokens, noColor);
-    const tokenStr = formatTokens(entry.tokens);
-    const line = `  ${label}  ${bar} ${tokenStr}`;
-    lines.push(line.length > width ? line.slice(0, width) : line);
-  }
-
-  return lines.join('\n');
+function renderMetricLine(entry: MetricEntry, width: number, noColor: boolean): string {
+  const label = entry.label;
+  const value = colorize(entry.value, 'cyan', noColor);
+  const gutter = 2;
+  const safeWidth = Math.max(12, width);
+  const valueWidth = Math.min(Math.max(6, visibleLength(entry.value)), Math.max(6, Math.floor(safeWidth * 0.45)));
+  const labelWidth = Math.max(4, safeWidth - valueWidth - gutter);
+  return `${truncateVisible(label, labelWidth)}${' '.repeat(gutter)}${padVisible(value, valueWidth)}`;
 }
 
-/**
- * Renders the top models list.
- */
-function renderTopModels(stats: AggregatedStats, width: number, noColor: boolean): string {
-  const lines: string[] = [];
-  const nameWidth = Math.min(28, Math.max(16, Math.floor(width * 0.35)));
-  const pctWidth = 4;
-  const barGap = 2;
-  const barWidth = Math.max(8, width - nameWidth - pctWidth - 6);
+function renderMetrics(entries: MetricEntry[], width: number, noColor: boolean): string[] {
+  if (entries.length === 0) return [];
+  const innerWidth = Math.max(16, width - 2);
 
-  for (const model of stats.topModels.slice(0, 5)) {
-    const pct = formatSharePercent(model.percentage);
-    const normalizedName = model.model.length > nameWidth
-      ? `${model.model.slice(0, nameWidth - 1)}…`
-      : model.model;
-    const fillLength = Math.max(1, Math.round((model.percentage / 100) * barWidth));
+  if (width >= 86 && entries.length > 3) {
+    const midpoint = Math.ceil(entries.length / 2);
+    const left = entries.slice(0, midpoint).map((entry) => `  ${renderMetricLine(entry, Math.floor((innerWidth - 3) / 2), noColor)}`);
+    const right = entries.slice(midpoint).map((entry) => `  ${renderMetricLine(entry, Math.floor((innerWidth - 3) / 2), noColor)}`);
+    return renderColumns(left, right, innerWidth, 0.5, 3);
+  }
+
+  return entries.map((entry) => `  ${renderMetricLine(entry, innerWidth, noColor)}`);
+}
+
+function renderPatternList(
+  title: string,
+  entries: PatternEntry[],
+  width: number,
+  noColor: boolean,
+): string[] {
+  if (entries.length === 0) return [];
+
+  const lines = [renderSectionTitle(title, noColor)];
+  const innerWidth = Math.max(18, width - 2);
+  const nameWidth = Math.min(22, Math.max(8, Math.floor(innerWidth * 0.35)));
+  const valueWidth = 6;
+  const barWidth = Math.max(6, innerWidth - nameWidth - valueWidth - 6);
+
+  for (const entry of entries) {
+    const fillLength = Math.max(1, Math.round(entry.share * barWidth));
     const fill = colorize(BAR_CHAR.repeat(fillLength), 'green', noColor);
-    const track = '\u2591'.repeat(Math.max(0, barWidth - fillLength));
-    const line = `  ${colorize(normalizedName.padEnd(nameWidth), 'yellow', noColor)}${' '.repeat(barGap)}${fill}${track}${' '.repeat(barGap)}${pct.padStart(pctWidth)}`;
-    lines.push(line);
+    const track = TRACK_CHAR.repeat(Math.max(0, barWidth - fillLength));
+    const line = `  ${colorize(truncateVisible(entry.label, nameWidth).padEnd(nameWidth), 'yellow', noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
+    lines.push(truncateVisible(line, width));
   }
 
-  return lines.join('\n');
+  return lines;
 }
 
-/**
- * Renders insights as bullet points.
- */
-function renderInsights(stats: AggregatedStats, noColor: boolean): string {
-  const insights: string[] = [];
+function renderPatternColumns(provider: ProviderDashboardModel, width: number, noColor: boolean): string[] {
+  const dayLines = renderPatternList('Day of Week', provider.dayOfWeek, Math.floor((width - 3) / 2), noColor);
+  const modelLines = renderPatternList('Top Models', provider.topModels, Math.floor((width - 3) / 2), noColor);
 
-  if (stats.currentStreak > 7) {
-    insights.push(`You have a ${stats.currentStreak}-day coding streak going!`);
-  }
-  if (stats.cacheHitRate > 0.5) {
-    insights.push(`Cache hit rate is ${formatPercent(stats.cacheHitRate)} - good cache reuse.`);
-  }
-  if (stats.cacheHitRate < 0.1 && stats.totalTokens > 0) {
-    insights.push('Cache hit rate is low - consider enabling prompt caching.');
-  }
-  if (stats.peakDay) {
-    insights.push(`Peak usage was on ${stats.peakDay.date} with ${formatTokens(stats.peakDay.tokens)} tokens.`);
+  if (dayLines.length > 0 && modelLines.length > 0 && width >= 96) {
+    return renderColumns(dayLines, modelLines, width - 2, 0.5, 3).map((line) => `  ${line}`);
   }
 
-  if (insights.length === 0) return '';
-
-  return insights
-    .map((i) => `  ${colorize('*', 'green', noColor)} ${i}`)
-    .join('\n');
+  return [...dayLines, ...(dayLines.length > 0 && modelLines.length > 0 ? [''] : []), ...modelLines];
 }
 
-/**
- * Renders a single provider section.
- */
+function renderInsights(insights: string[], width: number, noColor: boolean): string[] {
+  if (insights.length === 0) return [];
+  return [
+    renderSectionTitle('Insights', noColor),
+    ...insights.map((insight) => truncateVisible(`  ${colorize('*', 'green', noColor)} ${insight}`, width)),
+  ];
+}
+
 function renderProviderSection(
-  provider: ProviderData,
-  stats: AggregatedStats,
+  provider: ProviderDashboardModel,
   width: number,
   noColor: boolean,
   showInsights: boolean,
 ): string {
-  const sections: string[] = [];
+  const sections: string[] = [
+    boxedHeader(provider.provider.displayName, width, noColor),
+    ...renderSummary(provider.summary, width, noColor),
+    ...renderTrend(provider.trend, width, noColor),
+    '',
+    renderSectionTitle('Heatmap', noColor),
+    renderTerminalHeatmap(provider.provider.daily, { width: width - 2, noColor }),
+    '',
+    renderSectionTitle('Stats', noColor),
+    ...renderMetrics(provider.metrics, width, noColor),
+  ];
 
-  // Provider header
-  sections.push(boxedHeader(provider.displayName, width, noColor));
-
-  // Heatmap
-  sections.push('');
-  sections.push(colorize('  Heatmap', 'bold', noColor));
-  sections.push(renderTerminalHeatmap(provider.daily, { width, noColor }));
-
-  // Stats
-  sections.push('');
-  sections.push(colorize('  Stats', 'bold', noColor));
-  sections.push(renderStats(stats, width, noColor));
-
-  // Day of week
-  if (stats.dayOfWeek.length > 0) {
-    sections.push('');
-    sections.push(colorize('  Day of Week', 'bold', noColor));
-    sections.push(renderDayOfWeek(stats, width, noColor));
+  const patternLines = renderPatternColumns(provider, width, noColor);
+  if (patternLines.length > 0) {
+    sections.push('', ...patternLines);
   }
 
-  // Top models
-  if (stats.topModels.length > 0) {
-    sections.push('');
-    sections.push(colorize('  Top Models', 'bold', noColor));
-    sections.push(renderTopModels(stats, width, noColor));
-  }
-
-  // Insights
-  if (showInsights) {
-    const insightsText = renderInsights(stats, noColor);
-    if (insightsText) {
-      sections.push('');
-      sections.push(colorize('  Insights', 'bold', noColor));
-      sections.push(insightsText);
-    }
+  const insightLines = showInsights ? renderInsights(provider.insights, width, noColor) : [];
+  if (insightLines.length > 0) {
+    sections.push('', ...insightLines);
   }
 
   return sections.join('\n');
 }
 
-/**
- * Renders the full terminal dashboard.
- */
-export function renderDashboard(output: TokenleakOutput, options: RenderOptions): string {
+function renderOverview(model: DashboardModel, width: number, noColor: boolean): string {
+  const sections: string[] = [
+    boxedHeader('Overview', width, noColor),
+    ...renderSummary(model.overview.summary, width, noColor),
+    ...renderTrend(model.overview.trend, width, noColor),
+    '',
+    ...renderMetrics(model.overview.metrics, width, noColor),
+  ];
+
+  if (model.overview.providerLeaders.length > 1) {
+    sections.push('', ...renderPatternList('Provider Mix', model.overview.providerLeaders, width, noColor));
+  }
+
+  return sections.join('\n');
+}
+
+export function renderDashboardModel(model: DashboardModel, options: RenderOptions): string {
   const width = options.width;
   const noColor = options.noColor;
-  const sections: string[] = [];
+  const sections: string[] = [
+    boxedHeader('Tokenleak', width, noColor),
+    ...renderSummary([model.rangeLabel, ...model.overview.summary], width, noColor),
+  ];
 
-  // Title
-  sections.push(boxedHeader('Tokenleak', width, noColor));
-  sections.push('');
-
-  if (output.providers.length === 0) {
-    sections.push('  No provider data available.');
+  if (model.activeProviders.length === 0) {
+    sections.push('');
+    sections.push('  No provider activity in the selected range.');
+    if (model.inactiveProviders.length > 0) {
+      sections.push(truncateVisible(`  Checked: ${model.inactiveProviders.join(', ')}`, width));
+    }
     return sections.join('\n');
   }
 
-  // Render each provider
-  for (let i = 0; i < output.providers.length; i++) {
-    const provider = output.providers[i]!;
-    const providerStats = aggregate(provider.daily, output.dateRange.until);
-    sections.push(
-      renderProviderSection(
-        provider,
-        providerStats,
-        width,
-        noColor,
-        options.showInsights,
-      ),
-    );
+  sections.push('', renderOverview(model, width, noColor));
 
-    // Divider between providers
-    if (i < output.providers.length - 1) {
-      sections.push('');
-      sections.push(divider(width));
-      sections.push('');
-    }
+  for (const provider of model.activeProviders) {
+    const providerSection = renderProviderSection(provider, width, noColor, options.showInsights);
+    sections.push('', divider(width), '', providerSection);
   }
 
-  // Overall summary if multiple providers
-  if (output.providers.length > 1) {
+  if (model.inactiveProviders.length > 0) {
     sections.push('');
-    sections.push(divider(width));
-    sections.push('');
-    sections.push(boxedHeader('Overall', width, noColor));
-    sections.push('');
-    sections.push(renderStats(output.aggregated, width, noColor));
+    sections.push(truncateVisible(`  No activity in range: ${model.inactiveProviders.join(', ')}`, width));
   }
 
   return sections.join('\n');
 }
+
+export function renderDashboard(output: TokenleakOutput, options: RenderOptions): string {
+  return renderDashboardModel(buildDashboardModel(output, options), options);
+}
+
+export { formatCost, formatTokens };

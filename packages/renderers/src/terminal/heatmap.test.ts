@@ -13,7 +13,7 @@ describe('renderTerminalHeatmap', () => {
       { width: 40, noColor: true },
     );
 
-    expect(output).toContain('M');
+    expect(output).toContain('Mar 2026');
     expect(output).toContain('Sun');
     expect(output).toContain('·');
     expect(output).toContain('Less ·░▒▓█ More');
@@ -34,18 +34,16 @@ describe('renderTerminalHeatmap', () => {
     }
   });
 
-  it('avoids overlapping month labels on short grids', () => {
+  it('uses a caption instead of ambiguous partial month labels on very short grids', () => {
     const output = renderTerminalHeatmap(
       [
-        createDailyUsage('2026-01-01', 1000),
-        createDailyUsage('2026-02-01', 2000),
-        createDailyUsage('2026-03-01', 3000),
+        createDailyUsage('2026-06-15', 1000),
+        createDailyUsage('2026-06-16', 2000),
+        createDailyUsage('2026-06-17', 3000),
       ],
-      { width: 32, noColor: true },
+      { width: 16, noColor: true },
     );
 
-    expect(output).toContain('Jan');
-    expect(output).toContain('Feb');
-    expect(output).not.toContain('JaFeb');
+    expect(output).toContain('Jun 2026');
   });
 });

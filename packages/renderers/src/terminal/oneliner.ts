@@ -1,15 +1,20 @@
-import type { TokenleakOutput, RenderOptions } from '@tokenleak/core';
+import type { ProviderData, TokenleakOutput, RenderOptions } from '@tokenleak/core';
 import { formatTokens, formatCost } from './dashboard';
 
-/**
- * Renders a single-line summary of the tokenleak output.
- * Uses emoji for quick visual scanning.
- */
-export function renderOneliner(output: TokenleakOutput, _options: RenderOptions): string {
+function countActiveProviders(providers: ProviderData[]): number {
+  return providers.filter((provider) => provider.daily.some((entry) => entry.totalTokens > 0)).length;
+}
+
+export function renderOneliner(output: TokenleakOutput, options: RenderOptions): string {
+  void options;
   const streak = output.aggregated.currentStreak;
   const tokens = formatTokens(output.aggregated.totalTokens);
   const cost = formatCost(output.aggregated.totalCost);
-  const providerCount = output.providers.length;
+  const providerCount = countActiveProviders(output.providers);
 
-  return `\uD83D\uDD25 ${streak}d streak | ${tokens} tokens | ${cost} | ${providerCount} provider${providerCount !== 1 ? 's' : ''}`;
+  if (providerCount === 0) {
+    return `no activity | ${tokens} tokens | ${cost}`;
+  }
+
+  return `${streak}d streak | ${tokens} tokens | ${cost} | ${providerCount} active`;
 }
