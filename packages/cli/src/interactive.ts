@@ -82,6 +82,8 @@ const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
 const ALT_SCREEN_ON = '\x1b[?1049h';
 const ALT_SCREEN_OFF = '\x1b[?1049l';
+const ALT_SCROLL_ON = '\x1b[?1007h';
+const ALT_SCROLL_OFF = '\x1b[?1007l';
 const LOADING_TICK_MS = 120;
 
 function color(text: string, code: string): string {
@@ -372,61 +374,75 @@ function renderLoading(request: InteractiveRunRequest, frame = 0, startedAt = Da
   return `${HOME_CLEAR}${HIDE_CURSOR}${lines.join('\n')}`;
 }
 
-export function clipOutputLines(lines: string[], limit: number): string[] {
-  if (limit <= 0) return [];
-  if (lines.length <= limit) return lines;
-
-  const visible = lines.slice(0, Math.max(0, limit - 1));
-  visible.push(color(`... ${lines.length - visible.length} more lines hidden`, DIM));
-  return visible;
+export function clampScrollOffset(offset: number, totalLines: number, viewportHeight: number): number {
+  const maxOffset = Math.max(0, totalLines - Math.max(1, viewportHeight));
+  return Math.min(Math.max(0, offset), maxOffset);
 }
 
-function renderOutputSection(title: string, content: string, width: number, maxLines: number): string[] {
+export function buildOutputSectionLines(title: string, content: string, width: number): string[] {
   const normalized = content.trimEnd();
   if (!normalized) return [];
 
   const lines = normalized.split('\n').map((line) => truncateVisible(line, width));
   return [
     color(title, WHITE + BOLD),
-    ...clipOutputLines(lines, maxLines),
+    ...lines,
     '',
   ];
 }
 
-function renderResult(request: InteractiveRunRequest, result: InteractiveExecutionResult): string {
+function renderResult(
+  request: InteractiveRunRequest,
+  result: InteractiveExecutionResult,
+  scrollOffset = 0,
+): string {
   const width = Math.max(60, (process.stdout.columns ?? 120) - 1);
   const rows = process.stdout.rows ?? 40;
   const statusColor = result.ok ? GREEN : RED;
   const statusLabel = result.ok ? 'Completed' : 'Failed';
-  const fixedLines = 10;
-  const outputBudget = Math.max(8, rows - fixedLines);
-  const firstSectionLines = result.stdout.trim() && result.stderr.trim()
-    ? Math.max(4, Math.floor(outputBudget * 0.6))
-    : outputBudget;
-  const secondSectionLines = Math.max(4, outputBudget - firstSectionLines);
-
-  const body = [
+  const header = [
     color(request.title, WHITE + BOLD),
     color(request.preview, CYAN),
     '',
     `${color('Status', WHITE + BOLD)} ${color(statusLabel, statusColor)}`,
     color(result.summary, DIM),
     '',
-    ...renderOutputSection('Output', result.stdout, width, firstSectionLines),
-    ...renderOutputSection('Messages', result.stderr, width, secondSectionLines),
+  ];
+  const contentLines = [
+    ...buildOutputSectionLines('Output', result.stdout, width),
+    ...buildOutputSectionLines('Messages', result.stderr, width),
+  ];
+  const body = contentLines.length > 0
+    ? contentLines
+    : [color('No captured output for this command.', DIM), ''];
+  const footer = [
     renderRule(44),
-    `${color('Enter', YELLOW)} launcher  ${color('Q', YELLOW)} quit`,
+    `${color('Up/Down', YELLOW)} scroll  ${color('PgUp/PgDn', YELLOW)} page  ${color('Enter', YELLOW)} launcher  ${color('Q', YELLOW)} quit`,
+  ];
+  const viewportHeight = Math.max(4, rows - header.length - footer.length - 1);
+  const effectiveOffset = clampScrollOffset(scrollOffset, body.length, viewportHeight);
+  const visibleBody = body.slice(effectiveOffset, effectiveOffset + viewportHeight);
+  const padding = Array.from({ length: Math.max(0, viewportHeight - visibleBody.length) }, () => '');
+  const scrollStatus = body.length > viewportHeight
+    ? color(`Lines ${effectiveOffset + 1}-${Math.min(body.length, effectiveOffset + viewportHeight)} of ${body.length}`, DIM)
+    : color('All command output is visible.', DIM);
+  const lines = [
+    ...header,
+    ...visibleBody,
+    ...padding,
+    scrollStatus,
+    ...footer,
   ];
 
-  return `${HOME_CLEAR}${HIDE_CURSOR}${body.join('\n')}`;
+  return `${HOME_CLEAR}${HIDE_CURSOR}${lines.join('\n')}`;
 }
 
 function enterAltScreen(): void {
-  process.stdout.write(`${ALT_SCREEN_ON}${HOME_CLEAR}${HIDE_CURSOR}`);
+  process.stdout.write(`${ALT_SCREEN_ON}${ALT_SCROLL_ON}${HOME_CLEAR}${HIDE_CURSOR}`);
 }
 
 function leaveAltScreen(): void {
-  process.stdout.write(`${SHOW_CURSOR}${ALT_SCREEN_OFF}`);
+  process.stdout.write(`${SHOW_CURSOR}${ALT_SCROLL_OFF}${ALT_SCREEN_OFF}`);
 }
 
 function paint(content: string): void {
@@ -1054,19 +1070,6 @@ function createMenuOptions(): MenuOption[] {
   ];
 }
 
-async function waitForSingleKey(): Promise<{ name?: string; ctrl?: boolean }> {
-  return new Promise((resolve) => {
-    const onKeypress = (_input: string, key: { name?: string; ctrl?: boolean }) => {
-      process.stdin.off('keypress', onKeypress);
-      suspendRawMode();
-      resolve(key);
-    };
-
-    resumeRawMode();
-    process.stdin.on('keypress', onKeypress);
-  });
-}
-
 async function promptForMenuCommand(
   context: InteractiveContext,
   options: MenuOption[],
@@ -1189,11 +1192,84 @@ async function showExecutionResult(
   request: InteractiveRunRequest,
   result: InteractiveExecutionResult,
 ): Promise<'menu' | 'exit'> {
-  paint(renderResult(request, result));
-  const key = await waitForSingleKey();
-  if (key.ctrl && key.name === 'c') return 'exit';
-  if (key.name === 'q' || key.name === 'escape') return 'exit';
-  return 'menu';
+  const body = [
+    ...buildOutputSectionLines('Output', result.stdout, Math.max(60, (process.stdout.columns ?? 120) - 1)),
+    ...buildOutputSectionLines('Messages', result.stderr, Math.max(60, (process.stdout.columns ?? 120) - 1)),
+  ];
+  let scrollOffset = 0;
+
+  return new Promise<'menu' | 'exit'>((resolve) => {
+    const viewportHeight = (): number => {
+      const rows = process.stdout.rows ?? 40;
+      const headerLines = 6;
+      const footerLines = 3;
+      return Math.max(4, rows - headerLines - footerLines);
+    };
+
+    const render = (): void => {
+      paint(renderResult(request, result, scrollOffset));
+    };
+
+    const onKeypress = (_input: string, key: { name?: string; ctrl?: boolean }): void => {
+      if (key.ctrl && key.name === 'c') {
+        cleanup();
+        resolve('exit');
+        return;
+      }
+
+      if (key.name === 'q' || key.name === 'escape') {
+        cleanup();
+        resolve('exit');
+        return;
+      }
+
+      if (key.name === 'return' || key.name === 'enter') {
+        cleanup();
+        resolve('menu');
+        return;
+      }
+
+      const page = viewportHeight();
+      if (key.name === 'up') {
+        scrollOffset = clampScrollOffset(scrollOffset - 1, body.length, page);
+        render();
+        return;
+      }
+      if (key.name === 'down') {
+        scrollOffset = clampScrollOffset(scrollOffset + 1, body.length, page);
+        render();
+        return;
+      }
+      if (key.name === 'pageup') {
+        scrollOffset = clampScrollOffset(scrollOffset - page, body.length, page);
+        render();
+        return;
+      }
+      if (key.name === 'pagedown') {
+        scrollOffset = clampScrollOffset(scrollOffset + page, body.length, page);
+        render();
+        return;
+      }
+      if (key.name === 'home') {
+        scrollOffset = 0;
+        render();
+        return;
+      }
+      if (key.name === 'end') {
+        scrollOffset = clampScrollOffset(Number.MAX_SAFE_INTEGER, body.length, page);
+        render();
+      }
+    };
+
+    const cleanup = (): void => {
+      process.stdin.off('keypress', onKeypress);
+      suspendRawMode();
+    };
+
+    render();
+    resumeRawMode();
+    process.stdin.on('keypress', onKeypress);
+  });
 }
 
 export function shouldStartInteractiveCli(
