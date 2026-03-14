@@ -24,6 +24,7 @@ import {
   ClaudeCodeProvider,
   CodexProvider,
   OpenCodeProvider,
+  PiProvider,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
 import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServer } from '@tokenleak/renderers';
@@ -48,6 +49,7 @@ const THEME_VALUES = ['dark', 'light'] as const;
 const PROVIDER_SHORTCUTS = {
   claude: 'claude-code',
   codex: 'codex',
+  pi: 'pi',
   openCode: 'open-code',
 } as const;
 const PROVIDER_ALIASES: Record<string, string> = {
@@ -57,6 +59,8 @@ const PROVIDER_ALIASES: Record<string, string> = {
   claudecode: 'claude-code',
   codex: 'codex',
   openai: 'codex',
+  pi: 'pi',
+  'pi-mono': 'pi',
   'open-code': 'open-code',
   open_code: 'open-code',
   opencode: 'open-code',
@@ -64,6 +68,7 @@ const PROVIDER_ALIASES: Record<string, string> = {
 const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'claude-code': ['anthropic', 'claude', 'claudecode'],
   codex: ['openai'],
+  pi: ['pi-mono'],
   'open-code': ['opencode', 'open_code'],
 };
 
@@ -86,6 +91,7 @@ function getRequestedProviders(config: ReturnType<typeof resolveConfig>): Set<st
 
   if (config.claude) requested.add(PROVIDER_SHORTCUTS.claude);
   if (config.codex) requested.add(PROVIDER_SHORTCUTS.codex);
+  if (config.pi) requested.add(PROVIDER_SHORTCUTS.pi);
   if (config.openCode) requested.add(PROVIDER_SHORTCUTS.openCode);
 
   return requested;
@@ -114,6 +120,7 @@ function buildHelpText(): string {
     'Provider Shortcuts:',
     '  --claude                Only include Claude Code',
     '  --codex                 Only include Codex',
+    '  --pi                    Only include Pi',
     '  --open-code             Only include OpenCode',
     '  --all-providers         Ignore provider filters and use every available provider',
     '  --list-providers        Show registered providers and aliases',
@@ -142,9 +149,10 @@ function buildHelpText(): string {
     '  tokenleak',
     '  tokenleak --claude --days 30',
     '  tokenleak --codex --format png --output codex.png',
+    '  tokenleak --pi --days 30',
     '  tokenleak --open-code --since 2026-01-01 --until 2026-03-01',
-    '  tokenleak --provider claude,codex --format svg --output usage.svg',
-    '  tokenleak --provider anthropic,openai',
+    '  tokenleak --provider claude,codex,pi --format svg --output usage.svg',
+    '  tokenleak --provider anthropic,openai,pi-mono',
     '  tokenleak --list-providers',
     '  tokenleak --compare auto --format terminal',
     '  tokenleak --live-server --theme light',
@@ -299,6 +307,7 @@ export function normalizeCliArgv(argv: string[]): string[] {
 function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
+  registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
 }
 
@@ -349,6 +358,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   provider?: string;
   claude: boolean;
   codex: boolean;
+  pi: boolean;
   openCode: boolean;
   allProviders: boolean;
   listProviders: boolean;
@@ -375,6 +385,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     more: boolean;
     claude: boolean;
     codex: boolean;
+    pi: boolean;
     openCode: boolean;
     allProviders: boolean;
     listProviders: boolean;
@@ -392,6 +403,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     more: false,
     claude: false,
     codex: false,
+    pi: false,
     openCode: false,
     allProviders: false,
     listProviders: false,
@@ -472,6 +484,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['codex'] !== undefined) {
     result.codex = cliArgs['codex'] as boolean;
+  }
+  if (cliArgs['pi'] !== undefined) {
+    result.pi = cliArgs['pi'] as boolean;
   }
   if (cliArgs['openCode'] !== undefined) {
     result.openCode = cliArgs['openCode'] as boolean;
@@ -591,6 +606,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     config.provider ||
     config.claude ||
     config.codex ||
+    config.pi ||
     config.openCode
   )) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
@@ -620,7 +636,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   const requestedProviders = getRequestedProviders(config);
   if (!config.allProviders && requestedProviders.size > 0) {
-    if (config.provider && (config.claude || config.codex || config.openCode)) {
+    if (config.provider && (config.claude || config.codex || config.pi || config.openCode)) {
       process.stderr.write(
         `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
       );
@@ -889,6 +905,11 @@ const main = defineCommand({
       description: 'Shortcut for --provider codex',
       default: false,
     },
+    pi: {
+      type: 'boolean',
+      description: 'Shortcut for --provider pi',
+      default: false,
+    },
     openCode: {
       type: 'boolean',
       description: 'Shortcut for --provider open-code',
@@ -943,6 +964,7 @@ const main = defineCommand({
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
       if (args.claude) cliArgs['claude'] = true;
       if (args.codex) cliArgs['codex'] = true;
+      if (args.pi) cliArgs['pi'] = true;
       if (args.openCode) cliArgs['openCode'] = true;
       if (args.allProviders) cliArgs['allProviders'] = true;
       if (args.listProviders) cliArgs['listProviders'] = true;
