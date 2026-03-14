@@ -14,7 +14,7 @@ import {
 } from '@tokenleak/renderers';
 import type { TimeRange, MetricTab } from '@tokenleak/renderers';
 import { loadTokenleakData } from './data-loader.js';
-import { clampScrollOffset, stripAnsi } from './interactive.js';
+import { clampScrollOffset } from './interactive.js';
 
 const HOME_CLEAR = '\x1b[H\x1b[J';
 const HIDE_CURSOR = '\x1b[?25l';
@@ -30,11 +30,16 @@ const YELLOW = '\x1b[33m';
 
 interface TabbedState {
   timeRange: TimeRange;
+  initialTimeRange: TimeRange;
   metricTab: MetricTab;
   scrollOffset: number;
-  dataCache: Map<string, TokenleakOutput>;
+  dataCache: Map<TimeRange, TokenleakOutput>;
+  inflightLoads: Map<TimeRange, Promise<TokenleakOutput>>;
   noColor: boolean;
+  noInsights: boolean;
   baseUntil: string;
+  initialRange: DateRange | null;
+  width: number | null;
 }
 
 function timeRangeToDays(range: TimeRange): number {
@@ -55,25 +60,66 @@ function computeRange(range: TimeRange, baseUntil: string): DateRange {
   return { since, until };
 }
 
+function resolveRange(state: TabbedState, timeRange: TimeRange): DateRange {
+  if (state.initialRange && timeRange === state.initialTimeRange) {
+    return state.initialRange;
+  }
+
+  return computeRange(timeRange, state.baseUntil);
+}
+
 async function loadForRange(
   state: TabbedState,
   providers: IProvider[],
+  timeRange: TimeRange,
 ): Promise<TokenleakOutput> {
-  const cached = state.dataCache.get(state.timeRange);
+  const cached = state.dataCache.get(timeRange);
   if (cached) return cached;
 
-  const range = computeRange(state.timeRange, state.baseUntil);
-  const output = await loadTokenleakData(providers, range);
-  state.dataCache.set(state.timeRange, output);
-  return output;
+  const inflight = state.inflightLoads.get(timeRange);
+  if (inflight) return inflight;
+
+  const range = resolveRange(state, timeRange);
+  const loadPromise = loadTokenleakData(providers, range)
+    .then((output) => {
+      state.dataCache.set(timeRange, output);
+      return output;
+    })
+    .finally(() => {
+      state.inflightLoads.delete(timeRange);
+    });
+
+  state.inflightLoads.set(timeRange, loadPromise);
+  return loadPromise;
 }
 
-function renderActiveView(output: TokenleakOutput, tab: MetricTab, width: number, noColor: boolean): string {
+function getRenderWidth(state: TabbedState): number {
+  const terminalWidth = Math.max(40, (process.stdout.columns ?? 80) - 1);
+  if (state.width === null) {
+    return terminalWidth;
+  }
+
+  return Math.max(40, Math.min(terminalWidth, state.width));
+}
+
+function getViewportHeight(state: TabbedState, width: number, rows: number): number {
+  const headerLines = renderTabBar(state.timeRange, state.metricTab, width, state.noColor).split('\n').length + 2;
+  const footerLines = 1;
+  return Math.max(4, rows - headerLines - footerLines - 1);
+}
+
+function renderActiveView(
+  output: TokenleakOutput,
+  tab: MetricTab,
+  width: number,
+  noColor: boolean,
+  noInsights: boolean,
+): string {
   const options: RenderOptions = {
     format: 'terminal',
     theme: 'dark',
     width,
-    showInsights: true,
+    showInsights: !noInsights,
     noColor,
     output: null,
     more: true,
@@ -95,7 +141,7 @@ function renderScreen(
   output: TokenleakOutput,
   state: TabbedState,
 ): string {
-  const width = Math.max(40, (process.stdout.columns ?? 80) - 1);
+  const width = getRenderWidth(state);
   const rows = process.stdout.rows ?? 40;
 
   const tabBar = renderTabBar(state.timeRange, state.metricTab, width, state.noColor);
@@ -107,11 +153,12 @@ function renderScreen(
   const headerLines = [...tabBarLines, rangeLabel, ''];
   const footerLines = [''];
 
-  const viewportHeight = Math.max(4, rows - headerLines.length - footerLines.length - 1);
-  const viewContent = renderActiveView(output, state.metricTab, width, state.noColor);
+  const viewportHeight = getViewportHeight(state, width, rows);
+  const viewContent = renderActiveView(output, state.metricTab, width, state.noColor, state.noInsights);
   const contentLines = viewContent.split('\n');
 
   const effectiveOffset = clampScrollOffset(state.scrollOffset, contentLines.length, viewportHeight);
+  state.scrollOffset = effectiveOffset;
   const visibleContent = contentLines.slice(effectiveOffset, effectiveOffset + viewportHeight);
   const padding = Array.from({ length: Math.max(0, viewportHeight - visibleContent.length) }, () => '');
 
@@ -131,7 +178,7 @@ function renderScreen(
 }
 
 function renderLoading(state: TabbedState): string {
-  const width = Math.max(40, (process.stdout.columns ?? 80) - 1);
+  const width = getRenderWidth(state);
   const tabBar = renderTabBar(state.timeRange, state.metricTab, width, state.noColor);
   const loading = state.noColor
     ? '  Loading data...'
@@ -169,7 +216,12 @@ function resumeRawMode(): void {
 
 export interface TabbedDashboardOptions {
   noColor: boolean;
+  noInsights?: boolean;
+  width?: number;
   until?: string;
+  initialTimeRange?: TimeRange;
+  initialRange?: DateRange;
+  providerNames?: string[];
 }
 
 export async function startTabbedDashboard(
@@ -177,21 +229,33 @@ export async function startTabbedDashboard(
   options: TabbedDashboardOptions,
 ): Promise<void> {
   const state: TabbedState = {
-    timeRange: '30d',
+    timeRange: options.initialTimeRange ?? '30d',
+    initialTimeRange: options.initialTimeRange ?? '30d',
     metricTab: 'overview',
     scrollOffset: 0,
     dataCache: new Map(),
+    inflightLoads: new Map(),
     noColor: options.noColor,
+    noInsights: options.noInsights ?? false,
     baseUntil: options.until ?? new Date().toISOString().slice(0, 10),
+    initialRange: options.initialRange ?? null,
+    width: options.width ?? null,
   };
 
   enterAltScreen();
 
   let currentOutput: TokenleakOutput | null = null;
+  let activeLoadId = 0;
+  let shouldClose = false;
 
-  const loadAndRender = async (): Promise<void> => {
+  const loadAndRender = async (timeRange: TimeRange): Promise<void> => {
+    const loadId = ++activeLoadId;
     paint(renderLoading(state));
-    currentOutput = await loadForRange(state, providers);
+    const output = await loadForRange(state, providers, timeRange);
+    if (shouldClose || loadId !== activeLoadId || state.timeRange !== timeRange) {
+      return;
+    }
+    currentOutput = output;
     paint(renderScreen(currentOutput, state));
   };
 
@@ -208,13 +272,26 @@ export async function startTabbedDashboard(
   process.stdout.on('resize', onResize);
 
   try {
-    await loadAndRender();
+    await loadAndRender(state.timeRange);
 
+    let fatalError: unknown = null;
     await new Promise<void>((resolve) => {
-      const onKeypress = async (
+      const settleFailure = (error: unknown): void => {
+        fatalError = error;
+        cleanup();
+        resolve();
+      };
+
+      const runAsyncAction = (action: () => Promise<void>): void => {
+        void action().catch((error: unknown) => {
+          settleFailure(error);
+        });
+      };
+
+      const onKeypress = (
         _input: string,
         key: { name?: string; sequence?: string; ctrl?: boolean; shift?: boolean },
-      ): Promise<void> => {
+      ): void => {
         if (key.ctrl && key.name === 'c') {
           cleanup();
           resolve();
@@ -233,7 +310,7 @@ export async function startTabbedDashboard(
           const newIdx = (idx - 1 + TIME_RANGES.length) % TIME_RANGES.length;
           state.timeRange = TIME_RANGES[newIdx]!;
           state.scrollOffset = 0;
-          await loadAndRender();
+          runAsyncAction(() => loadAndRender(state.timeRange));
           return;
         }
         if (key.name === 'right') {
@@ -241,7 +318,7 @@ export async function startTabbedDashboard(
           const newIdx = (idx + 1) % TIME_RANGES.length;
           state.timeRange = TIME_RANGES[newIdx]!;
           state.scrollOffset = 0;
-          await loadAndRender();
+          runAsyncAction(() => loadAndRender(state.timeRange));
           return;
         }
 
@@ -271,7 +348,7 @@ export async function startTabbedDashboard(
 
         // Scrolling
         const rows = process.stdout.rows ?? 40;
-        const viewportHeight = Math.max(4, rows - 8);
+        const viewportHeight = getViewportHeight(state, getRenderWidth(state), rows);
 
         if (key.name === 'up') {
           state.scrollOffset = Math.max(0, state.scrollOffset - 1);
@@ -306,6 +383,7 @@ export async function startTabbedDashboard(
       };
 
       function cleanup(): void {
+        shouldClose = true;
         process.stdin.off('keypress', onKeypress);
         suspendRawMode();
       }
@@ -313,6 +391,9 @@ export async function startTabbedDashboard(
       resumeRawMode();
       process.stdin.on('keypress', onKeypress);
     });
+    if (fatalError) {
+      throw fatalError;
+    }
   } finally {
     process.stdout.off('resize', onResize);
     leaveAltScreen();

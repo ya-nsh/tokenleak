@@ -1032,7 +1032,16 @@ if (isDirectExecution) {
     const available = await registry.getAvailable();
 
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
-      await startTabbedDashboard(available, opts);
+      const requested = new Set(opts.providerNames ?? []);
+      const scopedProviders = requested.size > 0
+        ? available.filter((provider) => providerMatchesFilter(provider, requested))
+        : available;
+
+      if (scopedProviders.length === 0) {
+        throw new TokenleakError('No provider data found');
+      }
+
+      await startTabbedDashboard(scopedProviders, opts);
     };
 
     await startInteractiveCli({

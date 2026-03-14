@@ -269,6 +269,58 @@ describe('buildMoreStats', () => {
       more.sessionMetrics.projectBreakdown[9]!.tokens,
     );
   });
+
+  it('normalizes surrounding whitespace in project ids before bucketing', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 150,
+          cost: 0.1,
+          sessionId: 'session-a',
+          projectId: 'project-alpha',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T11:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-opus',
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 200,
+          cost: 0.1,
+          sessionId: 'session-b',
+          projectId: '  project-alpha  ',
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.sessionMetrics.projectCount).toBe(1);
+    expect(more.sessionMetrics.topProject).toEqual({
+      name: 'project-alpha',
+      tokens: 350,
+    } satisfies ProjectSummary);
+    expect(more.sessionMetrics.projectBreakdown).toEqual([
+      {
+        name: 'project-alpha',
+        tokens: 350,
+      },
+    ] satisfies ProjectSummary[]);
+  });
 });
 
 describe('computeModelMixShift', () => {

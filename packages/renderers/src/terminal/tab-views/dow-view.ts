@@ -41,7 +41,7 @@ export function renderDowView(output: TokenleakOutput, width: number, noColor: b
     const colorCode = DOW_COLORS[label] ?? 33;
     const share = totalTokens > 0 ? entry.tokens / totalTokens : 0;
     const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
-    const fillLen = Math.max(1, Math.round(ratio * barWidth));
+    const fillLen = Math.max(ratio > 0 ? 1 : 0, Math.round(ratio * barWidth));
     const bar = colorize256(BAR_CHAR.repeat(fillLen), colorCode, noColor) +
       dim(TRACK_CHAR.repeat(Math.max(0, barWidth - fillLen)), noColor);
     const shareStr = `${(share * 100).toFixed(0)}%`.padStart(shareWidth);
