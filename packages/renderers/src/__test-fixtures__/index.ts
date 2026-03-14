@@ -217,6 +217,10 @@ export function createMoreStats(overrides: Partial<MoreStats> = {}): MoreStats {
         name: 'project-alpha',
         tokens: 33000,
       },
+      projectBreakdown: [
+        { name: 'project-alpha', tokens: 33000 },
+        { name: 'project-beta', tokens: 15000 },
+      ],
     },
     compare: null,
     ...overrides,
