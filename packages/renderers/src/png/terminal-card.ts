@@ -363,28 +363,56 @@ function renderHourOfDayChart(
     null as (typeof hourOfDay)[number] | null,
   );
 
+  // Vertical gradient for bars: fades from transparent at bottom to accent at top
+  const hodGradId = 'hod-bar-grad';
+
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
+    // Bar gradient definition (bottom → top)
+    `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
+    `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.15"/>` +
+    `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
+    `</linearGradient></defs>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
     )}</text>`,
+    // Subtle baseline
+    `<line x1="${barAreaX}" y1="${baselineY}" x2="${barAreaX + barAreaWidth}" y2="${baselineY}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   ];
 
   hourOfDay.forEach((entry, index) => {
-    const barHeight = maxTokens > 0 ? Math.max(4, (entry.tokens / maxTokens) * innerHeight) : 4;
+    const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
+    const barHeight = maxTokens > 0 ? Math.max(4, ratio * innerHeight) : 4;
     const barX = barAreaX + index * (barWidth + barGap);
     const barY = baselineY - barHeight;
+    const isPeak = busiest !== null && entry.hour === busiest.hour && entry.tokens > 0;
+
+    // Glow behind peak bar
+    if (isPeak) {
+      bars.push(
+        `<rect x="${barX - 2}" y="${barY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(cardAccent)}" opacity="0.15" filter="url(#peakGlow)"/>`,
+      );
+    }
 
     bars.push(
-      `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="${escapeXml(cardAccent)}" opacity="${0.25 + (maxTokens > 0 ? entry.tokens / maxTokens : 0) * 0.75}"/>`,
+      `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.3 + ratio * 0.7}"/>`,
     );
   });
 
-  [0, 6, 12, 18, 23].forEach((hour) => {
+  // Glow filter for peak bar
+  bars.push(
+    `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
+    `<feGaussianBlur stdDeviation="4" result="blur"/>` +
+    `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+    `</filter></defs>`,
+  );
+
+  // Hour labels — show every 3 hours for cleaner look
+  [0, 3, 6, 9, 12, 15, 18, 21].forEach((hour) => {
     const labelX = barAreaX + hour * (barWidth + barGap) + barWidth / 2;
     bars.push(
-      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
+      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.labelFg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
         hour.toString().padStart(2, '0'),
       )}</text>`,
     );
@@ -644,14 +672,17 @@ export function renderTerminalCardSvg(
       `<text x="${pad + rankWidth}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(model.model)}</text>`,
     );
 
+    // Bar track — near-black so it almost disappears into the bg
+    const trackColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(theme.barTrack)}"/>`,
+      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(trackColor)}"/>`,
     );
 
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
+    const multiProviderFill = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.15)';
     const barFill = providers.length === 1
       ? `url(#${escapeXml(gradId)})`
-      : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.22)');
+      : multiProviderFill;
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
       `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
