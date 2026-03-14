@@ -1,4 +1,6 @@
 import type {
+  AggregatedStats,
+  CompareDeltas,
   DateRange,
   MoreStats,
   ProviderData,
@@ -302,6 +304,8 @@ export function buildMoreStats(
   compare: {
     previousRange: DateRange;
     previousProviders: ProviderData[];
+    previousStats: AggregatedStats;
+    deltas: CompareDeltas;
   } | null = null,
 ): MoreStats {
   const events = collectEvents(providers);
@@ -315,6 +319,8 @@ export function buildMoreStats(
     compare: compare
       ? {
           previousRange: compare.previousRange,
+          previousStats: compare.previousStats,
+          deltas: compare.deltas,
           modelMixShift: computeModelMixShift(providers, compare.previousProviders),
         }
       : null,

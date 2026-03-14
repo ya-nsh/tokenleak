@@ -8,6 +8,8 @@ export type { LiveServerOptions } from './live/live-server';
 export {
   renderTabBar,
   renderOverviewView,
+  renderCompareView,
+  renderProviderView,
   renderDowView,
   renderTodView,
   renderSessionView,

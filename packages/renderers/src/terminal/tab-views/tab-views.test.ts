@@ -8,6 +8,8 @@ import {
 } from '../../__test-fixtures__';
 import { renderTabBar } from './tab-bar';
 import { renderOverviewView } from './overview-view';
+import { renderCompareView } from './compare-view';
+import { renderProviderView } from './provider-view';
 import { renderDowView } from './dow-view';
 import { renderTodView } from './tod-view';
 import { renderSessionView } from './session-view';
@@ -20,6 +22,8 @@ describe('renderTabBar', () => {
     const result = renderTabBar('30d', 'overview', 120, false);
     expect(result).toContain('30d');
     expect(result).toContain('overview');
+    expect(result).toContain('delta');
+    expect(result).toContain('provider');
     expect(result).toContain('sess');
     expect(result).toContain('scroll');
   });
@@ -43,6 +47,56 @@ describe('renderOverviewView', () => {
     const options = createRenderOptions({ format: 'terminal', width: 80, noColor: true });
     const result = renderOverviewView(output, options);
     expect(result).toContain('Tokenleak');
+  });
+});
+
+describe('renderCompareView', () => {
+  it('renders compare metrics and model mix shift', () => {
+    const output = createOutput({
+      more: createMoreStats({
+        compare: {
+          previousRange: { since: '2025-12-01', until: '2025-12-31' },
+          previousStats: createPopulatedStats({
+            totalTokens: 70000,
+            totalCost: 2.5,
+            activeDays: 20,
+            currentStreak: 3,
+            averageDailyTokens: 1800,
+            cacheHitRate: 0.28,
+          }),
+          deltas: {
+            tokens: 30000,
+            cost: 1.5,
+            streak: 2,
+            activeDays: 10,
+            averageDailyTokens: 700,
+            cacheHitRate: 0.14,
+          },
+          modelMixShift: [
+            {
+              model: 'claude-3-opus',
+              currentShare: 0.5,
+              previousShare: 0.34,
+              deltaShare: 0.16,
+              currentTokens: 50000,
+              previousTokens: 24000,
+            },
+          ],
+        },
+      }),
+    });
+    const result = renderCompareView(output, 96, true);
+
+    expect(result).toContain('Compare');
+    expect(result).toContain('Model Mix Shift');
+    expect(result).toContain('claude-3-opus');
+    expect(result).toContain('Total Tokens');
+  });
+
+  it('shows an empty state without compare data', () => {
+    const output = createOutput({ more: createMoreStats({ compare: null }) });
+    const result = renderCompareView(output, 80, true);
+    expect(result).toContain('No compare data available');
   });
 });
 
@@ -222,5 +276,32 @@ describe('renderCwdView', () => {
     const output = createOutput({ more: createMoreStats() });
     const result = renderCwdView(output, 80, true);
     expect(stripAnsi(result)).toBe(result);
+  });
+});
+
+describe('renderProviderView', () => {
+  it('renders provider totals and last active dates', () => {
+    const output = createOutput({
+      providers: [
+        createOutput().providers[0]!,
+        {
+          ...createOutput().providers[0]!,
+          provider: 'codex',
+          displayName: 'Codex',
+        },
+      ],
+    });
+    const result = renderProviderView(output, 96, true);
+
+    expect(result).toContain('Providers');
+    expect(result).toContain('Claude Code');
+    expect(result).toContain('Codex');
+    expect(result).toContain('last active');
+  });
+
+  it('handles no provider activity', () => {
+    const output = createOutput({ providers: [] });
+    const result = renderProviderView(output, 80, true);
+    expect(result).toContain('No provider activity');
   });
 });

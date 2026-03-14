@@ -2,13 +2,15 @@ import { bold, bold256, dim, inverse256 } from '../colors';
 import { truncateVisible } from '../layout';
 
 export type TimeRange = '7d' | '30d' | '90d' | '365d';
-export type MetricTab = 'overview' | 'sess' | 'tok' | 'model' | 'cwd' | 'dow' | 'tod';
+export type MetricTab = 'overview' | 'delta' | 'provider' | 'sess' | 'tok' | 'model' | 'cwd' | 'dow' | 'tod';
 
 export const TIME_RANGES: TimeRange[] = ['7d', '30d', '90d', '365d'];
-export const METRIC_TABS: MetricTab[] = ['overview', 'sess', 'tok', 'model', 'cwd', 'dow', 'tod'];
+export const METRIC_TABS: MetricTab[] = ['overview', 'delta', 'provider', 'sess', 'tok', 'model', 'cwd', 'dow', 'tod'];
 
 const TAB_LABELS: Record<MetricTab, string> = {
   overview: 'overview',
+  delta: 'delta',
+  provider: 'provider',
   sess: 'sess',
   tok: 'tok',
   model: 'model',
@@ -46,7 +48,7 @@ export function renderTabBar(
   const hints = [
     `${bold256('←/→', HINT_COLOR, noColor)} range`,
     `${bold256('tab', HINT_COLOR, noColor)} metric`,
-    `${bold256('1-7', HINT_COLOR, noColor)} jump`,
+    `${bold256('1-9', HINT_COLOR, noColor)} jump`,
     `${bold256('↑/↓', HINT_COLOR, noColor)} scroll`,
     `${bold256('q', HINT_COLOR, noColor)} close`,
   ];

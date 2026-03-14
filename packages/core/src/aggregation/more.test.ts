@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { buildMoreStats, computeModelMixShift } from './more';
+import { aggregate, buildCompareOutput, mergeProviderData } from '../index';
 import type { ProviderData, UsageEvent, ProjectSummary } from '../types';
 
 function createEvents(provider: string = 'claude-code'): UsageEvent[] {
@@ -179,6 +180,11 @@ describe('buildMoreStats', () => {
       {
         previousRange: { since: '2026-02-01', until: '2026-02-14' },
         previousProviders: [previous],
+        previousStats: aggregate(mergeProviderData([previous]), '2026-02-14'),
+        deltas: buildCompareOutput(
+          { range: { since: '2026-03-01', until: '2026-03-14' }, stats: aggregate(mergeProviderData([current]), '2026-03-14') },
+          { range: { since: '2026-02-01', until: '2026-02-14' }, stats: aggregate(mergeProviderData([previous]), '2026-02-14') },
+        ).deltas,
       },
     );
 

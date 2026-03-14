@@ -2,6 +2,8 @@ export { renderTabBar } from './tab-bar';
 export type { TimeRange, MetricTab } from './tab-bar';
 export { TIME_RANGES, METRIC_TABS } from './tab-bar';
 export { renderOverviewView } from './overview-view';
+export { renderCompareView } from './compare-view';
+export { renderProviderView } from './provider-view';
 export { renderDowView } from './dow-view';
 export { renderTodView } from './tod-view';
 export { renderSessionView } from './session-view';
