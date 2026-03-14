@@ -1,11 +1,33 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { resolveConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run } from './cli';
+import { buildInteractiveSummary, resolveConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
-import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
+import { buildCliArgTokens, buildCliPreview } from './flags';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clipOutputLines } from './interactive';
+import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+const REGISTRY_FIXTURES_DIR = join(import.meta.dir, '..', '..', 'registry', 'src', '__fixtures__');
+
+function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => void } {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cli-fixtures-'));
+  const claudeConfigDir = join(fixtureRoot, 'claude-config');
+  const codexHome = join(fixtureRoot, 'codex-home');
+
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), { recursive: true });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), { recursive: true });
+
+  return {
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+      CODEX_HOME: codexHome,
+    },
+    cleanup: () => rmSync(fixtureRoot, { recursive: true, force: true }),
+  };
+}
 
 // ─── inferFormatFromPath ────────────────────────────────────────────────
 
@@ -40,6 +62,112 @@ describe('normalizeCliArgv', () => {
   test('normalizes kebab-case flags while preserving provider values', () => {
     const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--live-server']);
     expect(argv).toEqual(['--provider', 'claude, codex', '--liveServer']);
+  });
+});
+
+describe('interactive launcher', () => {
+  test('starts only for bare tokenleak in a TTY', () => {
+    expect(shouldStartInteractiveCli([], true, true)).toBe(true);
+    expect(shouldStartInteractiveCli(['--help'], true, true)).toBe(false);
+    expect(shouldStartInteractiveCli([], false, true)).toBe(false);
+    expect(shouldStartInteractiveCli([], true, false)).toBe(false);
+  });
+
+  test('flag panel includes key interactive flags', () => {
+    expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json');
+    expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
+    expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
+  });
+});
+
+describe('flag serialization', () => {
+  test('buildCliArgTokens serializes booleans and values in CLI order', () => {
+    expect(buildCliArgTokens({
+      format: 'png',
+      output: 'card.png',
+      openCode: true,
+      noColor: true,
+    })).toEqual(['--format', 'png', '--output', 'card.png', '--open-code', '--no-color']);
+  });
+
+  test('buildCliPreview includes the tokenleak executable prefix', () => {
+    expect(buildCliPreview({ format: 'json', output: 'out.json' })).toBe(
+      'tokenleak --format json --output out.json',
+    );
+    expect(buildCliPreview({})).toBe('tokenleak');
+  });
+});
+
+describe('interactive helpers', () => {
+  test('finalizeCliArgs forces --more for image compare flows', () => {
+    expect(finalizeCliArgs({ format: 'png', compare: 'auto' })).toMatchObject({
+      format: 'png',
+      compare: 'auto',
+      more: true,
+    });
+  });
+
+  test('finalizeCliArgs adds a default output when --open is requested for JSON', () => {
+    expect(finalizeCliArgs({ format: 'json', open: true })).toMatchObject({
+      format: 'json',
+      open: true,
+      output: 'tokenleak.json',
+    });
+  });
+
+  test('stripAnsi removes ANSI escape sequences', () => {
+    expect(stripAnsi('\x1b[32mhello\x1b[0m')).toBe('hello');
+  });
+
+  test('visibleLength counts only printable characters', () => {
+    expect(visibleLength('\x1b[31mred\x1b[0m')).toBe(3);
+  });
+
+  test('padVisible pads up to the requested width', () => {
+    expect(padVisible('abc', 5)).toBe('abc  ');
+  });
+
+  test('truncateVisible preserves ANSI-wrapped content when truncating', () => {
+    expect(truncateVisible('\x1b[32mhello-world\x1b[0m', 8)).toContain('\x1b[32m');
+    expect(stripAnsi(truncateVisible('\x1b[32mhello-world\x1b[0m', 8))).toBe('hello...');
+  });
+
+  test('clipOutputLines keeps lines under the limit unchanged', () => {
+    expect(clipOutputLines(['a', 'b'], 3)).toEqual(['a', 'b']);
+  });
+
+  test('clipOutputLines appends an overflow indicator when truncated', () => {
+    const clipped = clipOutputLines(['a', 'b', 'c', 'd'], 3);
+    expect(clipped).toHaveLength(3);
+    expect(stripAnsi(clipped[2]!)).toContain('more lines hidden');
+  });
+});
+
+describe('interactive summaries', () => {
+  test('summarizes successful file output commands', () => {
+    expect(buildInteractiveSummary({ format: 'svg', output: 'card.svg' }, true, 0)).toBe(
+      'SVG written to card.svg.',
+    );
+  });
+
+  test('summarizes list provider runs', () => {
+    expect(buildInteractiveSummary({ listProviders: true }, true, 0)).toBe('Provider registry loaded.');
+  });
+
+  test('summarizes live server runs', () => {
+    expect(buildInteractiveSummary({ liveServer: true }, true, 0)).toBe('Live dashboard stopped.');
+  });
+
+  test('summarizes compare runs', () => {
+    expect(buildInteractiveSummary({ compare: 'auto' }, true, 0)).toBe('Compare report generated.');
+  });
+
+  test('summarizes terminal dashboard runs', () => {
+    expect(buildInteractiveSummary({}, true, 0)).toBe('Terminal dashboard generated.');
+  });
+
+  test('summarizes failures using the exit code', () => {
+    expect(buildInteractiveSummary({}, false, 130)).toBe('Command exited with code 130.');
   });
 });
 
@@ -308,6 +436,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--open-code');
     expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('--more');
+    expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
 
@@ -362,15 +491,22 @@ describe('CLI invocation', () => {
   });
 
   test('--provider tolerates spaces after commas', async () => {
-    const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
+    const { env, cleanup } = createProviderFixtureEnv();
 
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain('"provider": "claude-code"');
-    expect(stdout).toContain('"provider": "codex"');
+    try {
+      const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"provider": "claude-code"');
+      expect(stdout).toContain('"provider": "codex"');
+    } finally {
+      cleanup();
+    }
   });
 });
