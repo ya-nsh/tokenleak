@@ -342,6 +342,25 @@ function renderMetricCard(
   return parts.join('\n');
 }
 
+/**
+ * Build per-provider hour-of-day buckets from raw events.
+ */
+function buildProviderHourBuckets(
+  providers: ProviderData[],
+): Array<{ provider: string; color: string; hours: number[] }> {
+  return providers.map((p) => {
+    const hours = new Array<number>(24).fill(0);
+    for (const event of p.events ?? []) {
+      const date = new Date(event.timestamp);
+      if (!Number.isNaN(date.getTime())) {
+        const h = date.getUTCHours();
+        hours[h] += event.totalTokens;
+      }
+    }
+    return { provider: p.provider, color: p.colors.primary, hours };
+  });
+}
+
 function renderHourOfDayChart(
   x: number,
   y: number,
@@ -349,7 +368,7 @@ function renderHourOfDayChart(
   hourOfDay: NonNullable<TokenleakOutput['more']>['hourOfDay'],
   theme: CardTheme,
   cardAccent: string,
-  barAccentColor: string,
+  providers: ProviderData[],
 ): { svg: string; height: number } {
   const chartHeight = 140;
   const innerHeight = 72;
@@ -364,16 +383,11 @@ function renderHourOfDayChart(
     null as (typeof hourOfDay)[number] | null,
   );
 
-  // Vertical gradient for bars: fades from transparent at bottom to accent at top
-  const hodGradId = 'hod-bar-grad';
+  const isMulti = providers.length > 1;
+  const providerBuckets = isMulti ? buildProviderHourBuckets(providers) : [];
 
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    // Bar gradient definition (bottom → top)
-    `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
-    `<stop offset="0%" stop-color="${escapeXml(barAccentColor)}" stop-opacity="0.15"/>` +
-    `<stop offset="100%" stop-color="${escapeXml(barAccentColor)}" stop-opacity="1"/>` +
-    `</linearGradient></defs>`,
     `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
     `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
@@ -382,32 +396,64 @@ function renderHourOfDayChart(
     `<line x1="${barAreaX}" y1="${baselineY}" x2="${barAreaX + barAreaWidth}" y2="${baselineY}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   ];
 
-  hourOfDay.forEach((entry, index) => {
-    const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
-    const barHeight = maxTokens > 0 ? Math.max(4, ratio * innerHeight) : 4;
-    const barX = barAreaX + index * (barWidth + barGap);
-    const barY = baselineY - barHeight;
-    const isPeak = busiest !== null && entry.hour === busiest.hour && entry.tokens > 0;
+  if (isMulti) {
+    // Stacked bars — each provider gets its own colored segment
+    hourOfDay.forEach((entry, index) => {
+      if (entry.tokens <= 0) return;
+      const totalBarHeight = Math.max(4, (entry.tokens / maxTokens) * innerHeight);
+      const colX = barAreaX + index * (barWidth + barGap);
+      let offsetY = 0;
 
-    // Glow behind peak bar
-    if (isPeak) {
+      for (const bucket of providerBuckets) {
+        const tokens = bucket.hours[index] ?? 0;
+        if (tokens <= 0) continue;
+        const segHeight = (tokens / entry.tokens) * totalBarHeight;
+        const segY = baselineY - offsetY - segHeight;
+        bars.push(
+          `<rect x="${colX}" y="${segY}" width="${barWidth}" height="${segHeight}" fill="${escapeXml(bucket.color)}" opacity="0.85"/>`,
+        );
+        offsetY += segHeight;
+      }
+      // Round the top of the stacked bar
+      const topY = baselineY - totalBarHeight;
       bars.push(
-        `<rect x="${barX - 2}" y="${barY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(barAccentColor)}" opacity="0.15" filter="url(#peakGlow)"/>`,
+        `<rect x="${colX}" y="${topY}" width="${barWidth}" height="${Math.min(6, totalBarHeight)}" rx="3" fill="${escapeXml(providerBuckets[0]?.color ?? cardAccent)}" opacity="0"/>`,
       );
-    }
-
+    });
+  } else {
+    // Single provider — gradient bars with peak glow
+    const hodGradId = 'hod-bar-grad';
     bars.push(
-      `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.3 + ratio * 0.7}"/>`,
+      `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="0.15"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
+      `</linearGradient></defs>`,
     );
-  });
+    bars.push(
+      `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
+      `<feGaussianBlur stdDeviation="4" result="blur"/>` +
+      `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+      `</filter></defs>`,
+    );
 
-  // Glow filter for peak bar
-  bars.push(
-    `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
-    `<feGaussianBlur stdDeviation="4" result="blur"/>` +
-    `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
-    `</filter></defs>`,
-  );
+    hourOfDay.forEach((entry, index) => {
+      const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
+      const barHeight = maxTokens > 0 ? Math.max(4, ratio * innerHeight) : 4;
+      const colX = barAreaX + index * (barWidth + barGap);
+      const colY = baselineY - barHeight;
+      const isPeak = busiest !== null && entry.hour === busiest.hour && entry.tokens > 0;
+
+      if (isPeak) {
+        bars.push(
+          `<rect x="${colX - 2}" y="${colY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(cardAccent)}" opacity="0.15" filter="url(#peakGlow)"/>`,
+        );
+      }
+
+      bars.push(
+        `<rect x="${colX}" y="${colY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.3 + ratio * 0.7}"/>`,
+      );
+    });
+  }
 
   // Hour labels — show every 3 hours for cleaner look
   [0, 3, 6, 9, 12, 15, 18, 21].forEach((hour) => {
@@ -483,10 +529,9 @@ export function renderTerminalCardSvg(
 
   // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
-  // For multi-provider: bars/charts use a dark neutral fill instead of the colored accent
-  const isMultiProvider = providers.length > 1;
-  const barAccent = isMultiProvider
-    ? (isDark ? '#1e1e24' : '#d4d4d8')
+  // For multi-provider top model bars: pure black fill
+  const barAccent = providers.length > 1
+    ? (isDark ? '#000000' : '#d4d4d8')
     : cardAccent;
 
   // Pre-compute all provider heatmaps to determine max width
@@ -854,7 +899,7 @@ export function renderTerminalCardSvg(
       more.hourOfDay,
       theme,
       cardAccent,
-      barAccent,
+      providers,
     );
     sections.push(hourChart.svg);
     y += hourChart.height + 16;
