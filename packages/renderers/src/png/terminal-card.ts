@@ -35,6 +35,7 @@ interface CardTheme {
   bg: string;
   fg: string;
   muted: string;
+  labelFg: string;
   border: string;
   accent: string;
   heatmapEmpty: string;
@@ -46,19 +47,21 @@ function getCardTheme(mode: 'dark' | 'light'): CardTheme {
   if (mode === 'dark') {
     return {
       bg: '#09090b',
-      fg: '#ffffff',
-      muted: '#52525b',
-      border: 'rgba(255,255,255,0.06)',
-      accent: '#10b981',
-      heatmapEmpty: '#141418',
-      barTrack: '#18181b',
-      titlebarBorder: 'rgba(255,255,255,0.06)',
+      fg: '#f0f0f0',
+      muted: '#6b7280',
+      labelFg: '#b0b8c4',
+      border: 'rgba(255,255,255,0.08)',
+      accent: '#34d399',
+      heatmapEmpty: '#1a1a22',
+      barTrack: '#151520',
+      titlebarBorder: 'rgba(255,255,255,0.08)',
     };
   }
   return {
     bg: '#fafafa',
     fg: '#18181b',
     muted: '#a1a1aa',
+    labelFg: '#71717a',
     border: 'rgba(0,0,0,0.08)',
     accent: '#059669',
     heatmapEmpty: '#e4e4e7',
@@ -81,7 +84,7 @@ function buildHeatmapScale(
 
   // For dark theme: levels go from very dim to bright
   // For light theme: levels go from very light to saturated
-  const opacities = isDark ? [0.15, 0.35, 0.6, 1.0] : [0.2, 0.4, 0.65, 1.0];
+  const opacities = isDark ? [0.25, 0.5, 0.75, 1.0] : [0.2, 0.4, 0.65, 1.0];
 
   return [
     'transparent',
@@ -287,6 +290,24 @@ function renderProviderHeatmap(
   return { svg, gridWidth, height };
 }
 
+function renderSectionHeader(
+  x: number,
+  y: number,
+  title: string,
+  theme: CardTheme,
+  cardAccent: string,
+): string {
+  const parts: string[] = [];
+  // Accent bar before header
+  parts.push(
+    `<rect x="${x}" y="${y - 8}" width="3" height="10" rx="1.5" fill="${escapeXml(cardAccent)}" opacity="0.6"/>`,
+  );
+  parts.push(
+    `<text x="${x + 12}" y="${y}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.8">${escapeXml(title)}</text>`,
+  );
+  return parts.join('\n');
+}
+
 function renderMetricCard(
   x: number,
   y: number,
@@ -299,17 +320,19 @@ function renderMetricCard(
   const parts: string[] = [];
   const height = 38 + lines.length * 22;
 
+  // Card background
   parts.push(
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   );
+  // Card title
   parts.push(
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">${escapeXml(title)}</text>`,
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">${escapeXml(title)}</text>`,
   );
 
   lines.forEach((line, index) => {
     const lineY = y + 48 + index * 22;
     parts.push(
-      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(line.label)}</text>`,
+      `<text x="${x + 18}" y="${lineY}" fill="${escapeXml(theme.fg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(line.label)}</text>`,
     );
     parts.push(
       `<text x="${x + width - 18}" y="${lineY}" fill="${escapeXml(line.accent ? cardAccent : theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" text-anchor="end">${escapeXml(line.value)}</text>`,
@@ -319,6 +342,25 @@ function renderMetricCard(
   return parts.join('\n');
 }
 
+/**
+ * Build per-provider hour-of-day buckets from raw events.
+ */
+function buildProviderHourBuckets(
+  providers: ProviderData[],
+): Array<{ provider: string; color: string; hours: number[] }> {
+  return providers.map((p) => {
+    const hours = new Array<number>(24).fill(0);
+    for (const event of p.events ?? []) {
+      const date = new Date(event.timestamp);
+      if (!Number.isNaN(date.getTime())) {
+        const h = date.getUTCHours();
+        hours[h] += event.totalTokens;
+      }
+    }
+    return { provider: p.provider, color: p.colors.primary, hours };
+  });
+}
+
 function renderHourOfDayChart(
   x: number,
   y: number,
@@ -326,6 +368,8 @@ function renderHourOfDayChart(
   hourOfDay: NonNullable<TokenleakOutput['more']>['hourOfDay'],
   theme: CardTheme,
   cardAccent: string,
+  providers: ProviderData[],
+  isDark: boolean,
 ): { svg: string; height: number } {
   const chartHeight = 140;
   const innerHeight = 72;
@@ -340,28 +384,133 @@ function renderHourOfDayChart(
     null as (typeof hourOfDay)[number] | null,
   );
 
+  const isMulti = providers.length > 1;
+  const providerBuckets = isMulti ? buildProviderHourBuckets(providers) : [];
+
+  // Build inline legend for multi-provider (placed next to title)
+  let legendSvg = '';
+  if (isMulti && providerBuckets.length > 0) {
+    const titleWidth = 105; // approx width of "HOUR OF DAY" text
+    let legendX = x + 18 + titleWidth + 12;
+    const legendY = y + 22;
+    for (const bucket of providerBuckets) {
+      const displayName = providers.find((p) => p.provider === bucket.provider)?.displayName ?? bucket.provider;
+      legendSvg +=
+        `<rect x="${legendX}" y="${legendY - 8}" width="8" height="8" rx="2" fill="${escapeXml(bucket.color)}" opacity="0.85"/>` +
+        `<text x="${legendX + 12}" y="${legendY - 1}" fill="${escapeXml(theme.fg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600">${escapeXml(displayName)}</text>`;
+      legendX += 12 + displayName.length * 5.5 + 16;
+    }
+  }
+
   const bars: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${chartHeight}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">HOUR OF DAY</text>`,
-    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">HOUR OF DAY</text>`,
+    legendSvg,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       busiest ? `${formatHour(busiest.hour)} peak` : 'No session events',
     )}</text>`,
+    // Subtle baseline
+    `<line x1="${barAreaX}" y1="${baselineY}" x2="${barAreaX + barAreaWidth}" y2="${baselineY}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
   ];
 
-  hourOfDay.forEach((entry, index) => {
-    const barHeight = maxTokens > 0 ? Math.max(4, (entry.tokens / maxTokens) * innerHeight) : 4;
-    const barX = barAreaX + index * (barWidth + barGap);
-    const barY = baselineY - barHeight;
+  // Glow filter (shared by both modes)
+  bars.push(
+    `<defs><filter id="peakGlow" x="-50%" y="-50%" width="200%" height="200%">` +
+    `<feGaussianBlur stdDeviation="4" result="blur"/>` +
+    `<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+    `</filter></defs>`,
+  );
 
+  if (isMulti) {
+    // Per-provider vertical gradients: dim at base → vibrant at top
+    const provBaseOpacity = isDark ? '0.45' : '0.3';
+    const provMidOpacity = isDark ? '0.85' : '0.75';
+    for (let bi = 0; bi < providerBuckets.length; bi++) {
+      const gradId = `hod-prov-${bi}`;
+      bars.push(
+        `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
+        `<stop offset="0%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="${provBaseOpacity}"/>` +
+        `<stop offset="60%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="${provMidOpacity}"/>` +
+        `<stop offset="100%" stop-color="${escapeXml(providerBuckets[bi].color)}" stop-opacity="1"/>` +
+        `</linearGradient></defs>`,
+      );
+    }
+
+    // Stacked bars with gradients and rounded top
+    hourOfDay.forEach((entry, index) => {
+      if (entry.tokens <= 0) return;
+      const totalRatio = entry.tokens / maxTokens;
+      const totalBarHeight = Math.max(4, totalRatio * innerHeight);
+      const colX = barAreaX + index * (barWidth + barGap);
+      const isPeak = busiest !== null && entry.hour === busiest.hour;
+
+      // Glow behind peak column
+      if (isPeak) {
+        const topY = baselineY - totalBarHeight;
+        bars.push(
+          `<rect x="${colX - 2}" y="${topY - 2}" width="${barWidth + 4}" height="${totalBarHeight + 4}" rx="5" fill="${escapeXml(providerBuckets[0]?.color ?? cardAccent)}" opacity="0.12" filter="url(#peakGlow)"/>`,
+        );
+      }
+
+      // Clip path for rounded top on the full stacked column
+      const clipId = `hod-clip-${index}`;
+      const topY = baselineY - totalBarHeight;
+      bars.push(
+        `<defs><clipPath id="${escapeXml(clipId)}">` +
+        `<rect x="${colX}" y="${topY}" width="${barWidth}" height="${totalBarHeight}" rx="3"/>` +
+        `</clipPath></defs>`,
+      );
+
+      // Render segments bottom-up inside the clip
+      let offsetY = 0;
+      for (let bi = 0; bi < providerBuckets.length; bi++) {
+        const tokens = providerBuckets[bi].hours[index] ?? 0;
+        if (tokens <= 0) continue;
+        const segHeight = (tokens / entry.tokens) * totalBarHeight;
+        const segY = baselineY - offsetY - segHeight;
+        bars.push(
+          `<rect x="${colX}" y="${segY}" width="${barWidth}" height="${segHeight}" fill="url(#hod-prov-${bi})" clip-path="url(#${escapeXml(clipId)})"/>`,
+        );
+        offsetY += segHeight;
+      }
+    });
+  } else {
+    // Single provider — rich gradient with bright midpoint
+    const hodGradId = 'hod-bar-grad';
+    const hodBaseOpacity = isDark ? '0.25' : '0.1';
+    const hodMidOpacity = isDark ? '0.75' : '0.6';
     bars.push(
-      `<rect x="${barX}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="${escapeXml(cardAccent)}" opacity="${0.25 + (maxTokens > 0 ? entry.tokens / maxTokens : 0) * 0.75}"/>`,
+      `<defs><linearGradient id="${escapeXml(hodGradId)}" x1="0%" y1="100%" x2="0%" y2="0%">` +
+      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}" stop-opacity="${hodBaseOpacity}"/>` +
+      `<stop offset="40%" stop-color="${escapeXml(cardAccent)}" stop-opacity="${hodMidOpacity}"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}" stop-opacity="1"/>` +
+      `</linearGradient></defs>`,
     );
-  });
 
-  [0, 6, 12, 18, 23].forEach((hour) => {
+    hourOfDay.forEach((entry, index) => {
+      const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
+      const barHeight = maxTokens > 0 ? Math.max(4, ratio * innerHeight) : 4;
+      const colX = barAreaX + index * (barWidth + barGap);
+      const colY = baselineY - barHeight;
+      const isPeak = busiest !== null && entry.hour === busiest.hour && entry.tokens > 0;
+
+      if (isPeak) {
+        bars.push(
+          `<rect x="${colX - 2}" y="${colY - 2}" width="${barWidth + 4}" height="${barHeight + 4}" rx="5" fill="${escapeXml(cardAccent)}" opacity="0.15" filter="url(#peakGlow)"/>`,
+        );
+      }
+
+      bars.push(
+        `<rect x="${colX}" y="${colY}" width="${barWidth}" height="${barHeight}" rx="3" fill="url(#${escapeXml(hodGradId)})" opacity="${0.35 + ratio * 0.65}"/>`,
+      );
+    });
+  }
+
+  // Hour labels — show every 3 hours for cleaner look
+  [0, 3, 6, 9, 12, 15, 18, 21].forEach((hour) => {
     const labelX = barAreaX + hour * (barWidth + barGap) + barWidth / 2;
     bars.push(
-      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
+      `<text x="${labelX}" y="${y + 116}" fill="${escapeXml(theme.labelFg)}" font-size="9" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="middle">${escapeXml(
         hour.toString().padStart(2, '0'),
       )}</text>`,
     );
@@ -389,8 +538,8 @@ function renderModelMixShift(
   const height = 38 + rows.length * 24;
   const parts: string[] = [
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="10" fill="${escapeXml(theme.barTrack)}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
-    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
-    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+    `<text x="${x + 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" letter-spacing="1.6">MODEL MIX SHIFT</text>`,
+    `<text x="${x + width - 18}" y="${y + 22}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
       `${more.compare.previousRange.since} → ${more.compare.previousRange.until}`,
     )}</text>`,
   ];
@@ -408,7 +557,7 @@ function renderModelMixShift(
       )}</text>`,
     );
     parts.push(
-      `<text x="${x + width - 110}" y="${lineY}" fill="${escapeXml(theme.muted)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
+      `<text x="${x + width - 110}" y="${lineY}" fill="${escapeXml(theme.labelFg)}" font-size="11" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(
         `${(row.previousShare * 100).toFixed(1)}% → ${(row.currentShare * 100).toFixed(1)}%`,
       )}</text>`,
     );
@@ -431,6 +580,8 @@ export function renderTerminalCardSvg(
 
   // Use the single provider's primary color as the card accent; fall back to theme accent for multi-provider
   const cardAccent = providers.length === 1 ? (providers[0]?.colors.primary ?? theme.accent) : theme.accent;
+  // For multi-provider top model bars: bright cool white in dark, black in light
+  const barAccent = providers.length > 1 ? (isDark ? '#c4d0e0' : '#000000') : cardAccent;
 
   // Pre-compute all provider heatmaps to determine max width
   const providerHeatmaps = providers.map((p) => {
@@ -578,7 +729,7 @@ export function renderTerminalCardSvg(
       sections.push(
         `<text x="${x}" y="${startY}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="1.5">${escapeXml(stat.label)}</text>`,
       );
-      const valueColor = stat.accent ? cardAccent : theme.fg;
+      const valueColor = stat.accent && providers.length === 1 ? cardAccent : theme.fg;
       sections.push(
         `<text x="${x}" y="${startY + 28}" fill="${escapeXml(valueColor)}" font-size="22" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700">${escapeXml(stat.value)}</text>`,
       );
@@ -597,45 +748,49 @@ export function renderTerminalCardSvg(
   );
   y += 28;
 
-  sections.push(
-    `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('TOP MODELS')}</text>`,
-  );
+  sections.push(renderSectionHeader(pad, y, 'TOP MODELS', theme, cardAccent));
   y += 24;
 
   const topModels = stats.topModels.slice(0, 3);
+  const rankWidth = 28;
   const modelNameWidth = MODEL_NAME_WIDTH;
   const barGap = MODEL_BAR_GAP;
   const percentX = cardWidth - pad;
-  const barX = pad + modelNameWidth;
+  const barX = pad + rankWidth + modelNameWidth;
   const barMaxWidth = Math.max(48, percentX - barX - barGap);
 
   for (const [index, model] of topModels.entries()) {
     const barWidth = Math.max(4, (model.percentage / 100) * barMaxWidth);
 
+    // Rank number
     sections.push(
-      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="400">${escapeXml(model.model)}</text>`,
+      `<text x="${pad}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(cardAccent)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="700" opacity="0.7">${escapeXml(String(index + 1))}</text>`,
     );
 
+    // Model name - brighter and bolder
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(theme.barTrack)}"/>`,
+      `<text x="${pad + rankWidth}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500">${escapeXml(model.model)}</text>`,
+    );
+
+    // Bar track — subtle but visible
+    const trackColor = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)';
+    sections.push(
+      `<rect x="${barX}" y="${y}" width="${barMaxWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(trackColor)}"/>`,
     );
 
     const gradId = `grad-${index}-${model.model.replace(/[^a-zA-Z0-9]/g, '')}`;
-    const barFill = providers.length === 1
-      ? `url(#${escapeXml(gradId)})`
-      : (isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.18)');
     sections.push(
       `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="0%">` +
-      `<stop offset="0%" stop-color="${escapeXml(cardAccent)}44"/>` +
-      `<stop offset="100%" stop-color="${escapeXml(cardAccent)}"/>` +
+      `<stop offset="0%" stop-color="${escapeXml(barAccent)}" stop-opacity="${isDark ? '0.45' : '0.27'}"/>` +
+      `<stop offset="100%" stop-color="${escapeXml(barAccent)}" stop-opacity="1"/>` +
       `</linearGradient></defs>`,
     );
     sections.push(
-      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="${escapeXml(barFill)}"/>`,
+      `<rect x="${barX}" y="${y}" width="${barWidth}" height="${MODEL_BAR_HEIGHT}" rx="6" fill="url(#${escapeXml(gradId)})"/>`,
     );
 
     sections.push(
-      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
+      `<text x="${percentX}" y="${y + MODEL_BAR_HEIGHT - 1}" fill="${escapeXml(theme.fg)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" text-anchor="end">${escapeXml(`${model.percentage.toFixed(0)}%`)}</text>`,
     );
 
     y += 32;
@@ -651,9 +806,7 @@ export function renderTerminalCardSvg(
       `<line x1="${pad}" y1="${y}" x2="${cardWidth - pad}" y2="${y}" stroke="${escapeXml(theme.border)}" stroke-width="1"/>`,
     );
     y += 28;
-    sections.push(
-      `<text x="${pad}" y="${y}" fill="${escapeXml(theme.muted)}" font-size="10" font-family="${escapeXml(FONT_FAMILY)}" font-weight="600" letter-spacing="2">${escapeXml('MORE')}</text>`,
-    );
+    sections.push(renderSectionHeader(pad, y, 'MORE', theme, cardAccent));
     y += 24;
 
     const efficiencyLines = [
@@ -795,6 +948,8 @@ export function renderTerminalCardSvg(
       more.hourOfDay,
       theme,
       cardAccent,
+      providers,
+      isDark,
     );
     sections.push(hourChart.svg);
     y += hourChart.height + 16;

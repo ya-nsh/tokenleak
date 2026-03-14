@@ -243,7 +243,7 @@ describe('OpenCodeProvider', () => {
       const data = await provider.load(DEFAULT_RANGE);
 
       expect(data.provider).toBe('open-code');
-      expect(data.displayName).toBe('Open Code');
+      expect(data.displayName).toBe('OpenCode');
       expect(data.daily.length).toBeGreaterThan(0);
       expect(data.totalTokens).toBeGreaterThan(0);
 
@@ -398,7 +398,7 @@ describe('OpenCodeProvider', () => {
     test('has correct name, displayName, and colors', () => {
       const provider = new OpenCodeProvider();
       expect(provider.name).toBe('open-code');
-      expect(provider.displayName).toBe('Open Code');
+      expect(provider.displayName).toBe('OpenCode');
       expect(provider.colors).toEqual({
         primary: '#6366f1',
         secondary: '#a78bfa',
