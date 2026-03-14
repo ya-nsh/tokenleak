@@ -12,7 +12,7 @@ import {
   formatTokens,
 } from './dashboard-model';
 import { renderTerminalHeatmap } from './heatmap';
-import { clampVisible, padVisible, renderColumns, visibleLength } from './layout';
+import { padVisible, renderColumns, truncateVisible, visibleLength } from './layout';
 
 const BOX_H = '\u2500';
 const BOX_V = '\u2502';
@@ -51,13 +51,13 @@ function renderSummary(parts: string[], width: number, noColor: boolean): string
 
   const colored = parts.map((part, index) => colorize(part, index % 2 === 0 ? 'cyan' : 'green', noColor));
   const line = colored.join(colorize('  |  ', 'dim', noColor));
-  return [clampVisible(`  ${line}`, width)];
+  return [truncateVisible(`  ${line}`, width)];
 }
 
 function renderTrend(trend: string, width: number, noColor: boolean): string[] {
   if (!trend) return [];
   return [
-    clampVisible(`  ${colorize('Recent Trend', 'bold', noColor)}  ${colorize(trend, 'green', noColor)}`, width),
+    truncateVisible(`  ${colorize('Recent Trend', 'bold', noColor)}  ${colorize(trend, 'green', noColor)}`, width),
   ];
 }
 
@@ -68,7 +68,7 @@ function renderMetricLine(entry: MetricEntry, width: number, noColor: boolean): 
   const safeWidth = Math.max(12, width);
   const valueWidth = Math.min(Math.max(6, visibleLength(entry.value)), Math.max(6, Math.floor(safeWidth * 0.45)));
   const labelWidth = Math.max(4, safeWidth - valueWidth - gutter);
-  return `${clampVisible(label, labelWidth)}${' '.repeat(gutter)}${padVisible(value, valueWidth)}`;
+  return `${truncateVisible(label, labelWidth)}${' '.repeat(gutter)}${padVisible(value, valueWidth)}`;
 }
 
 function renderMetrics(entries: MetricEntry[], width: number, noColor: boolean): string[] {
@@ -103,8 +103,8 @@ function renderPatternList(
     const fillLength = Math.max(1, Math.round(entry.share * barWidth));
     const fill = colorize(BAR_CHAR.repeat(fillLength), 'green', noColor);
     const track = TRACK_CHAR.repeat(Math.max(0, barWidth - fillLength));
-    const line = `  ${colorize(clampVisible(entry.label, nameWidth).padEnd(nameWidth), 'yellow', noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
-    lines.push(clampVisible(line, width));
+    const line = `  ${colorize(truncateVisible(entry.label, nameWidth).padEnd(nameWidth), 'yellow', noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
+    lines.push(truncateVisible(line, width));
   }
 
   return lines;
@@ -125,11 +125,16 @@ function renderInsights(insights: string[], width: number, noColor: boolean): st
   if (insights.length === 0) return [];
   return [
     renderSectionTitle('Insights', noColor),
-    ...insights.map((insight) => clampVisible(`  ${colorize('*', 'green', noColor)} ${insight}`, width)),
+    ...insights.map((insight) => truncateVisible(`  ${colorize('*', 'green', noColor)} ${insight}`, width)),
   ];
 }
 
-function renderProviderSection(provider: ProviderDashboardModel, width: number, noColor: boolean): string {
+function renderProviderSection(
+  provider: ProviderDashboardModel,
+  width: number,
+  noColor: boolean,
+  showInsights: boolean,
+): string {
   const sections: string[] = [
     boxedHeader(provider.provider.displayName, width, noColor),
     ...renderSummary(provider.summary, width, noColor),
@@ -147,7 +152,7 @@ function renderProviderSection(provider: ProviderDashboardModel, width: number, 
     sections.push('', ...patternLines);
   }
 
-  const insightLines = renderInsights(provider.insights, width, noColor);
+  const insightLines = showInsights ? renderInsights(provider.insights, width, noColor) : [];
   if (insightLines.length > 0) {
     sections.push('', ...insightLines);
   }
@@ -183,7 +188,7 @@ export function renderDashboardModel(model: DashboardModel, options: RenderOptio
     sections.push('');
     sections.push('  No provider activity in the selected range.');
     if (model.inactiveProviders.length > 0) {
-      sections.push(clampVisible(`  Checked: ${model.inactiveProviders.join(', ')}`, width));
+      sections.push(truncateVisible(`  Checked: ${model.inactiveProviders.join(', ')}`, width));
     }
     return sections.join('\n');
   }
@@ -191,15 +196,13 @@ export function renderDashboardModel(model: DashboardModel, options: RenderOptio
   sections.push('', renderOverview(model, width, noColor));
 
   for (const provider of model.activeProviders) {
-    const providerSection = options.showInsights
-      ? renderProviderSection(provider, width, noColor)
-      : renderProviderSection({ ...provider, insights: [] }, width, noColor);
+    const providerSection = renderProviderSection(provider, width, noColor, options.showInsights);
     sections.push('', divider(width), '', providerSection);
   }
 
   if (model.inactiveProviders.length > 0) {
     sections.push('');
-    sections.push(clampVisible(`  No activity in range: ${model.inactiveProviders.join(', ')}`, width));
+    sections.push(truncateVisible(`  No activity in range: ${model.inactiveProviders.join(', ')}`, width));
   }
 
   return sections.join('\n');

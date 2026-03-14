@@ -79,7 +79,7 @@ function createTerminalOptions(overrides: Parameters<typeof createRenderOptions>
 }
 
 function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  return text.replace(/\u001B\[[0-9;?]*[A-Za-z]/g, '');
 }
 
 describe('TerminalRenderer', () => {
@@ -178,6 +178,18 @@ describe('TerminalRenderer', () => {
 
     for (const line of result.split('\n')) {
       expect(stripAnsi(line).length).toBeLessThanOrEqual(96);
+    }
+  });
+
+  it('keeps visible lines within the requested width at 80 columns', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+      createProvider('codex', 'Codex', createDailyUsageSequence(6, '2026-03-02', 2500)),
+    ]);
+    const result = await renderer.render(output, createTerminalOptions({ width: 80, noColor: true }));
+
+    for (const line of result.split('\n')) {
+      expect(stripAnsi(line).length).toBeLessThanOrEqual(80);
     }
   });
 

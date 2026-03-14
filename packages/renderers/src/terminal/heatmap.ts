@@ -78,7 +78,7 @@ export function renderTerminalHeatmap(
     let row = `${label} `.slice(0, DAY_LABEL_WIDTH);
 
     for (const week of displayWeeks) {
-      const cell = week.days[dayIndex]!;
+      const cell = week.days[dayIndex] ?? { level: 0, tokens: 0 };
       const block = [
         HEATMAP_BLOCKS.EMPTY,
         HEATMAP_BLOCKS.LIGHT,

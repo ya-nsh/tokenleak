@@ -15,11 +15,12 @@ export class TerminalRenderer implements IRenderer {
       ...options,
       noColor: options.noColor,
     };
-    const model = buildDashboardModel(output, effectiveOptions);
 
     if (effectiveOptions.width < MIN_COMPACT_WIDTH) {
       return renderOneliner(output, effectiveOptions);
     }
+
+    const model = buildDashboardModel(output, effectiveOptions);
 
     if (model.mode === 'compact') {
       return renderCompactDashboard(model, effectiveOptions);

@@ -1,5 +1,5 @@
 export function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  return text.replace(/\u001B\[[0-9;?]*[A-Za-z]/g, '');
 }
 
 export function visibleLength(text: string): number {
@@ -23,8 +23,8 @@ export function truncateVisible(text: string, width: number): string {
   let sawAnsi = false;
 
   while (index < text.length && visibleCount < limit) {
-    if (text[index] === '\x1b') {
-      const match = text.slice(index).match(/^\x1b\[[0-9;?]*[A-Za-z]/);
+    if (text[index] === '\u001B') {
+      const match = text.slice(index).match(/^\u001B\[[0-9;?]*[A-Za-z]/);
       if (match) {
         result += match[0];
         index += match[0].length;
@@ -38,11 +38,7 @@ export function truncateVisible(text: string, width: number): string {
     visibleCount += 1;
   }
 
-  return sawAnsi ? `${result}…\x1b[0m` : `${result}…`;
-}
-
-export function clampVisible(text: string, width: number): string {
-  return truncateVisible(text, width);
+  return sawAnsi ? `${result}…\u001B[0m` : `${result}…`;
 }
 
 export function renderColumns(
@@ -59,8 +55,8 @@ export function renderColumns(
   const lines: string[] = [];
 
   for (let index = 0; index < rows; index += 1) {
-    const leftLine = clampVisible(left[index] ?? '', leftWidth);
-    const rightLine = clampVisible(right[index] ?? '', rightWidth);
+    const leftLine = truncateVisible(left[index] ?? '', leftWidth);
+    const rightLine = truncateVisible(right[index] ?? '', rightWidth);
     lines.push(`${padVisible(leftLine, leftWidth)}${' '.repeat(gutter)}${rightLine}`);
   }
 

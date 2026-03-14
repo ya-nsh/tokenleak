@@ -69,7 +69,7 @@ function buildRangeLabel(output: TokenleakOutput): string {
 
 function buildSparkline(daily: DailyUsage[], points = 14): string {
   const blocks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
-  if (daily.length === 0) return '';
+  if (daily.length === 0) return '·'.repeat(points);
 
   const values = daily
     .slice()

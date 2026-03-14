@@ -59,7 +59,8 @@ export function renderCompactDashboard(model: DashboardModel, options: RenderOpt
   if (model.activeProviders.length > 0) {
     lines.push(colorize('  Providers', 'bold', noColor));
     for (const provider of model.activeProviders.slice(0, 4)) {
-      const summary = `${provider.provider.displayName} ${provider.metrics[2]?.value ?? ''} ${provider.lastActiveDate ? `| ${provider.lastActiveDate}` : ''}`.trim();
+      const tokensMetric = provider.metrics.find((entry) => entry.label === 'Total Tokens');
+      const summary = `${provider.provider.displayName} ${tokensMetric?.value ?? ''} ${provider.lastActiveDate ? `| ${provider.lastActiveDate}` : ''}`.trim();
       lines.push(truncateVisible(`  ${summary}`, width));
     }
     lines.push('');

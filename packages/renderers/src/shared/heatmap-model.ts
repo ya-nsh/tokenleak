@@ -107,6 +107,7 @@ export function buildHeatmapModel(
       lastMonth = month;
     }
 
+    // The inner loop advances the outer cursor across a full week.
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
       const date = new Date(cursor);
       const dateString = formatDate(date);
