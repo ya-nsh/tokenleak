@@ -2,10 +2,12 @@ import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import type { TimeRange } from '@tokenleak/renderers';
 import { computeDateRange } from './date-range.js';
-import { buildCliPreview } from './flags.js';
+import { buildCliArgTokens, buildCliPreview } from './flags.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export const INTERACTIVE_FLAG_LINES = [
+  '    explain <date>       explain one day of usage',
+  '    focus                rank deep-work sessions',
   '-f, --format <format>   terminal | png | svg | json | wrapped',
   '-t, --theme <theme>     dark | light',
   '-s, --since <date>      YYYY-MM-DD start date',
@@ -36,6 +38,7 @@ type CliArgs = Record<string, unknown>;
 
 export type InteractiveRunRequest = {
   args: CliArgs;
+  argv?: string[];
   preview: string;
   title: string;
   loadingTitle: string;
@@ -57,7 +60,7 @@ type InteractiveCommand =
   | { type: 'exit' };
 
 type MenuOption = {
-  digit: string;
+  shortcut: string;
   title: string;
   description: string;
   preview: string;
@@ -271,7 +274,37 @@ function createRunCommand(args: CliArgs): InteractiveCommand {
     request: {
       args: finalizedArgs,
       preview: buildCliPreview(finalizedArgs),
+      argv: buildCliArgTokens(finalizedArgs),
       ...describeRequest(finalizedArgs),
+    },
+  };
+}
+
+type InteractiveRequestOverrides = Partial<
+  Pick<InteractiveRunRequest, 'title' | 'loadingTitle' | 'loadingDetail' | 'executionMode'>
+>;
+
+function createSubcommandRunCommand(
+  subcommand: string,
+  args: CliArgs,
+  positionalArgs: string[] = [],
+  overrides: InteractiveRequestOverrides = {},
+): InteractiveCommand {
+  const finalizedArgs = finalizeCliArgs(args);
+  const argv = [subcommand, ...positionalArgs, ...buildCliArgTokens(finalizedArgs)];
+  const preview = argv.length === 0 ? 'tokenleak' : `tokenleak ${argv.join(' ')}`;
+
+  return {
+    type: 'run',
+    request: {
+      args: {
+        ...finalizedArgs,
+        subcommand,
+      },
+      argv,
+      preview,
+      ...describeRequest(finalizedArgs),
+      ...overrides,
     },
   };
 }
@@ -280,7 +313,7 @@ function renderMenu(options: MenuOption[], selectedIndex: number): string[] {
   return options.map((option, index) => {
     const isSelected = index === selectedIndex;
     const prefix = isSelected ? color('>', GREEN) : ' ';
-    const number = isSelected ? color(option.digit, WHITE + BOLD) : color(option.digit, YELLOW);
+    const number = isSelected ? color(option.shortcut, WHITE + BOLD) : color(option.shortcut, YELLOW);
     const title = isSelected ? color(option.title, WHITE + BOLD) : color(option.title, WHITE);
     const description = isSelected ? color(option.description, CYAN) : color(option.description, DIM);
     return `${prefix} [${number}] ${title} ${description}`;
@@ -307,7 +340,7 @@ function renderMenuPanel(
     color('Tokenleak Interactive Launcher', WHITE + BOLD),
     `${color(`v${context.version}`, YELLOW)} ${color('interactive command center', CYAN)}`,
     '',
-    color('Arrow keys move. Number keys jump directly. Enter runs the selected action.', DIM),
+    color('Arrow keys move. Shortcut keys jump directly. Enter runs the selected action.', DIM),
     color('Commands run inside this session, so you can keep selecting without leaving tokenleak.', DIM),
     '',
     ...renderMenu(options, selectedIndex),
@@ -1039,6 +1072,77 @@ async function buildComparePreset(): Promise<InteractiveCommand> {
   return createRunCommand(args);
 }
 
+async function buildExplainPreset(): Promise<InteractiveCommand> {
+  const date = await ask('Date to explain (YYYY-MM-DD)');
+  const format = await promptSingleChoice(
+    'Explain Format',
+    'Choose how the explain report should be rendered.',
+    [
+      { value: 'terminal', label: 'Terminal', description: 'Narrative report in the current terminal' },
+      { value: 'json', label: 'JSON', description: 'Structured explain payload' },
+    ],
+  );
+  const providers = await promptProviderSelection();
+  const width = format === 'terminal' ? await promptWidth() : null;
+  const output = await ask('Output file (blank keeps stdout)');
+  const noColor = format === 'terminal' ? await askYesNo('Disable ANSI colors', false) : false;
+
+  const args: CliArgs = {
+    format,
+  };
+  if (width) args['width'] = width;
+  if (output) args['output'] = output;
+  if (noColor) args['noColor'] = true;
+  applySelectedProviders(args, providers);
+
+  return createSubcommandRunCommand(
+    'explain',
+    args,
+    [date],
+    {
+      title: 'Explain Day',
+      loadingTitle: 'Building explain report',
+      loadingDetail: `Analyzing what drove usage on ${date}.`,
+    },
+  );
+}
+
+async function buildFocusPreset(): Promise<InteractiveCommand> {
+  const format = await promptSingleChoice(
+    'Focus Format',
+    'Choose how the focus report should be rendered.',
+    [
+      { value: 'terminal', label: 'Terminal', description: 'Ranked session report in the current terminal' },
+      { value: 'json', label: 'JSON', description: 'Structured focus payload' },
+    ],
+  );
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection();
+  const width = format === 'terminal' ? await promptWidth() : null;
+  const output = await ask('Output file (blank keeps stdout)');
+  const noColor = format === 'terminal' ? await askYesNo('Disable ANSI colors', false) : false;
+
+  const args: CliArgs = {
+    format,
+    ...rangeArgs,
+  };
+  if (width) args['width'] = width;
+  if (output) args['output'] = output;
+  if (noColor) args['noColor'] = true;
+  applySelectedProviders(args, providers);
+
+  return createSubcommandRunCommand(
+    'focus',
+    args,
+    [],
+    {
+      title: 'Focus Sessions',
+      loadingTitle: 'Ranking focus sessions',
+      loadingDetail: 'Finding the deepest work sessions for the selected range.',
+    },
+  );
+}
+
 async function buildLivePreset(): Promise<InteractiveCommand> {
   const theme = await promptTheme();
   const rangeArgs = await promptDateWindow();
@@ -1130,74 +1234,74 @@ async function buildCustomCommand(): Promise<InteractiveCommand> {
 function createMenuOptions(): MenuOption[] {
   return [
     {
-      digit: '1',
+      shortcut: '1',
       title: 'Launch Dashboard',
       description: 'guided terminal view',
       preview: 'tokenleak --days 90',
       select: buildDashboardPreset,
     },
     {
-      digit: '2',
+      shortcut: '2',
       title: 'Export JSON',
       description: 'structured output for scripts',
       preview: 'tokenleak --format json',
       select: buildJsonPreset,
     },
     {
-      digit: '3',
+      shortcut: '3',
       title: 'Export SVG',
       description: 'shareable vector card',
       preview: 'tokenleak --format svg --output tokenleak.svg',
       select: async () => buildImagePreset('svg'),
     },
     {
-      digit: '4',
+      shortcut: '4',
       title: 'Export PNG',
       description: 'social-ready raster image',
       preview: 'tokenleak --format png --output tokenleak.png --more',
       select: async () => buildImagePreset('png'),
     },
     {
-      digit: '5',
+      shortcut: '5',
       title: '\u{1F389} AI Wrapped',
       description: 'your personal AI coding story card',
       preview: 'tokenleak --format wrapped --output tokenleak-wrapped.png --open',
       select: buildWrappedPreset,
     },
     {
-      digit: '6',
+      shortcut: '6',
       title: 'Compare Periods',
       description: 'diff current vs previous usage',
       preview: 'tokenleak --compare auto --format json',
       select: buildComparePreset,
     },
     {
-      digit: '7',
+      shortcut: '7',
       title: 'Start Live Server',
       description: 'browser dashboard on localhost',
       preview: 'tokenleak --live-server --theme dark',
       select: buildLivePreset,
     },
     {
-      digit: '8',
+      shortcut: '8',
+      title: 'Explain Day',
+      description: 'diagnose one day of usage',
+      preview: 'tokenleak explain 2026-03-10',
+      select: buildExplainPreset,
+    },
+    {
+      shortcut: '9',
+      title: 'Focus Sessions',
+      description: 'rank deep-work sessions',
+      preview: 'tokenleak focus --days 30',
+      select: buildFocusPreset,
+    },
+    {
+      shortcut: '0',
       title: 'Build Custom Command',
       description: 'configure flags interactively',
       preview: 'tokenleak --format terminal --days 90',
       select: buildCustomCommand,
-    },
-    {
-      digit: '9',
-      title: 'List Providers',
-      description: 'detect available registries',
-      preview: 'tokenleak --list-providers',
-      select: async () => createRunCommand({ listProviders: true }),
-    },
-    {
-      digit: '0',
-      title: 'Exit',
-      description: 'close the launcher',
-      preview: 'exit',
-      select: async () => ({ type: 'exit' }),
     },
   ];
 }
@@ -1262,15 +1366,9 @@ async function promptForMenuCommand(
 
       const digit = key.sequence?.match(/^[0-9]$/)?.[0];
       if (digit) {
-        const nextIndex = options.findIndex((option) => option.digit === digit);
+        const nextIndex = options.findIndex((option) => option.shortcut === digit);
         if (nextIndex >= 0) {
           state.selectedIndex = nextIndex;
-          if (digit === '8') {
-            showHelp = true;
-            paint(renderHelpOverlay(context.helpText, Math.max(60, (process.stdout.columns ?? 120) - 1)));
-            return;
-          }
-
           resolving = true;
           cleanup();
           try {
@@ -1288,12 +1386,6 @@ async function promptForMenuCommand(
       }
 
       if (key.name === 'return' || key.name === 'enter') {
-        if (options[state.selectedIndex]!.digit === '8') {
-          showHelp = true;
-          paint(renderHelpOverlay(context.helpText, Math.max(60, (process.stdout.columns ?? 120) - 1)));
-          return;
-        }
-
         resolving = true;
         cleanup();
         try {

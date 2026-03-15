@@ -77,6 +77,8 @@ describe('interactive launcher', () => {
   });
 
   test('flag panel includes key interactive flags', () => {
+    expect(INTERACTIVE_FLAG_LINES).toContain('    explain <date>       explain one day of usage');
+    expect(INTERACTIVE_FLAG_LINES).toContain('    focus                rank deep-work sessions');
     expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json | wrapped');
     expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
     expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
@@ -228,6 +230,14 @@ describe('interactive summaries', () => {
 
   test('summarizes compare runs', () => {
     expect(buildInteractiveSummary({ compare: 'auto' }, true, 0)).toBe('Compare report generated.');
+  });
+
+  test('summarizes explain runs', () => {
+    expect(buildInteractiveSummary({ subcommand: 'explain' }, true, 0)).toBe('Explain report generated.');
+  });
+
+  test('summarizes focus runs', () => {
+    expect(buildInteractiveSummary({ subcommand: 'focus' }, true, 0)).toBe('Focus report generated.');
   });
 
   test('summarizes terminal dashboard runs', () => {

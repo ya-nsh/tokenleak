@@ -259,6 +259,14 @@ export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: bo
     return `${format} written to ${outputPath}.`;
   }
 
+  if (cliArgs['subcommand'] === 'explain') {
+    return 'Explain report generated.';
+  }
+
+  if (cliArgs['subcommand'] === 'focus') {
+    return 'Focus report generated.';
+  }
+
   if (cliArgs['listProviders']) {
     return 'Provider registry loaded.';
   }
@@ -293,7 +301,7 @@ async function executeInteractiveCommand(
       };
     }
 
-    const command = [process.execPath, cliPath, ...buildCliArgTokens(request.args)];
+    const command = [process.execPath, cliPath, ...(request.argv ?? buildCliArgTokens(request.args))];
 
     if (request.executionMode === 'inherit') {
       const proc = Bun.spawn(command, {
