@@ -1,6 +1,4 @@
-import { useState, useCallback, useMemo, type ReactNode } from 'react';
-import { useKeyboard } from '@opentui/react';
-import type { KeyEvent } from '@opentui/core';
+import { useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 
 export type DialogEntry = {
   id: number;
@@ -17,18 +15,20 @@ export type UseDialogStackResult = {
 };
 
 /**
- * Modal stack manager — push/pop dialogs with Esc to dismiss top.
+ * Modal stack manager — push/pop dialogs.
+ * Individual dialogs handle their own Escape key via onCancel props
+ * to avoid double-firing with the stack's global handler.
  */
 export function useDialogStack(): UseDialogStackResult {
   const [dialogs, setDialogs] = useState<DialogEntry[]>([]);
-  const [nextId, setNextId] = useState(0);
+  const nextIdRef = useRef(0);
 
   const push = useCallback(
     (render: DialogEntry['render']) => {
-      setDialogs((prev) => [...prev, { id: nextId, render }]);
-      setNextId((prev) => prev + 1);
+      const id = nextIdRef.current++;
+      setDialogs((prev) => [...prev, { id, render }]);
     },
-    [nextId],
+    [],
   );
 
   const pop = useCallback(() => {
@@ -40,13 +40,6 @@ export function useDialogStack(): UseDialogStackResult {
   }, []);
 
   const hasDialogs = dialogs.length > 0;
-
-  useKeyboard((event: KeyEvent) => {
-    if (hasDialogs && event.name === 'escape') {
-      pop();
-      event.preventDefault();
-    }
-  });
 
   const topDialog = useMemo(() => {
     if (dialogs.length === 0) return null;

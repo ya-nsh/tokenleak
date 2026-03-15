@@ -19,6 +19,15 @@ export function computeDateRange(args: {
   days?: number;
 }): DateRange {
   const until = args.until ?? new Date().toISOString().slice(0, 10);
+
+  if (args.until && !isValidDate(args.until)) {
+    throw new Error(`Invalid --until date: "${args.until}". Use YYYY-MM-DD format.`);
+  }
+
+  if (args.since && !isValidDate(args.since)) {
+    throw new Error(`Invalid --since date: "${args.since}". Use YYYY-MM-DD format.`);
+  }
+
   let since: string;
   if (args.since) {
     since = args.since;
@@ -28,6 +37,11 @@ export function computeDateRange(args: {
     d.setDate(d.getDate() - daysBack);
     since = d.toISOString().slice(0, 10);
   }
+
+  if (since > until) {
+    throw new Error(`--since (${since}) must not be after --until (${until}).`);
+  }
+
   return { since, until };
 }
 

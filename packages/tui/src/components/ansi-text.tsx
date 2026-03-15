@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useKeyboard } from '@opentui/react';
 import type { KeyEvent } from '@opentui/core';
 import { clampScrollOffset } from '../menu/utils.js';
@@ -17,14 +17,26 @@ export type AnsiTextProps = {
  */
 export function AnsiText({ content, focused = true, viewportHeight = 30, onScrollChange }: AnsiTextProps) {
   const [scrollOffset, setScrollOffset] = useState(0);
+  const scrollOffsetRef = useRef(0);
   const onScrollChangeRef = useRef(onScrollChange);
   onScrollChangeRef.current = onScrollChange;
 
   const lines = useMemo(() => content.split('\n'), [content]);
 
+  // Reset scroll when content changes (e.g. tab/range switch)
+  useEffect(() => {
+    const clamped = clampScrollOffset(scrollOffsetRef.current, lines.length, viewportHeight);
+    if (clamped !== scrollOffsetRef.current) {
+      scrollOffsetRef.current = clamped;
+      setScrollOffset(clamped);
+      onScrollChangeRef.current?.(clamped, lines.length, viewportHeight);
+    }
+  }, [lines.length, viewportHeight]);
+
   const updateScroll = useCallback(
     (newOffset: number) => {
       const clamped = clampScrollOffset(newOffset, lines.length, viewportHeight);
+      scrollOffsetRef.current = clamped;
       setScrollOffset(clamped);
       onScrollChangeRef.current?.(clamped, lines.length, viewportHeight);
     },
@@ -34,22 +46,23 @@ export function AnsiText({ content, focused = true, viewportHeight = 30, onScrol
   useKeyboard(
     (event: KeyEvent) => {
       if (!focused) return;
+      const current = scrollOffsetRef.current;
 
       switch (event.name) {
         case 'up':
-          updateScroll(scrollOffset - 1);
+          updateScroll(current - 1);
           event.preventDefault();
           break;
         case 'down':
-          updateScroll(scrollOffset + 1);
+          updateScroll(current + 1);
           event.preventDefault();
           break;
         case 'pageup':
-          updateScroll(scrollOffset - viewportHeight);
+          updateScroll(current - viewportHeight);
           event.preventDefault();
           break;
         case 'pagedown':
-          updateScroll(scrollOffset + viewportHeight);
+          updateScroll(current + viewportHeight);
           event.preventDefault();
           break;
         case 'home':

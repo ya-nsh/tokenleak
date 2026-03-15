@@ -2,8 +2,23 @@ import { useState, useCallback, useMemo } from 'react';
 import { useKeyboard } from '@opentui/react';
 import type { KeyEvent } from '@opentui/core';
 import type { SelectOption } from '@opentui/core';
-import type { InteractiveCommand, InteractiveContext } from '../menu/types.js';
-import { getMenuOptionsMeta, INTERACTIVE_FLAG_LINES } from '../menu/options.js';
+import type { InteractiveContext } from '../menu/types.js';
+import {
+  getMenuOptionsMeta,
+  INTERACTIVE_FLAG_LINES,
+  buildDashboardCommand,
+  buildImageCommand,
+  buildWrappedCommand,
+  buildWrappedLiveCommand,
+  buildCompareCommand,
+  buildAdvisorCommand,
+  buildLiveCommand,
+  buildExplainCommand,
+  buildFocusCommand,
+  buildCustomRunCommand,
+  buildJsonCommand,
+} from '../menu/options.js';
+import type { InteractiveCommand } from '../menu/types.js';
 import { THEME } from '../theme.js';
 import { useLayoutMode } from '../hooks/use-layout-mode.js';
 
@@ -12,6 +27,38 @@ export type LauncherProps = {
   onCommand: (command: InteractiveCommand) => void;
   onShowHelp: () => void;
 };
+
+/**
+ * Build a default command for each menu option index.
+ * Uses sensible defaults so the launcher is immediately functional
+ * without a multi-step dialog wizard.
+ */
+function buildDefaultCommandForIndex(index: number): InteractiveCommand {
+  switch (index) {
+    case 0: // Launch Dashboard
+      return buildDashboardCommand({ days: 90 }, [], null, false, false);
+    case 1: // Export (PNG default)
+      return buildImageCommand('png', 'dark', { days: 90 }, [], null, 'tokenleak.png', true, true);
+    case 2: // AI Wrapped
+      return buildWrappedCommand('dark', { days: 365 }, [], 'tokenleak-wrapped.png', true);
+    case 3: // Wrapped Live
+      return buildWrappedLiveCommand({ days: 365 }, []);
+    case 4: // Compare Periods
+      return buildCompareCommand({ days: 90 }, [], 'auto', null);
+    case 5: // Advisor
+      return buildAdvisorCommand('terminal', { days: 90 }, [], null, false);
+    case 6: // Start Live Server
+      return buildLiveCommand('dark', { days: 90 }, [], true);
+    case 7: // Explain Day
+      return buildExplainCommand(new Date().toISOString().slice(0, 10), 'terminal', [], null, null, false);
+    case 8: // Focus Sessions
+      return buildFocusCommand('terminal', { days: 30 }, [], null, null, false);
+    case 9: // Build Custom Command
+      return buildCustomRunCommand({ format: 'terminal', days: 90 });
+    default:
+      return { type: 'exit' };
+  }
+}
 
 export function Launcher({ context, onCommand, onShowHelp }: LauncherProps) {
   const menuMeta = useMemo(() => getMenuOptionsMeta(), []);
@@ -27,18 +74,23 @@ export function Launcher({ context, onCommand, onShowHelp }: LauncherProps) {
     [menuMeta],
   );
 
-  const handleSelect = useCallback(
+  const dispatchSelected = useCallback(
     (index: number) => {
-      setSelectedIndex(index);
-      // Dispatch a placeholder command — the actual select flow will be handled
-      // by the App component which manages the full dialog wizard state
-      onCommand({ type: 'show-help' }); // temporary, overridden below
+      const command = buildDefaultCommandForIndex(index);
+      onCommand(command);
     },
     [onCommand],
   );
 
-  // We need to notify parent which menu index was selected
-  const handleMenuSelect = useCallback(
+  const handleSelect = useCallback(
+    (index: number) => {
+      setSelectedIndex(index);
+      dispatchSelected(index);
+    },
+    [dispatchSelected],
+  );
+
+  const handleMenuChange = useCallback(
     (index: number) => {
       setSelectedIndex(index);
     },
@@ -47,12 +99,12 @@ export function Launcher({ context, onCommand, onShowHelp }: LauncherProps) {
 
   useKeyboard((event: KeyEvent) => {
     // Digit shortcuts
-    const digit = event.name?.match?.(/^[0-9]$/)?.[0] ?? event.sequence?.match?.(/^[0-9]$/)?.[0];
+    const digit = event.sequence?.match?.(/^[0-9]$/)?.[0];
     if (digit) {
       const idx = menuMeta.findIndex((m) => m.shortcut === digit);
       if (idx >= 0) {
         setSelectedIndex(idx);
-        onCommand({ type: 'run', request: { args: {}, preview: menuMeta[idx]!.preview, title: menuMeta[idx]!.title, loadingTitle: '', loadingDetail: '', executionMode: 'capture' } });
+        dispatchSelected(idx);
         event.preventDefault();
       }
       return;
@@ -90,7 +142,6 @@ export function Launcher({ context, onCommand, onShowHelp }: LauncherProps) {
         <box height={1} />
         <select
           options={options}
-          selectedIndex={selectedIndex}
           focused={true}
           wrapSelection={true}
           selectedBackgroundColor={THEME.ACTIVE}
@@ -98,7 +149,7 @@ export function Launcher({ context, onCommand, onShowHelp }: LauncherProps) {
           textColor={THEME.FG}
           descriptionColor={THEME.DIM}
           showDescription={true}
-          onChange={handleMenuSelect}
+          onChange={handleMenuChange}
           onSelect={handleSelect}
         />
         <box height={1} />

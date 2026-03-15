@@ -1,10 +1,9 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useKeyboard } from '@opentui/react';
 import type { KeyEvent } from '@opentui/core';
 import type { TokenleakOutput, RenderOptions, DateRange } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
 import {
-  renderTabBar,
   renderOverviewView,
   renderCompareView,
   renderProviderView,
@@ -97,45 +96,63 @@ export function Dashboard({ providers, options, loadData, onExit }: DashboardPro
   const noColor = options.noColor;
   const noInsights = options.noInsights ?? false;
 
-  const resolveRange = useCallback(
-    (range: TimeRange): DateRange => {
-      if (options.initialRange && range === (options.initialTimeRange ?? '30d')) {
-        return options.initialRange;
-      }
-      return computeRange(range, baseUntil);
-    },
-    [options.initialRange, options.initialTimeRange, baseUntil],
-  );
+  // Stable refs for values used inside the fetcher
+  const resolveRangeRef = useRef((range: TimeRange): DateRange => {
+    if (options.initialRange && range === (options.initialTimeRange ?? '30d')) {
+      return options.initialRange;
+    }
+    return computeRange(range, baseUntil);
+  });
+  resolveRangeRef.current = (range: TimeRange): DateRange => {
+    if (options.initialRange && range === (options.initialTimeRange ?? '30d')) {
+      return options.initialRange;
+    }
+    return computeRange(range, baseUntil);
+  };
+
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+  const providersRef = useRef(providers);
+  providersRef.current = providers;
+  const compareRef = useRef(compare);
+  compareRef.current = compare;
 
   const dataCache = useAsyncData<TimeRange, TokenleakOutput>(
     async (key: TimeRange) => {
-      const range = resolveRange(key);
-      return loadData(providers, range, compare);
+      const range = resolveRangeRef.current(key);
+      return loadDataRef.current(providersRef.current, range, compareRef.current);
     },
     120_000,
   );
 
-  const loadAndRender = useCallback(
-    async (range: TimeRange) => {
-      setLoading(true);
-      try {
-        const output = await dataCache.load(range);
-        setCurrentOutput(output);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [dataCache],
-  );
+  // Stable ref for loadAndRender so the effect always calls the latest version
+  const loadAndRenderRef = useRef(async (range: TimeRange) => {
+    setLoading(true);
+    try {
+      const output = await dataCache.load(range);
+      setCurrentOutput(output);
+    } finally {
+      setLoading(false);
+    }
+  });
+  loadAndRenderRef.current = async (range: TimeRange) => {
+    setLoading(true);
+    try {
+      const output = await dataCache.load(range);
+      setCurrentOutput(output);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void loadAndRender(timeRange);
+    void loadAndRenderRef.current(timeRange);
   }, [timeRange]);
 
   const autoRefresh = useAutoRefresh(
     () => {
       dataCache.invalidate(timeRange);
-      void loadAndRender(timeRange);
+      void loadAndRenderRef.current(timeRange);
     },
     60,
   );

@@ -150,4 +150,16 @@ describe('computeDateRange', () => {
     expect(range.since).toBe('2026-01-01');
     expect(range.until).toBe('2026-03-01');
   });
+
+  test('throws on invalid until date', () => {
+    expect(() => computeDateRange({ until: '2026-13-45' })).toThrow('Invalid --until date');
+  });
+
+  test('throws on invalid since date', () => {
+    expect(() => computeDateRange({ since: 'garbage' })).toThrow('Invalid --since date');
+  });
+
+  test('throws when since is after until', () => {
+    expect(() => computeDateRange({ since: '2026-06-01', until: '2026-01-01' })).toThrow('must not be after');
+  });
 });

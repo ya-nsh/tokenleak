@@ -18,6 +18,9 @@ export type UseAsyncDataResult<K, T> = {
 /**
  * Three-state cache hook (Fresh/Stale/Miss) for async data fetching.
  * Deduplicates in-flight requests for the same key.
+ *
+ * The fetcher is accessed via ref so that `load` has a stable identity
+ * even when the caller passes an inline arrow function.
  */
 export function useAsyncData<K extends string, T>(
   fetcher: (key: K) => Promise<T>,
@@ -25,6 +28,8 @@ export function useAsyncData<K extends string, T>(
 ): UseAsyncDataResult<K, T> {
   const [cache, setCache] = useState<Map<K, AsyncDataEntry<T>>>(new Map());
   const inflightRef = useRef<Map<K, Promise<T>>>(new Map());
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
 
   const get = useCallback(
     (key: K): AsyncDataEntry<T> | null => {
@@ -43,7 +48,7 @@ export function useAsyncData<K extends string, T>(
       const existing = inflightRef.current.get(key);
       if (existing) return existing;
 
-      const promise = fetcher(key)
+      const promise = fetcherRef.current(key)
         .then((data) => {
           const entry: AsyncDataEntry<T> = {
             data,
@@ -64,7 +69,8 @@ export function useAsyncData<K extends string, T>(
       inflightRef.current.set(key, promise);
       return promise;
     },
-    [fetcher],
+    // Stable: no dependency on fetcher (uses ref)
+    [],
   );
 
   const invalidate = useCallback(
