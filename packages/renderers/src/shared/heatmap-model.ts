@@ -5,9 +5,14 @@ const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 export interface HeatmapCell {
   date: string;
   tokens: number;
+  cost: number;
   level: number;
   dayIndex: number;
   weekIndex: number;
+  dominantModelFamily: string | null;
+  dominantModelLabel: string | null;
+  dominantModelShare: number;
+  mixedModelCount: number;
 }
 
 export interface HeatmapWeek {
@@ -37,12 +42,66 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function buildUsageMap(daily: DailyUsage[]): Map<string, number> {
-  const map = new Map<string, number>();
+function buildUsageMap(daily: DailyUsage[]): Map<string, DailyUsage> {
+  const map = new Map<string, DailyUsage>();
   for (const entry of daily) {
-    map.set(entry.date, (map.get(entry.date) ?? 0) + entry.totalTokens);
+    map.set(entry.date, entry);
   }
   return map;
+}
+
+function inferModelFamily(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (normalized.startsWith('claude')) return 'Claude';
+  if (
+    normalized.startsWith('gpt') ||
+    normalized.startsWith('o1') ||
+    normalized.startsWith('o3') ||
+    normalized.startsWith('o4')
+  ) {
+    return 'GPT';
+  }
+  if (normalized.startsWith('gemini')) return 'Gemini';
+  if (normalized.startsWith('llama') || normalized.startsWith('meta-llama')) return 'Llama';
+  if (normalized.startsWith('deepseek')) return 'DeepSeek';
+  if (normalized.startsWith('qwen')) return 'Qwen';
+  return 'Other';
+}
+
+function getDominantModelMeta(entry: DailyUsage | undefined): Pick<
+  HeatmapCell,
+  'dominantModelFamily' | 'dominantModelLabel' | 'dominantModelShare' | 'mixedModelCount'
+> {
+  if (!entry || entry.models.length === 0 || entry.totalTokens <= 0) {
+    return {
+      dominantModelFamily: null,
+      dominantModelLabel: null,
+      dominantModelShare: 0,
+      mixedModelCount: 0,
+    };
+  }
+
+  const ranked = entry.models
+    .filter((model) => model.totalTokens > 0)
+    .slice()
+    .sort((left, right) => right.totalTokens - left.totalTokens);
+  const dominant = ranked[0];
+
+  if (!dominant) {
+    return {
+      dominantModelFamily: null,
+      dominantModelLabel: null,
+      dominantModelShare: 0,
+      mixedModelCount: 0,
+    };
+  }
+
+  return {
+    dominantModelFamily: inferModelFamily(dominant.model),
+    dominantModelLabel: dominant.model,
+    dominantModelShare: dominant.totalTokens / entry.totalTokens,
+    mixedModelCount: ranked.length,
+  };
 }
 
 function computeQuantiles(values: number[]): number[] {
@@ -85,7 +144,7 @@ export function buildHeatmapModel(
   const startDate = alignToSunday(new Date(`${since}T00:00:00Z`));
   const endDate = new Date(`${until}T00:00:00Z`);
   const usageMap = buildUsageMap(daily);
-  const usageValues = Array.from(usageMap.values());
+  const usageValues = Array.from(usageMap.values()).map((entry) => entry.totalTokens);
   const quantiles = computeQuantiles(usageValues);
   const maxTokens = usageValues.reduce((max, value) => (value > max ? value : max), 0);
   const weeks: HeatmapWeek[] = [];
@@ -111,13 +170,18 @@ export function buildHeatmapModel(
     const dayCursor = new Date(cursor);
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
       const dateString = formatDate(dayCursor);
-      const tokens = usageMap.get(dateString) ?? 0;
+      const usageEntry = usageMap.get(dateString);
+      const tokens = usageEntry?.totalTokens ?? 0;
+      const cost = usageEntry?.cost ?? 0;
+      const modelMeta = getDominantModelMeta(usageEntry);
       weekDays.push({
         date: dateString,
         tokens,
+        cost,
         level: getLevel(tokens, quantiles),
         dayIndex,
         weekIndex,
+        ...modelMeta,
       });
       dayCursor.setUTCDate(dayCursor.getUTCDate() + 1);
     }
