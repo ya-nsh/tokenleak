@@ -52,7 +52,7 @@ export type StartTuiOptions = {
 
 /**
  * Launch the OpenTUI-powered interactive CLI.
- * Replaces `startInteractiveCli()` + `startTabbedDashboard()`.
+ * Goes directly into the tabbed dashboard view.
  */
 export async function startTui(options: StartTuiOptions): Promise<void> {
   const renderer = await createCliRenderer({
