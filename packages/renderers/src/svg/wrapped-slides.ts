@@ -6,8 +6,8 @@ import type { SvgTheme } from './theme';
 // ── Constants ────────────────────────────────────────────────────────
 const WIDTH = 1200;
 const INNER_PAD = 80;
-const FONT_FAMILY =
-  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+const DISPLAY_FONT =
+  "'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
 const MONO_FONT =
   "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
 
@@ -18,11 +18,55 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+// ── Per-slide accent colors ──────────────────────────────────────────
+const ACCENT = {
+  cyan: '#00F5FF',
+  green: '#39FF14',
+  coral: '#FF4757',
+  amber: '#FFB347',
+  purple: '#C084FC',
+} as const;
+
+const SLIDE_ACCENTS_DARK = [
+  ACCENT.cyan,    // 1  Title
+  ACCENT.green,   // 2  Big Numbers
+  ACCENT.coral,   // 3  Streak
+  ACCENT.cyan,    // 4  Top Model
+  ACCENT.amber,   // 5  Provider Mix
+  ACCENT.cyan,    // 6  Day of Week
+  ACCENT.purple,  // 7  Time of Day
+  ACCENT.green,   // 8  Cache
+  ACCENT.amber,   // 9  Peak Day
+  ACCENT.purple,  // 10 Achievements
+  ACCENT.cyan,    // 11 Projection
+  ACCENT.cyan,    // 12 Footer (gradient of all)
+] as const;
+
+const SLIDE_ACCENTS_LIGHT = [
+  '#0891B2',  // 1  Title
+  '#16A34A',  // 2  Big Numbers
+  '#DC2626',  // 3  Streak
+  '#0891B2',  // 4  Top Model
+  '#D97706',  // 5  Provider Mix
+  '#0891B2',  // 6  Day of Week
+  '#9333EA',  // 7  Time of Day
+  '#16A34A',  // 8  Cache
+  '#D97706',  // 9  Peak Day
+  '#9333EA',  // 10 Achievements
+  '#0891B2',  // 11 Projection
+  '#0891B2',  // 12 Footer
+] as const;
+
 // ── Theme extension for wrapped ──────────────────────────────────────
 interface WrappedTheme {
   base: SvgTheme;
   mode: 'dark' | 'light';
-  sectionBgs: Array<[string, string]>;
+  bg: string;
+  fg: string;
+  fgMuted: string;
+  fgDim: string;
+  cardBg: string;
+  slideAccents: readonly string[];
   heroAccent: string;
   warmAccent: string;
   coolAccent: string;
@@ -39,55 +83,39 @@ function getWrappedTheme(mode: 'dark' | 'light'): WrappedTheme {
     return {
       base,
       mode,
-      sectionBgs: [
-        ['#120828', '#0a1628'],
-        ['#0a1628', '#0d1b2a'],
-        ['#1a0e00', '#0d1117'],
-        ['#0a1a2e', '#0d1117'],
-        ['#0d1117', '#0f1520'],
-        ['#0a1628', '#0d1117'],
-        ['#180830', '#0d1117'],
-        ['#001a0d', '#0d1117'],
-        ['#1a1500', '#0d1117'],
-        ['#120828', '#0a1628'],
-        ['#0a1628', '#0d1117'],
-        ['#09090b', '#09090b'],
-      ],
-      heroAccent: '#a78bfa',
-      warmAccent: '#f59e0b',
-      coolAccent: '#38bdf8',
-      greenAccent: '#34d399',
-      goldAccent: '#fbbf24',
-      purpleAccent: '#c084fc',
-      narrativeColor: '#cbd5e1',
-      subtitleColor: '#94a3b8',
+      bg: '#0A0A0F',
+      fg: '#F1F5F9',
+      fgMuted: '#94A3B8',
+      fgDim: '#64748B',
+      cardBg: 'rgba(255,255,255,0.06)',
+      slideAccents: SLIDE_ACCENTS_DARK,
+      heroAccent: ACCENT.cyan,
+      warmAccent: ACCENT.coral,
+      coolAccent: ACCENT.cyan,
+      greenAccent: ACCENT.green,
+      goldAccent: ACCENT.amber,
+      purpleAccent: ACCENT.purple,
+      narrativeColor: '#CBD5E1',
+      subtitleColor: '#94A3B8',
     };
   }
   return {
     base,
     mode,
-    sectionBgs: [
-      ['#ede9fe', '#e0e7ff'],
-      ['#e0e7ff', '#eff6ff'],
-      ['#fef3c7', '#fffbeb'],
-      ['#dbeafe', '#eff6ff'],
-      ['#f8fafc', '#f1f5f9'],
-      ['#dbeafe', '#eff6ff'],
-      ['#ede9fe', '#f5f3ff'],
-      ['#d1fae5', '#ecfdf5'],
-      ['#fef9c3', '#fefce8'],
-      ['#ede9fe', '#e0e7ff'],
-      ['#dbeafe', '#eff6ff'],
-      ['#f8fafc', '#f8fafc'],
-    ],
-    heroAccent: '#7c3aed',
-    warmAccent: '#d97706',
-    coolAccent: '#2563eb',
-    greenAccent: '#059669',
-    goldAccent: '#b45309',
-    purpleAccent: '#7c3aed',
+    bg: '#F8F9FC',
+    fg: '#1A1A2E',
+    fgMuted: '#64748B',
+    fgDim: '#94A3B8',
+    cardBg: 'rgba(0,0,0,0.04)',
+    slideAccents: SLIDE_ACCENTS_LIGHT,
+    heroAccent: '#0891B2',
+    warmAccent: '#DC2626',
+    coolAccent: '#0891B2',
+    greenAccent: '#16A34A',
+    goldAccent: '#D97706',
+    purpleAccent: '#9333EA',
     narrativeColor: '#334155',
-    subtitleColor: '#64748b',
+    subtitleColor: '#64748B',
   };
 }
 
@@ -97,7 +125,7 @@ interface SlideResult {
   height: number;
 }
 
-// ── SVG icon shapes (replacing emoji) ────────────────────────────────
+// ── SVG icon shapes ──────────────────────────────────────────────────
 function svgIconFire(x: number, y: number, size: number, color: string): string {
   const s = size / 24;
   return `<g transform="translate(${x},${y}) scale(${s})">` +
@@ -188,7 +216,6 @@ function svgIconSun(x: number, y: number, size: number, color: string): string {
   const cy = y + size / 2;
   const r = size * 0.3;
   let svg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${escapeXml(color)}" opacity="0.85"/>`;
-  // Rays
   for (let i = 0; i < 8; i++) {
     const angle = (i * 45 * Math.PI) / 180;
     const x1 = cx + r * 1.4 * Math.cos(angle);
@@ -209,24 +236,14 @@ function svgIconRocket(x: number, y: number, size: number, color: string): strin
     `</g>`;
 }
 
-// Map icon names to SVG renderers
 type IconName = 'fire' | 'star' | 'circle' | 'diamond' | 'bolt' | 'trophy' |
   'target' | 'mountain' | 'palette' | 'calendar' | 'moon' | 'sun' | 'rocket';
 
 function renderIcon(name: IconName, x: number, y: number, size: number, color: string): string {
   const fns: Record<IconName, (x: number, y: number, s: number, c: string) => string> = {
-    fire: svgIconFire,
-    star: svgIconStar,
-    circle: svgIconCircle,
-    diamond: svgIconDiamond,
-    bolt: svgIconBolt,
-    trophy: svgIconTrophy,
-    target: svgIconTarget,
-    mountain: svgIconMountain,
-    palette: svgIconPalette,
-    calendar: svgIconCalendar,
-    moon: svgIconMoon,
-    sun: svgIconSun,
+    fire: svgIconFire, star: svgIconStar, circle: svgIconCircle, diamond: svgIconDiamond,
+    bolt: svgIconBolt, trophy: svgIconTrophy, target: svgIconTarget, mountain: svgIconMountain,
+    palette: svgIconPalette, calendar: svgIconCalendar, moon: svgIconMoon, sun: svgIconSun,
     rocket: svgIconRocket,
   };
   return fns[name](x, y, size, color);
@@ -294,7 +311,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
     all.push({ icon: 'palette', title: 'Multi-Tool', subtitle: `${providers.length} providers`, color: '#c084fc' });
   }
 
-  // Fallbacks if fewer than 3
   if (all.length < 3) {
     if (all.length < 3 && stats.longestStreak > 7 && !all.some((a) => a.title === 'Streak Master')) {
       all.push({ icon: 'fire', title: 'Streak Builder', subtitle: `${stats.longestStreak} day streak`, color: '#f59e0b' });
@@ -305,7 +321,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
     if (all.length < 3 && stats.activeDays > 0) {
       all.push({ icon: 'star', title: 'Active Coder', subtitle: `${stats.activeDays} active days`, color: '#fbbf24' });
     }
-    // Guaranteed fallback so there's always at least one
     if (all.length < 3 && stats.totalTokens > 0) {
       all.push({ icon: 'bolt', title: 'Token User', subtitle: `${formatNumber(stats.totalTokens)} tokens`, color: '#a78bfa' });
     }
@@ -318,21 +333,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
 }
 
 // ── SVG Helpers ──────────────────────────────────────────────────────
-function sectionBg(
-  y: number,
-  height: number,
-  gradColors: [string, string],
-  gradId: string,
-): string {
-  return [
-    `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="100%">`,
-    `<stop offset="0%" stop-color="${escapeXml(gradColors[0])}"/>`,
-    `<stop offset="100%" stop-color="${escapeXml(gradColors[1])}"/>`,
-    `</linearGradient></defs>`,
-    `<rect x="0" y="${y}" width="${WIDTH}" height="${height}" fill="url(#${escapeXml(gradId)})"/>`,
-  ].join('');
-}
-
 function svgText(
   x: number,
   y: number,
@@ -352,7 +352,7 @@ function svgText(
     `y="${y}"`,
     `fill="${escapeXml(opts.fill ?? '#ffffff')}"`,
     `font-size="${opts.size ?? 14}"`,
-    `font-family="${escapeXml(opts.family ?? FONT_FAMILY)}"`,
+    `font-family="${escapeXml(opts.family ?? DISPLAY_FONT)}"`,
     `font-weight="${opts.weight ?? 400}"`,
   ];
   if (opts.anchor) attrs.push(`text-anchor="${escapeXml(opts.anchor)}"`);
@@ -374,6 +374,16 @@ function roundedRect(
   if (opts.opacity !== undefined) extra.push(`opacity="${opts.opacity}"`);
   if (opts.stroke) extra.push(`stroke="${escapeXml(opts.stroke)}" stroke-width="${opts.strokeWidth ?? 1}"`);
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${escapeXml(fill)}" ${extra.join(' ')}/>`;
+}
+
+function sectionHeader(x: number, y: number, text: string, theme: WrappedTheme): string {
+  return svgText(x, y, text, {
+    fill: theme.fgMuted,
+    size: 13,
+    weight: 700,
+    spacing: 3,
+    family: MONO_FONT,
+  });
 }
 
 // ── SVG arc helpers ──────────────────────────────────────────────────
@@ -403,6 +413,262 @@ function polarToCartesian(
   };
 }
 
+// ── New helpers ──────────────────────────────────────────────────────
+function glowCircle(cx: number, cy: number, r: number, color: string, opacity: number): string {
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${escapeXml(color)}" opacity="${opacity}"/>`;
+}
+
+function renderScanlines(y: number, height: number): string {
+  const lines: string[] = [];
+  for (let ly = y; ly < y + height; ly += 4) {
+    lines.push(`<rect x="0" y="${ly}" width="${WIDTH}" height="1" fill="white" opacity="0.03"/>`);
+  }
+  return lines.join('');
+}
+
+function renderHeatmapRow(
+  x: number,
+  y: number,
+  count: number,
+  _maxCount: number,
+  accent: string,
+): string {
+  const cellSize = 14;
+  const gap = 3;
+  const cells: string[] = [];
+  const coolColor = '#1a1a4e';
+
+  for (let i = 0; i < count; i++) {
+    const t = count > 1 ? i / (count - 1) : 1;
+    const r = Math.round(lerp(parseInt(coolColor.slice(1, 3), 16), parseInt(accent.slice(1, 3), 16), t));
+    const g = Math.round(lerp(parseInt(coolColor.slice(3, 5), 16), parseInt(accent.slice(3, 5), 16), t));
+    const b = Math.round(lerp(parseInt(coolColor.slice(5, 7), 16), parseInt(accent.slice(5, 7), 16), t));
+    const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    const cx = x + i * (cellSize + gap);
+    cells.push(`<rect x="${cx}" y="${y}" width="${cellSize}" height="${cellSize}" rx="3" fill="${color}"/>`);
+  }
+  return cells.join('');
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function renderStackedBar(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  segments: Array<{ fraction: number; color: string }>,
+): string {
+  const parts: string[] = [];
+  let offset = 0;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!;
+    const segW = Math.max(1, seg.fraction * w);
+    const rx = i === 0 && i === segments.length - 1 ? h / 2
+      : i === 0 ? `${h / 2} 0 0 ${h / 2}`
+      : i === segments.length - 1 ? `0 ${h / 2} ${h / 2} 0`
+      : '0';
+    if (typeof rx === 'number') {
+      parts.push(`<rect x="${x + offset}" y="${y}" width="${segW}" height="${h}" rx="${rx}" fill="${escapeXml(seg.color)}"/>`);
+    } else {
+      parts.push(`<rect x="${x + offset}" y="${y}" width="${segW}" height="${h}" fill="${escapeXml(seg.color)}"/>`);
+    }
+    offset += segW;
+  }
+  return parts.join('');
+}
+
+function renderRadialHeatRing(
+  cx: number,
+  cy: number,
+  r: number,
+  values24: number[],
+  accent: string,
+  dimColor: string,
+): string {
+  const parts: string[] = [];
+  const maxVal = Math.max(...values24, 1);
+  const strokeW = 20;
+  const gapDeg = 2;
+  const segDeg = (360 - 24 * gapDeg) / 24;
+
+  for (let i = 0; i < 24; i++) {
+    const startA = i * (segDeg + gapDeg) - 90;
+    const endA = startA + segDeg;
+    const t = values24[i]! / maxVal;
+    const opacity = 0.15 + t * 0.85;
+    const color = t > 0.3 ? accent : dimColor;
+    const arcPath = describeArc(cx, cy, r, startA, endA);
+    parts.push(`<path d="${arcPath}" fill="none" stroke="${escapeXml(color)}" stroke-width="${strokeW}" stroke-linecap="round" opacity="${opacity.toFixed(2)}"/>`);
+  }
+  return parts.join('');
+}
+
+function renderSpeedometer(
+  cx: number,
+  cy: number,
+  r: number,
+  value: number,
+  theme: WrappedTheme,
+): string {
+  const parts: string[] = [];
+  const startAngle = 135;
+  const endAngle = 405;
+  const totalSweep = endAngle - startAngle;
+  const trackWidth = 20;
+
+  // Track segments: red → yellow → green
+  const trackSegments = [
+    { end: 0.25, color: '#FF4757' },
+    { end: 0.5, color: '#FFB347' },
+    { end: 0.75, color: '#FFD700' },
+    { end: 1.0, color: '#39FF14' },
+  ];
+
+  let prevEnd = 0;
+  for (const seg of trackSegments) {
+    const sA = startAngle + prevEnd * totalSweep;
+    const eA = startAngle + seg.end * totalSweep;
+    if (eA - sA < 0.5) { prevEnd = seg.end; continue; }
+    const arcPath = describeArc(cx, cy, r, sA, eA);
+    parts.push(`<path d="${arcPath}" fill="none" stroke="${escapeXml(seg.color)}" stroke-width="${trackWidth}" stroke-linecap="round" opacity="0.3"/>`);
+    prevEnd = seg.end;
+  }
+
+  // Active arc
+  if (value > 0) {
+    const activeEnd = startAngle + Math.min(value, 1) * totalSweep;
+    const activeColor = value >= 0.75 ? '#39FF14' : value >= 0.5 ? '#FFD700' : value >= 0.25 ? '#FFB347' : '#FF4757';
+    const activePath = describeArc(cx, cy, r, startAngle, activeEnd);
+    parts.push(`<path d="${activePath}" fill="none" stroke="${escapeXml(activeColor)}" stroke-width="${trackWidth}" stroke-linecap="round"/>`);
+  }
+
+  // Needle
+  const needleAngle = startAngle + Math.min(value, 1) * totalSweep;
+  const needleTip = polarToCartesian(cx, cy, r - 8, needleAngle);
+  const needleBase1 = polarToCartesian(cx, cy, 6, needleAngle - 90);
+  const needleBase2 = polarToCartesian(cx, cy, 6, needleAngle + 90);
+  parts.push(`<path d="M${needleTip.x} ${needleTip.y} L${needleBase1.x} ${needleBase1.y} L${needleBase2.x} ${needleBase2.y} Z" fill="${escapeXml(theme.fg)}"/>`);
+  parts.push(`<circle cx="${cx}" cy="${cy}" r="8" fill="${escapeXml(theme.fg)}"/>`);
+
+  return parts.join('');
+}
+
+function cacheGrade(hitRate: number): string {
+  if (hitRate >= 0.9) return 'A';
+  if (hitRate >= 0.75) return 'B';
+  if (hitRate >= 0.5) return 'C';
+  if (hitRate >= 0.25) return 'D';
+  return 'F';
+}
+
+function renderLineChart(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  observed: number[],
+  projected: number[],
+  accent: string,
+  theme: WrappedTheme,
+): string {
+  const parts: string[] = [];
+  const all = [...observed, ...projected];
+  const maxVal = Math.max(...all, 1);
+  const totalPoints = all.length;
+  if (totalPoints === 0) return '';
+
+  const pointSpacing = w / Math.max(totalPoints - 1, 1);
+
+  // Gradient fill under observed line
+  const gradId = `line-fill-${x}-${y}`;
+  parts.push(
+    `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0%" stop-color="${escapeXml(accent)}" stop-opacity="0.3"/>` +
+    `<stop offset="100%" stop-color="${escapeXml(accent)}" stop-opacity="0"/>` +
+    `</linearGradient></defs>`,
+  );
+
+  // Build observed polygon fill
+  if (observed.length > 1) {
+    const polyPoints: string[] = [];
+    polyPoints.push(`${x},${y + h}`);
+    for (let i = 0; i < observed.length; i++) {
+      const px = x + i * pointSpacing;
+      const py = y + h - (observed[i]! / maxVal) * h;
+      polyPoints.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+    }
+    polyPoints.push(`${(x + (observed.length - 1) * pointSpacing).toFixed(1)},${y + h}`);
+    parts.push(`<polygon points="${polyPoints.join(' ')}" fill="url(#${gradId})"/>`);
+  }
+
+  // Observed solid line
+  if (observed.length > 1) {
+    const pathParts: string[] = [];
+    for (let i = 0; i < observed.length; i++) {
+      const px = x + i * pointSpacing;
+      const py = y + h - (observed[i]! / maxVal) * h;
+      pathParts.push(`${i === 0 ? 'M' : 'L'}${px.toFixed(1)} ${py.toFixed(1)}`);
+    }
+    parts.push(`<path d="${pathParts.join(' ')}" fill="none" stroke="${escapeXml(accent)}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+
+  // Projected dashed line
+  if (projected.length > 0) {
+    const startIdx = observed.length - 1;
+    const pathParts: string[] = [];
+    // Start from last observed point
+    if (observed.length > 0) {
+      const px = x + startIdx * pointSpacing;
+      const py = y + h - (observed[observed.length - 1]! / maxVal) * h;
+      pathParts.push(`M${px.toFixed(1)} ${py.toFixed(1)}`);
+    }
+    for (let i = 0; i < projected.length; i++) {
+      const px = x + (startIdx + 1 + i) * pointSpacing;
+      const py = y + h - (projected[i]! / maxVal) * h;
+      pathParts.push(`L${px.toFixed(1)} ${py.toFixed(1)}`);
+    }
+    parts.push(`<path d="${pathParts.join(' ')}" fill="none" stroke="${escapeXml(accent)}" stroke-width="2" stroke-dasharray="8,6" stroke-linecap="round" opacity="0.6"/>`);
+  }
+
+  // Dots on observed
+  if (observed.length <= 31) {
+    for (let i = 0; i < observed.length; i++) {
+      const px = x + i * pointSpacing;
+      const py = y + h - (observed[i]! / maxVal) * h;
+      parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3" fill="${escapeXml(accent)}"/>`);
+    }
+  }
+
+  // Callout at projection endpoint
+  if (projected.length > 0) {
+    const lastIdx = startIdx(observed.length, projected.length);
+    const lastPx = x + lastIdx * pointSpacing;
+    const lastPy = y + h - (projected[projected.length - 1]! / maxVal) * h;
+    const labelText = formatCost(projected[projected.length - 1]!);
+    const labelW = labelText.length * 10 + 20;
+    const labelH = 28;
+    const labelX = Math.min(lastPx - labelW / 2, x + w - labelW);
+    const labelY = Math.max(lastPy - labelH - 10, y);
+    parts.push(roundedRect(labelX, labelY, labelW, labelH, theme.cardBg, 6, { stroke: accent, strokeWidth: 1 }));
+    parts.push(svgText(labelX + labelW / 2, labelY + 19, labelText, {
+      fill: accent,
+      size: 13,
+      weight: 700,
+      anchor: 'middle',
+      family: MONO_FONT,
+    }));
+  }
+
+  return parts.join('');
+}
+
+function startIdx(observedLen: number, _projectedLen: number): number {
+  return observedLen - 1 + _projectedLen;
+}
+
 // ── Date formatting helper ───────────────────────────────────────────
 function formatDateLong(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00Z');
@@ -418,55 +684,68 @@ function renderTitleSlide(
 ): SlideResult {
   const height = 420;
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[0] ?? ['#120828', '#0a1628'];
+  const accent = theme.slideAccents[0]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'title-bg'));
+  // Background
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  // Decorative glow circles
-  const glowColor = theme.mode === 'dark' ? theme.purpleAccent : '#7c3aed';
-  parts.push(
-    `<circle cx="200" cy="210" r="200" fill="${escapeXml(glowColor)}" opacity="0.04"/>`,
-    `<circle cx="1000" cy="150" r="160" fill="${escapeXml(theme.coolAccent)}" opacity="0.03"/>`,
-  );
+  // Scanline texture
+  parts.push(renderScanlines(0, height));
 
-  // Decorative top accent bar
-  parts.push(
-    `<rect x="${INNER_PAD}" y="50" width="60" height="4" rx="2" fill="${escapeXml(theme.heroAccent)}" opacity="0.6"/>`,
-  );
-
-  // Main title
-  const titleColor = theme.mode === 'dark' ? '#f1f5f9' : '#1e1b4b';
-  parts.push(svgText(INNER_PAD, 130, 'Your AI Coding', {
-    fill: titleColor,
+  // "Your AI Coding" in oversized type
+  parts.push(svgText(INNER_PAD, 150, 'Your AI Coding', {
+    fill: theme.fg,
     size: 56,
     weight: 800,
+    family: DISPLAY_FONT,
   }));
-  parts.push(svgText(INNER_PAD, 198, 'Wrapped', {
-    fill: theme.heroAccent,
+
+  // "Wrapped" in accent
+  parts.push(svgText(INNER_PAD, 224, 'Wrapped', {
+    fill: accent,
     size: 64,
     weight: 800,
+    family: DISPLAY_FONT,
+  }));
+
+  // Blinking cursor after "Wrapped"
+  const cursorX = INNER_PAD + 330;
+  parts.push(`<rect x="${cursorX}" y="190" width="4" height="40" rx="2" fill="${escapeXml(accent)}" opacity="0.8">`);
+  parts.push(`<animate attributeName="opacity" values="0.8;0;0.8" dur="1.2s" repeatCount="indefinite"/>`);
+  parts.push(`</rect>`);
+
+  // "SEASON 2025" badge
+  const badgeX = INNER_PAD;
+  const badgeY = 70;
+  const year = new Date().getFullYear();
+  const badgeText = `SEASON ${year}`;
+  parts.push(roundedRect(badgeX, badgeY, 160, 30, 'transparent', 6, { stroke: accent, strokeWidth: 1 }));
+  parts.push(svgText(badgeX + 80, badgeY + 20, badgeText, {
+    fill: accent,
+    size: 12,
+    weight: 700,
+    anchor: 'middle',
+    family: MONO_FONT,
+    spacing: 2,
   }));
 
   // Date range
   const { since, until } = output.dateRange;
   const rangeText = `${formatDateLong(since)} \u2014 ${formatDateLong(until)}`;
-  parts.push(svgText(INNER_PAD, 250, rangeText, {
-    fill: theme.subtitleColor,
+  parts.push(svgText(INNER_PAD, 270, rangeText, {
+    fill: theme.fgMuted,
     size: 18,
     weight: 500,
   }));
 
-  parts.push(svgText(INNER_PAD, 290, 'tokenleak', {
-    fill: theme.heroAccent,
-    size: 16,
+  // Watermark
+  parts.push(svgText(INNER_PAD, 310, 'tokenleak', {
+    fill: accent,
+    size: 14,
     weight: 600,
-    opacity: 0.7,
+    opacity: 0.5,
+    family: MONO_FONT,
   }));
-
-  // Decorative bottom line
-  parts.push(
-    `<rect x="${INNER_PAD}" y="${height - 40}" width="100" height="3" rx="1.5" fill="${escapeXml(theme.heroAccent)}" opacity="0.3"/>`,
-  );
 
   return { svg: parts.join('\n'), height };
 }
@@ -479,54 +758,46 @@ function renderBigNumbersSlide(
   const height = 440;
   const parts: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[1] ?? ['#0a1628', '#0d1b2a'];
+  const accent = theme.slideAccents[1]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'bignums-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 60, 'THE BIG NUMBERS', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'THE BIG NUMBERS', theme));
 
-  // Hero: Total tokens
-  parts.push(svgText(INNER_PAD, 150, formatNumber(stats.totalTokens), {
-    fill: theme.mode === 'dark' ? '#f8fafc' : '#0f172a',
-    size: 80,
-    weight: 800,
-  }));
-  parts.push(svgText(INNER_PAD, 180, 'total tokens', {
-    fill: theme.subtitleColor,
-    size: 20,
-    weight: 500,
-  }));
+  const contentW = WIDTH - INNER_PAD * 2;
+  const colWidth = contentW / 3;
 
-  // Grid of supporting stats
-  const gridY = 230;
-  const colWidth = (WIDTH - INNER_PAD * 2) / 3;
-
-  const supportStats = [
-    { value: formatCost(stats.totalCost), label: 'Total Cost', accent: true },
-    { value: `${stats.activeDays}`, label: 'Active Days', accent: false },
-    { value: `${stats.totalDays}`, label: 'Total Days', accent: false },
+  const statItems = [
+    { value: formatNumber(stats.totalTokens), label: 'total tokens', color: accent },
+    { value: formatCost(stats.totalCost), label: 'total cost', color: ACCENT.amber },
+    { value: `${stats.activeDays}`, label: 'active days', color: ACCENT.cyan },
   ];
 
-  for (let i = 0; i < supportStats.length; i++) {
+  for (let i = 0; i < statItems.length; i++) {
+    const item = statItems[i]!;
     const sx = INNER_PAD + i * colWidth;
-    const stat = supportStats[i]!;
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(sx, gridY, colWidth - 24, 140, cardBg, 16));
-    parts.push(svgText(sx + 24, gridY + 60, stat.value, {
-      fill: stat.accent ? theme.greenAccent : (theme.mode === 'dark' ? '#e2e8f0' : '#1e293b'),
-      size: 42,
-      weight: 700,
+
+    // Hairline rule between columns
+    if (i > 0) {
+      parts.push(`<line x1="${sx}" y1="90" x2="${sx}" y2="${height - 60}" stroke="${escapeXml(theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')}" stroke-width="1"/>`);
+    }
+
+    // Giant monospace numeral
+    parts.push(svgText(sx + colWidth / 2, 220, item.value, {
+      fill: item.color,
+      size: i === 0 ? 80 : 72,
+      weight: 800,
+      anchor: 'middle',
+      family: MONO_FONT,
     }));
-    parts.push(svgText(sx + 24, gridY + 95, stat.label, {
-      fill: theme.subtitleColor,
+
+    // Unit label
+    parts.push(svgText(sx + colWidth / 2, 260, item.label, {
+      fill: theme.fgDim,
       size: 14,
-      weight: 600,
-      spacing: 1,
+      weight: 500,
+      anchor: 'middle',
+      family: DISPLAY_FONT,
     }));
   }
 
@@ -538,70 +809,58 @@ function renderStreakSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
+  const height = 380;
   const parts: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[2] ?? ['#1a0e00', '#0d1117'];
+  const accent = theme.slideAccents[2]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'streak-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  // Warm glow
-  parts.push(
-    `<circle cx="${WIDTH - 180}" cy="170" r="120" fill="${escapeXml(theme.warmAccent)}" opacity="0.05"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'STREAK STORY', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'STREAK STORY', theme));
 
   const narrative = stats.longestStreak > 0
     ? `Your longest coding streak was ${stats.longestStreak} days`
     : 'Start your first coding streak!';
-  parts.push(svgText(INNER_PAD, 120, narrative, {
+  parts.push(svgText(INNER_PAD, 110, narrative, {
     fill: theme.narrativeColor,
-    size: 24,
+    size: 22,
     weight: 600,
   }));
 
-  // Big streak number
-  parts.push(svgText(INNER_PAD, 210, `${stats.longestStreak}`, {
-    fill: theme.warmAccent,
-    size: 72,
+  // Big streak number with glow
+  parts.push(glowCircle(INNER_PAD + 80, 200, 80, accent, 0.06));
+  parts.push(svgText(INNER_PAD, 220, `${stats.longestStreak}`, {
+    fill: accent,
+    size: 80,
     weight: 800,
+    family: MONO_FONT,
   }));
 
-  // Fire icon beside the number
-  const fireX = INNER_PAD + 160;
-  parts.push(svgIconFire(fireX, 155, 56, theme.warmAccent));
+  // Fire icon with simulated glow
+  const fireX = INNER_PAD + 200;
+  parts.push(glowCircle(fireX + 28, 185, 40, accent, 0.08));
+  parts.push(svgIconFire(fireX, 160, 56, accent));
 
   // Current streak
   parts.push(svgText(INNER_PAD, 270, `Current streak: ${stats.currentStreak} days`, {
-    fill: theme.subtitleColor,
+    fill: theme.fgMuted,
     size: 16,
     weight: 500,
   }));
 
-  // Streak dots
-  const dotsToShow = Math.min(stats.longestStreak, 30);
-  const dotSize = 10;
-  const dotGap = 6;
-  const dotsY = 300;
-  for (let i = 0; i < dotsToShow; i++) {
-    const dx = INNER_PAD + i * (dotSize + dotGap);
-    const opacity = 0.3 + (i / Math.max(dotsToShow, 1)) * 0.7;
-    parts.push(
-      `<rect x="${dx}" y="${dotsY}" width="${dotSize}" height="${dotSize}" rx="3" fill="${escapeXml(theme.warmAccent)}" opacity="${opacity.toFixed(2)}"/>`,
-    );
-  }
-  if (stats.longestStreak > 30) {
-    parts.push(svgText(INNER_PAD + 30 * (dotSize + dotGap) + 8, dotsY + 9, `+${stats.longestStreak - 30}`, {
-      fill: theme.warmAccent,
-      size: 11,
-      weight: 600,
-    }));
+  // Heatmap row
+  const heatmapCount = Math.min(stats.longestStreak, 30);
+  if (heatmapCount > 0) {
+    parts.push(renderHeatmapRow(INNER_PAD, 310, heatmapCount, heatmapCount, accent));
+    if (stats.longestStreak > 30) {
+      const overflow = heatmapCount * (14 + 3) + 8;
+      parts.push(svgText(INNER_PAD + overflow, 323, `+${stats.longestStreak - 30}`, {
+        fill: accent,
+        size: 12,
+        weight: 600,
+        family: MONO_FONT,
+      }));
+    }
   }
 
   return { svg: parts.join('\n'), height };
@@ -616,20 +875,15 @@ function renderTopModelSlide(
   const parts: string[] = [];
   const stats = output.aggregated;
   const topModels = stats.topModels.slice(0, 3);
-  const gradColors = theme.sectionBgs[3] ?? ['#0a1a2e', '#0d1117'];
+  const accent = theme.slideAccents[3]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'model-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'YOUR TOP MODEL', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'YOUR TOP MODEL', theme));
 
   if (topModels.length === 0) {
     parts.push(svgText(INNER_PAD, 200, 'No model data available', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 20,
       weight: 500,
     }));
@@ -638,78 +892,78 @@ function renderTopModelSlide(
 
   const topModel = topModels[0]!;
 
-  // Donut chart on the right
-  const donutCx = WIDTH - 220;
-  const donutCy = 200;
+  // Donut chart: thick-stroke, gapped segments, round caps
+  const donutCx = WIDTH - 240;
+  const donutCy = 220;
   const donutR = 100;
-  const donutWidth = 24;
-  const arcColors = [theme.coolAccent, theme.purpleAccent, theme.greenAccent, theme.warmAccent];
+  const donutWidth = 28;
+  const arcColors = [accent, ACCENT.purple, ACCENT.green, ACCENT.amber];
+
+  // Radial glow behind chart
+  parts.push(glowCircle(donutCx, donutCy, donutR + 30, accent, 0.05));
 
   // Background ring
   const ringBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-  parts.push(
-    `<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${ringBg}" stroke-width="${donutWidth}"/>`,
-  );
+  parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${ringBg}" stroke-width="${donutWidth}"/>`);
 
-  // Model arcs
-  let startAngle = 0;
+  // Model arcs with 3-degree gaps
+  let arcStartAngle = 0;
+  const gapDeg = 3;
   for (let i = 0; i < topModels.length; i++) {
     const model = topModels[i]!;
     const sweep = (model.percentage / 100) * 360;
-    if (sweep < 0.5) continue;
-    const endAngle = startAngle + sweep;
-    const clampedEnd = sweep >= 359.5 ? startAngle + 359.5 : endAngle;
-    const arcPath = describeArc(donutCx, donutCy, donutR, startAngle, clampedEnd);
-    parts.push(
-      `<path d="${arcPath}" fill="none" stroke="${escapeXml(arcColors[i % arcColors.length]!)}" stroke-width="${donutWidth}" stroke-linecap="round"/>`,
-    );
-    startAngle = endAngle;
+    if (sweep < 1) continue;
+    const adjustedSweep = Math.max(sweep - gapDeg, 1);
+    const endAngle = arcStartAngle + adjustedSweep;
+    const arcPath = describeArc(donutCx, donutCy, donutR, arcStartAngle, endAngle);
+    parts.push(`<path d="${arcPath}" fill="none" stroke="${escapeXml(arcColors[i % arcColors.length]!)}" stroke-width="${donutWidth}" stroke-linecap="round"/>`);
+    arcStartAngle += sweep;
   }
 
-  // Percentage in center
-  parts.push(svgText(donutCx, donutCy + 12, `${topModel.percentage.toFixed(0)}%`, {
-    fill: theme.mode === 'dark' ? '#f8fafc' : '#0f172a',
-    size: 32,
+  // Model name centered in donut
+  parts.push(svgText(donutCx, donutCy - 5, topModel.model, {
+    fill: theme.fg,
+    size: 16,
+    weight: 700,
+    anchor: 'middle',
+    family: MONO_FONT,
+  }));
+
+  // Percentage below model name
+  parts.push(svgText(donutCx, donutCy + 25, `${topModel.percentage.toFixed(0)}%`, {
+    fill: accent,
+    size: 28,
     weight: 800,
     anchor: 'middle',
+    family: MONO_FONT,
   }));
 
-  // Top model name
-  parts.push(svgText(INNER_PAD, 130, topModel.model, {
-    fill: theme.coolAccent,
-    size: 32,
-    weight: 700,
-  }));
-  parts.push(svgText(INNER_PAD, 165, `${topModel.percentage.toFixed(0)}% of all tokens`, {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
-  }));
-
-  // Model bars
-  const barsY = 210;
-  const barMaxWidth = 450;
+  // Left side: model list with bars
+  const barsY = 100;
+  const barMaxWidth = 400;
   for (let i = 0; i < topModels.length; i++) {
     const model = topModels[i]!;
-    const by = barsY + i * 56;
+    const by = barsY + i * 80;
     parts.push(svgText(INNER_PAD, by + 20, `#${i + 1}`, {
       fill: arcColors[i % arcColors.length]!,
       size: 14,
       weight: 700,
+      family: MONO_FONT,
     }));
     parts.push(svgText(INNER_PAD + 40, by + 20, model.model, {
-      fill: theme.mode === 'dark' ? '#e2e8f0' : '#1e293b',
-      size: 15,
+      fill: theme.fg,
+      size: 16,
       weight: 600,
     }));
     const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-    parts.push(roundedRect(INNER_PAD + 40, by + 30, barMaxWidth, 12, trackBg, 6));
+    parts.push(roundedRect(INNER_PAD + 40, by + 32, barMaxWidth, 14, trackBg, 7));
     const barW = Math.max(8, (model.percentage / 100) * barMaxWidth);
-    parts.push(roundedRect(INNER_PAD + 40, by + 30, barW, 12, arcColors[i % arcColors.length]!, 6, { opacity: 0.8 }));
-    parts.push(svgText(INNER_PAD + 40 + barMaxWidth + 16, by + 42, `${model.percentage.toFixed(0)}%`, {
-      fill: theme.subtitleColor,
+    parts.push(roundedRect(INNER_PAD + 40, by + 32, barW, 14, arcColors[i % arcColors.length]!, 7, { opacity: 0.8 }));
+    parts.push(svgText(INNER_PAD + 40 + barMaxWidth + 16, by + 46, `${model.percentage.toFixed(0)}%`, {
+      fill: theme.fgMuted,
       size: 13,
       weight: 600,
+      family: MONO_FONT,
     }));
   }
 
@@ -722,28 +976,21 @@ function renderProviderMixSlide(
   theme: WrappedTheme,
 ): SlideResult {
   const providers = output.providers;
-  const baseHeight = 200;
-  const perProviderHeight = 70;
-  const height = Math.max(baseHeight, 130 + providers.length * perProviderHeight);
+  const height = Math.max(200, 200 + providers.length * 30);
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[4] ?? ['#0d1117', '#0f1520'];
+  const accent = theme.slideAccents[4]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'provider-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'PROVIDER MIX', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'PROVIDER MIX', theme));
 
   if (providers.length === 0) {
     parts.push(svgText(INNER_PAD, 130, 'No provider data', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 18,
       weight: 500,
     }));
-    return { svg: parts.join('\n'), height: baseHeight };
+    return { svg: parts.join('\n'), height: 200 };
   }
 
   const totalTokens = providers.reduce((s, p) => s + p.totalTokens, 0);
@@ -756,28 +1003,31 @@ function renderProviderMixSlide(
     weight: 600,
   }));
 
-  const barMaxWidth = WIDTH - INNER_PAD * 2 - 200;
+  // Stacked bar
+  const barX = INNER_PAD;
+  const barY = 130;
+  const barW = WIDTH - INNER_PAD * 2;
+  const barH = 32;
+
+  const segments = providers.map((p) => ({
+    fraction: totalTokens > 0 ? p.totalTokens / totalTokens : 0,
+    color: p.colors.primary,
+  }));
+  parts.push(renderStackedBar(barX, barY, barW, barH, segments));
+
+  // Swatches + labels below
+  let swatchX = INNER_PAD;
+  const swatchY = barY + barH + 24;
   for (let i = 0; i < providers.length; i++) {
     const p = providers[i]!;
-    const py = 130 + i * perProviderHeight;
-    const pct = totalTokens > 0 ? (p.totalTokens / totalTokens) * 100 : 0;
-
-    parts.push(`<circle cx="${INNER_PAD + 8}" cy="${py + 18}" r="8" fill="${escapeXml(p.colors.primary)}"/>`);
-    parts.push(svgText(INNER_PAD + 28, py + 23, p.displayName, {
-      fill: theme.mode === 'dark' ? '#e2e8f0' : '#1e293b',
-      size: 16,
-      weight: 600,
+    const pct = totalTokens > 0 ? ((p.totalTokens / totalTokens) * 100).toFixed(0) : '0';
+    parts.push(`<rect x="${swatchX}" y="${swatchY}" width="12" height="12" rx="3" fill="${escapeXml(p.colors.primary)}"/>`);
+    parts.push(svgText(swatchX + 18, swatchY + 11, `${p.displayName} ${pct}%`, {
+      fill: theme.fgMuted,
+      size: 13,
+      weight: 500,
     }));
-    parts.push(svgText(WIDTH - INNER_PAD, py + 23, `${pct.toFixed(0)}%`, {
-      fill: theme.subtitleColor,
-      size: 15,
-      weight: 700,
-      anchor: 'end',
-    }));
-    const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-    parts.push(roundedRect(INNER_PAD + 28, py + 36, barMaxWidth, 14, trackBg, 7));
-    const barW = Math.max(8, (pct / 100) * barMaxWidth);
-    parts.push(roundedRect(INNER_PAD + 28, py + 36, barW, 14, p.colors.primary, 7, { opacity: 0.75 }));
+    swatchX += p.displayName.length * 8 + 70;
   }
 
   return { svg: parts.join('\n'), height };
@@ -791,20 +1041,15 @@ function renderDayOfWeekSlide(
   const height = 400;
   const parts: string[] = [];
   const dow = output.aggregated.dayOfWeek;
-  const gradColors = theme.sectionBgs[5] ?? ['#0a1628', '#0d1117'];
+  const accent = theme.slideAccents[5]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'dow-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'CODING DAYS', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'CODING DAYS', theme));
 
   if (dow.length === 0) {
     parts.push(svgText(INNER_PAD, 200, 'No day-of-week data', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 18,
       weight: 500,
     }));
@@ -821,43 +1066,53 @@ function renderDayOfWeekSlide(
     weight: 600,
   }));
 
-  const chartX = INNER_PAD;
-  const chartY = 140;
-  const barAreaWidth = WIDTH - INNER_PAD * 2;
-  const barWidth = Math.floor((barAreaWidth - 6 * 20) / 7);
-  const barMaxHeight = 180;
+  // Dotted grid lines
+  const chartX = INNER_PAD + 30;
+  const chartY = 130;
+  const barAreaWidth = WIDTH - INNER_PAD * 2 - 60;
+  const barWidth = 24;
+  const barGap = (barAreaWidth - 7 * barWidth) / 6;
+  const barMaxHeight = 190;
+
+  for (const pct of [0.25, 0.5, 0.75, 1.0]) {
+    const gy = chartY + barMaxHeight - pct * barMaxHeight;
+    parts.push(`<line x1="${chartX}" y1="${gy}" x2="${chartX + barAreaWidth}" y2="${gy}" stroke="${escapeXml(theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)')}" stroke-width="1" stroke-dasharray="4,4"/>`);
+  }
 
   for (let i = 0; i < 7 && i < dow.length; i++) {
     const entry = dow[i]!;
-    const bx = chartX + i * (barWidth + 20);
+    const bx = chartX + i * (barWidth + barGap);
     const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
-    const barH = Math.max(8, ratio * barMaxHeight);
+    const barH = Math.max(4, ratio * barMaxHeight);
     const by = chartY + barMaxHeight - barH;
     const isPeak = entry.day === peak.day;
 
-    const barColor = isPeak ? theme.coolAccent : (theme.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)');
-    parts.push(roundedRect(bx, by, barWidth, barH, barColor, 8, { opacity: isPeak ? 1 : 0.6 }));
-
+    // Peak bar: glow behind
     if (isPeak) {
-      parts.push(
-        `<rect x="${bx - 4}" y="${by - 4}" width="${barWidth + 8}" height="${barH + 8}" rx="10" fill="${escapeXml(theme.coolAccent)}" opacity="0.12"/>`,
-      );
+      parts.push(`<rect x="${bx - 8}" y="${by - 4}" width="${barWidth + 16}" height="${barH + 8}" rx="14" fill="${escapeXml(accent)}" opacity="0.1"/>`);
     }
 
+    const barColor = isPeak ? accent : (theme.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)');
+    parts.push(roundedRect(bx, by, barWidth, barH, barColor, 6));
+
+    // Day label
     const dayLabel = DAY_SHORT[i] ?? '';
     parts.push(svgText(bx + barWidth / 2, chartY + barMaxHeight + 24, dayLabel, {
-      fill: isPeak ? theme.coolAccent : theme.subtitleColor,
+      fill: isPeak ? accent : theme.fgMuted,
       size: 13,
       weight: isPeak ? 700 : 500,
       anchor: 'middle',
+      family: MONO_FONT,
     }));
 
+    // Token count above peak bar
     if (isPeak) {
-      parts.push(svgText(bx + barWidth / 2, by - 12, formatNumber(entry.tokens), {
-        fill: theme.coolAccent,
+      parts.push(svgText(bx + barWidth / 2, by - 10, formatNumber(entry.tokens), {
+        fill: accent,
         size: 13,
         weight: 700,
         anchor: 'middle',
+        family: MONO_FONT,
       }));
     }
   }
@@ -877,29 +1132,25 @@ function renderTimeOfDaySlide(
   const totalTokens = hourOfDay.reduce((s, e) => s + e.tokens, 0);
   if (totalTokens === 0) return { svg: '', height: 0 };
 
-  const height = 400;
+  const height = 420;
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[6] ?? ['#180830', '#0d1117'];
+  const accent = theme.slideAccents[6]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'tod-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'WHEN YOU CODE', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'WHEN YOU CODE', theme));
 
+  // Time periods
   const morning = hourOfDay.filter((e) => e.hour >= 6 && e.hour < 12).reduce((s, e) => s + e.tokens, 0);
   const afternoon = hourOfDay.filter((e) => e.hour >= 12 && e.hour < 18).reduce((s, e) => s + e.tokens, 0);
   const evening = hourOfDay.filter((e) => e.hour >= 18 && e.hour < 22).reduce((s, e) => s + e.tokens, 0);
   const night = hourOfDay.filter((e) => e.hour >= 22 || e.hour < 6).reduce((s, e) => s + e.tokens, 0);
 
   const periods = [
-    { label: 'Morning', icon: 'sun' as IconName, tokens: morning, color: theme.warmAccent },
-    { label: 'Afternoon', icon: 'star' as IconName, tokens: afternoon, color: theme.goldAccent },
-    { label: 'Evening', icon: 'fire' as IconName, tokens: evening, color: theme.purpleAccent },
-    { label: 'Night', icon: 'moon' as IconName, tokens: night, color: theme.coolAccent },
+    { label: 'Morning', tokens: morning },
+    { label: 'Afternoon', tokens: afternoon },
+    { label: 'Evening', tokens: evening },
+    { label: 'Night', tokens: night },
   ];
 
   const dominant = periods.reduce((a, b) => (a.tokens >= b.tokens ? a : b));
@@ -921,40 +1172,42 @@ function renderTimeOfDaySlide(
     weight: 600,
   }));
 
-  const cardWidth = (WIDTH - INNER_PAD * 2 - 3 * 20) / 4;
-  const cardsY = 140;
-  for (let i = 0; i < periods.length; i++) {
-    const period = periods[i]!;
-    const cx = INNER_PAD + i * (cardWidth + 20);
-    const pct = totalTokens > 0 ? (period.tokens / totalTokens) * 100 : 0;
+  // Radial heat ring
+  const ringCx = WIDTH / 2;
+  const ringCy = 270;
+  const ringR = 110;
+  const dimColor = theme.mode === 'dark' ? '#1a1a2e' : '#d1d5db';
+  const values24 = hourOfDay.map((e) => e.tokens);
+  parts.push(renderRadialHeatRing(ringCx, ringCy, ringR, values24, accent, dimColor));
 
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(cx, cardsY, cardWidth, 200, cardBg, 16));
-
-    // Icon
-    parts.push(renderIcon(period.icon, cx + cardWidth / 2 - 16, cardsY + 24, 32, period.color));
-
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 90, period.label, {
-      fill: theme.subtitleColor,
-      size: 13,
-      weight: 600,
-      anchor: 'middle',
-    }));
-
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 140, `${pct.toFixed(0)}%`, {
-      fill: period.color,
-      size: 36,
-      weight: 800,
-      anchor: 'middle',
-    }));
-
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 170, formatNumber(period.tokens), {
-      fill: theme.subtitleColor,
-      size: 12,
-      weight: 500,
-      anchor: 'middle',
-    }));
+  // Hour markers
+  const markerLabels = [
+    { hour: 0, label: '12am', iconFn: svgIconMoon },
+    { hour: 6, label: '6am', iconFn: svgIconSun },
+    { hour: 12, label: '12pm', iconFn: svgIconSun },
+    { hour: 18, label: '6pm', iconFn: svgIconMoon },
+  ];
+  for (const mk of markerLabels) {
+    const angleDeg = (mk.hour / 24) * 360 - 90;
+    const pos = polarToCartesian(ringCx, ringCy, ringR + 30, angleDeg);
+    parts.push(mk.iconFn(pos.x - 8, pos.y - 8, 16, theme.fgMuted));
   }
+
+  // Center: dominant period text
+  parts.push(svgText(ringCx, ringCy - 5, dominant.label, {
+    fill: theme.fg,
+    size: 18,
+    weight: 700,
+    anchor: 'middle',
+    family: MONO_FONT,
+  }));
+  parts.push(svgText(ringCx, ringCy + 18, `${dominantPct}%`, {
+    fill: accent,
+    size: 24,
+    weight: 800,
+    anchor: 'middle',
+    family: MONO_FONT,
+  }));
 
   return { svg: parts.join('\n'), height };
 }
@@ -964,77 +1217,64 @@ function renderCacheSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
+  const height = 380;
   const parts: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[7] ?? ['#001a0d', '#0d1117'];
+  const accent = theme.slideAccents[7]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'cache-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'CACHE EFFICIENCY', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'CACHE EFFICIENCY', theme));
 
   const hitRate = stats.cacheHitRate;
   const hitPct = (hitRate * 100).toFixed(1);
+  const grade = cacheGrade(hitRate);
 
-  // Gauge arc
-  const gaugeCx = WIDTH - 240;
-  const gaugeCy = 190;
+  // Speedometer gauge
+  const gaugeCx = WIDTH - 280;
+  const gaugeCy = 210;
   const gaugeR = 90;
-  const gaugeWidth = 18;
+  parts.push(renderSpeedometer(gaugeCx, gaugeCy, gaugeR, hitRate, theme));
 
-  const trackColor = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
-  const bgArc = describeArc(gaugeCx, gaugeCy, gaugeR, -90, 270);
-  parts.push(
-    `<path d="${bgArc}" fill="none" stroke="${trackColor}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`,
-  );
-
-  if (hitRate > 0) {
-    const sweepAngle = Math.min(hitRate * 360, 359);
-    const fillArc = describeArc(gaugeCx, gaugeCy, gaugeR, -90, -90 + sweepAngle);
-    parts.push(
-      `<path d="${fillArc}" fill="none" stroke="${escapeXml(theme.greenAccent)}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`,
-    );
-  }
-
-  parts.push(svgText(gaugeCx, gaugeCy + 10, `${hitPct}%`, {
-    fill: theme.greenAccent,
-    size: 36,
+  // Letter grade beside gauge
+  parts.push(svgText(gaugeCx, gaugeCy + 55, grade, {
+    fill: accent,
+    size: 48,
     weight: 800,
     anchor: 'middle',
-  }));
-  parts.push(svgText(gaugeCx, gaugeCy + 35, 'hit rate', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 500,
-    anchor: 'middle',
+    family: MONO_FONT,
   }));
 
+  // Left side: narrative + stats
   parts.push(svgText(INNER_PAD, 120, `${hitPct}% Cache Hit Rate`, {
     fill: theme.narrativeColor,
     size: 24,
     weight: 600,
   }));
 
+  // Big percentage
+  parts.push(svgText(INNER_PAD, 210, `${hitPct}%`, {
+    fill: accent,
+    size: 64,
+    weight: 800,
+    family: MONO_FONT,
+  }));
+
   const cacheEcon = output.more?.cacheEconomics;
   if (cacheEcon) {
-    parts.push(svgText(INNER_PAD, 170, `${formatNumber(cacheEcon.readTokens)} cache reads`, {
-      fill: theme.subtitleColor,
+    parts.push(svgText(INNER_PAD, 260, `${formatNumber(cacheEcon.readTokens)} cache reads`, {
+      fill: theme.fgMuted,
       size: 16,
       weight: 500,
     }));
-    parts.push(svgText(INNER_PAD, 200, `${formatNumber(cacheEcon.writeTokens)} cache writes`, {
-      fill: theme.subtitleColor,
+    parts.push(svgText(INNER_PAD, 290, `${formatNumber(cacheEcon.writeTokens)} cache writes`, {
+      fill: theme.fgMuted,
       size: 16,
       weight: 500,
     }));
     if (cacheEcon.reuseRatio !== null && Number.isFinite(cacheEcon.reuseRatio)) {
-      parts.push(svgText(INNER_PAD, 230, `${cacheEcon.reuseRatio.toFixed(1)}x reuse ratio`, {
-        fill: theme.greenAccent,
+      parts.push(svgText(INNER_PAD, 320, `${cacheEcon.reuseRatio.toFixed(1)}x reuse ratio`, {
+        fill: accent,
         size: 16,
         weight: 600,
       }));
@@ -1049,56 +1289,51 @@ function renderPeakDaySlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 320;
+  const height = 340;
   const parts: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[8] ?? ['#1a1500', '#0d1117'];
+  const accent = theme.slideAccents[8]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'peak-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(
-    `<circle cx="${WIDTH / 2}" cy="160" r="140" fill="${escapeXml(theme.goldAccent)}" opacity="0.04"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'PEAK DAY SPOTLIGHT', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'PEAK DAY', theme));
 
   if (!stats.peakDay) {
     parts.push(svgText(INNER_PAD, 180, 'No usage data recorded yet', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 20,
       weight: 500,
     }));
     return { svg: parts.join('\n'), height };
   }
 
+  // Decorative rule above headline
+  parts.push(`<rect x="${INNER_PAD}" y="85" width="${WIDTH - INNER_PAD * 2}" height="3" rx="1.5" fill="${escapeXml(accent)}"/>`);
+
+  // Date in massive condensed monospace - newspaper headline
   const formattedDate = formatDateLong(stats.peakDay.date);
-  parts.push(svgText(INNER_PAD, 110, `${formattedDate} was your biggest day`, {
-    fill: theme.narrativeColor,
-    size: 24,
-    weight: 600,
+  parts.push(svgText(INNER_PAD, 150, formattedDate.toUpperCase(), {
+    fill: theme.fg,
+    size: 48,
+    weight: 800,
+    family: MONO_FONT,
   }));
 
-  parts.push(svgText(INNER_PAD, 210, formatNumber(stats.peakDay.tokens), {
-    fill: theme.goldAccent,
-    size: 72,
+  // Decorative rule below headline
+  parts.push(`<rect x="${INNER_PAD}" y="170" width="${WIDTH - INNER_PAD * 2}" height="3" rx="1.5" fill="${escapeXml(accent)}"/>`);
+
+  // Token count as subheadline
+  parts.push(svgText(INNER_PAD, 230, formatNumber(stats.peakDay.tokens), {
+    fill: accent,
+    size: 64,
     weight: 800,
+    family: MONO_FONT,
   }));
-  parts.push(svgText(INNER_PAD, 245, 'tokens in a single day', {
-    fill: theme.subtitleColor,
+  parts.push(svgText(INNER_PAD, 265, 'tokens in a single day', {
+    fill: theme.fgMuted,
     size: 16,
     weight: 500,
   }));
-
-  // Trophy icon on the right
-  const badgeCx = WIDTH - 200;
-  const badgeCy = 180;
-  parts.push(roundedRect(badgeCx - 60, badgeCy - 50, 120, 100, theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', 20));
-  parts.push(svgIconTrophy(badgeCx - 24, badgeCy - 24, 48, theme.goldAccent));
 
   return { svg: parts.join('\n'), height };
 }
@@ -1109,59 +1344,53 @@ function renderAchievementsSlide(
   theme: WrappedTheme,
 ): SlideResult {
   const achievements = computeAchievements(output);
-  const rows = Math.ceil(achievements.length / 2);
-  const rowHeight = 100;
+  const rows = Math.ceil(achievements.length / 3);
+  const rowHeight = 110;
   const height = Math.max(240, 100 + rows * rowHeight + 40);
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[9] ?? ['#120828', '#0a1628'];
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'achieve-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(
-    `<circle cx="600" cy="${height / 2}" r="200" fill="${escapeXml(theme.purpleAccent)}" opacity="0.03"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'ACHIEVEMENTS UNLOCKED', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'ACHIEVEMENTS', theme));
 
   if (achievements.length === 0) {
     parts.push(svgText(INNER_PAD, 150, 'Keep coding to unlock achievements!', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 18,
       weight: 500,
     }));
     return { svg: parts.join('\n'), height: 240 };
   }
 
-  const colWidth = (WIDTH - INNER_PAD * 2 - 24) / 2;
+  // 3-column grid
+  const colCount = 3;
+  const gap = 20;
+  const colWidth = (WIDTH - INNER_PAD * 2 - (colCount - 1) * gap) / colCount;
+
   for (let i = 0; i < achievements.length; i++) {
     const a = achievements[i]!;
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const ax = INNER_PAD + col * (colWidth + 24);
+    const col = i % colCount;
+    const row = Math.floor(i / colCount);
+    const ax = INNER_PAD + col * (colWidth + gap);
     const ay = 90 + row * rowHeight;
 
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(ax, ay, colWidth, 80, cardBg, 16));
+    // Dark card
+    parts.push(roundedRect(ax, ay, colWidth, 90, theme.cardBg, 12));
 
     // Icon
-    parts.push(renderIcon(a.icon, ax + 16, ay + 22, 36, a.color));
+    parts.push(renderIcon(a.icon, ax + 16, ay + 20, 32, a.color));
 
     // Title
-    parts.push(svgText(ax + 66, ay + 35, a.title, {
-      fill: theme.mode === 'dark' ? '#f1f5f9' : '#1e293b',
-      size: 18,
+    parts.push(svgText(ax + 58, ay + 35, a.title, {
+      fill: theme.fg,
+      size: 15,
       weight: 700,
     }));
 
     // Subtitle
-    parts.push(svgText(ax + 66, ay + 58, a.subtitle, {
-      fill: theme.subtitleColor,
-      size: 13,
+    parts.push(svgText(ax + 58, ay + 58, a.subtitle, {
+      fill: theme.fgMuted,
+      size: 12,
       weight: 500,
     }));
   }
@@ -1174,18 +1403,13 @@ function renderMonthlyBurnSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 300;
+  const height = 360;
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[10] ?? ['#0a1628', '#0d1117'];
+  const accent = theme.slideAccents[10]!;
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'burn-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
-  parts.push(svgText(INNER_PAD, 55, 'MONTHLY PROJECTION', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  parts.push(sectionHeader(INNER_PAD, 55, 'MONTHLY PROJECTION', theme));
 
   const burn = output.more?.monthlyBurn;
   if (!burn) {
@@ -1197,48 +1421,52 @@ function renderMonthlyBurnSlide(
       weight: 500,
     }));
     parts.push(svgText(INNER_PAD, 185, formatCost(projected), {
-      fill: theme.coolAccent,
+      fill: accent,
       size: 64,
       weight: 800,
+      family: MONO_FONT,
     }));
     parts.push(svgText(INNER_PAD, 220, 'per month', {
-      fill: theme.subtitleColor,
+      fill: theme.fgMuted,
       size: 16,
       weight: 500,
     }));
     return { svg: parts.join('\n'), height };
   }
 
-  parts.push(svgText(INNER_PAD, 115, 'At this rate, you will spend', {
+  parts.push(svgText(INNER_PAD, 100, 'At this rate, you will spend', {
     fill: theme.narrativeColor,
     size: 22,
     weight: 500,
   }));
 
-  parts.push(svgText(INNER_PAD, 185, formatCost(burn.projectedCost), {
-    fill: theme.coolAccent,
-    size: 64,
-    weight: 800,
-  }));
-  parts.push(svgText(INNER_PAD, 220, 'this month', {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
-  }));
+  // Build line chart data
+  const observedDays = burn.observedDays;
+  const calendarDays = burn.calendarDays;
+  const dailyCost = observedDays > 0 ? burn.projectedCost / calendarDays : 0;
 
-  // Progress bar
-  const barY = 252;
-  const barWidth = WIDTH - INNER_PAD * 2;
-  const barHeight = 16;
-  const progress = burn.calendarDays > 0 ? burn.observedDays / burn.calendarDays : 0;
+  // Generate cumulative cost data
+  const observed: number[] = [];
+  for (let d = 0; d < observedDays; d++) {
+    observed.push(dailyCost * (d + 1));
+  }
+  const projected: number[] = [];
+  for (let d = observedDays; d < calendarDays; d++) {
+    projected.push(dailyCost * (d + 1));
+  }
 
-  const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  parts.push(roundedRect(INNER_PAD, barY, barWidth, barHeight, trackBg, 8));
-  parts.push(roundedRect(INNER_PAD, barY, Math.max(8, progress * barWidth), barHeight, theme.coolAccent, 8, { opacity: 0.7 }));
+  // Line chart
+  const chartX = INNER_PAD;
+  const chartY = 130;
+  const chartW = WIDTH - INNER_PAD * 2;
+  const chartH = 160;
 
-  parts.push(svgText(INNER_PAD, barY + 36, `Based on ${burn.observedDays} of ${burn.calendarDays} days`, {
-    fill: theme.subtitleColor,
-    size: 12,
+  parts.push(renderLineChart(chartX, chartY, chartW, chartH, observed, projected, accent, theme));
+
+  // Label
+  parts.push(svgText(INNER_PAD, chartY + chartH + 30, `Based on ${burn.observedDays} of ${burn.calendarDays} days \u2014 projected: ${formatCost(burn.projectedCost)}`, {
+    fill: theme.fgMuted,
+    size: 13,
     weight: 500,
   }));
 
@@ -1252,34 +1480,44 @@ function renderFooterSlide(
 ): SlideResult {
   const height = 140;
   const parts: string[] = [];
-  const gradColors = theme.sectionBgs[11] ?? ['#09090b', '#09090b'];
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'footer-bg'));
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${height}" fill="${escapeXml(theme.bg)}"/>`);
 
+  // Gradient top border cycling through accent colors
+  const gradId = 'footer-grad';
   parts.push(
-    `<rect x="${INNER_PAD}" y="30" width="60" height="3" rx="1.5" fill="${escapeXml(theme.heroAccent)}" opacity="0.4"/>`,
+    `<defs><linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">` +
+    `<stop offset="0%" stop-color="${escapeXml(ACCENT.cyan)}"/>` +
+    `<stop offset="25%" stop-color="${escapeXml(ACCENT.green)}"/>` +
+    `<stop offset="50%" stop-color="${escapeXml(ACCENT.purple)}"/>` +
+    `<stop offset="75%" stop-color="${escapeXml(ACCENT.amber)}"/>` +
+    `<stop offset="100%" stop-color="${escapeXml(ACCENT.coral)}"/>` +
+    `</linearGradient></defs>`,
   );
+  parts.push(`<rect x="0" y="0" width="${WIDTH}" height="2" fill="url(#${gradId})"/>`);
 
-  parts.push(svgText(INNER_PAD, 65, 'Generated by tokenleak', {
-    fill: theme.subtitleColor,
+  parts.push(svgText(INNER_PAD, 55, 'Generated by tokenleak', {
+    fill: theme.fgMuted,
     size: 14,
     weight: 600,
+    family: MONO_FONT,
   }));
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  parts.push(svgText(INNER_PAD, 90, now, {
-    fill: theme.subtitleColor,
+  parts.push(svgText(INNER_PAD, 80, now, {
+    fill: theme.fgDim,
     size: 12,
     weight: 400,
+    family: MONO_FONT,
     opacity: 0.6,
   }));
 
-  parts.push(svgText(WIDTH - INNER_PAD, 70, 'tokenleak', {
-    fill: theme.heroAccent,
+  parts.push(svgText(WIDTH - INNER_PAD, 60, 'tokenleak', {
+    fill: theme.slideAccents[11]!,
     size: 18,
     weight: 700,
     anchor: 'end',
-    opacity: 0.5,
+    opacity: 0.3,
     family: MONO_FONT,
   }));
 
@@ -1322,7 +1560,7 @@ export function renderWrappedSlidesSvg(
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${totalHeight}" viewBox="0 0 ${WIDTH} ${totalHeight}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" color-rendering="optimizeQuality">`,
-    `<rect width="${WIDTH}" height="${totalHeight}" fill="${escapeXml(theme.mode === 'dark' ? '#09090b' : '#f8fafc')}"/>`,
+    `<rect width="${WIDTH}" height="${totalHeight}" fill="${escapeXml(theme.bg)}"/>`,
     ...stackedSections,
     '</svg>',
   ].join('\n');
