@@ -365,7 +365,7 @@ export interface TokenleakOutput {
 }
 
 export interface RenderOptions {
-  format: 'json' | 'svg' | 'png' | 'terminal';
+  format: 'json' | 'svg' | 'png' | 'terminal' | 'wrapped';
   theme: 'dark' | 'light';
   width: number;
   showInsights: boolean;

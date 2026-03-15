@@ -1,7 +1,8 @@
 export type { IRenderer } from './renderer';
 export { JsonRenderer } from './json/index';
-export { SvgRenderer, renderWrappedCard, renderBadge } from './svg/index';
-export { PngRenderer } from './png/index';
+export { SvgRenderer, renderWrappedCard, renderBadge, renderWrappedSlidesSvg, computeAchievements } from './svg/index';
+export type { Achievement } from './svg/index';
+export { PngRenderer, renderWrappedPng } from './png/index';
 export { TerminalRenderer } from './terminal/index';
 export { startLiveServer } from './live/live-server';
 export type { LiveServerOptions } from './live/live-server';
