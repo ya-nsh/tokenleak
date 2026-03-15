@@ -129,4 +129,16 @@ describe('JsonRenderer', () => {
     expect(parsed.more.modelEfficiency.rankings[0].model).toBe('claude-3-sonnet');
     expect(parsed.more.modelEfficiency.ineligibleModels[0].model).toBe('claude-3-opus');
   });
+
+  it('preserves expanded cache ROI metrics in json output', async () => {
+    const output = createMinimalTokenleakOutput({
+      more: createMoreStats(),
+    });
+    const result = await renderer.render(output, options);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.more.cacheRoi.summary.netSavings).toBeCloseTo(0.0105, 10);
+    expect(parsed.more.cacheRoi.byProvider[0].label).toBe('Claude Code');
+    expect(parsed.more.cacheRoi.byProject[0].label).toBe('project-alpha');
+  });
 });

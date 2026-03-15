@@ -68,5 +68,6 @@ describe('loadTokenleakData', () => {
     expect(output.providers).toHaveLength(1);
     expect(output.providers[0]?.provider).toBe('claude-code');
     expect(output.dateRange).toEqual(RANGE);
+    expect(output.more?.cacheRoi).toBeDefined();
   });
 });

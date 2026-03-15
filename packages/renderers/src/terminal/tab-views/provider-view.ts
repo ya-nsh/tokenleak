@@ -2,6 +2,7 @@ import { aggregate } from '@tokenleak/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, PROJECT_COLORS } from '../colors';
 import { truncateVisible } from '../layout';
+import { renderCacheRoiBreakdowns } from './cache-roi';
 
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
@@ -73,6 +74,16 @@ export function renderProviderView(output: TokenleakOutput, width: number, noCol
 
   lines.push('');
   lines.push(truncateVisible(`  ${dim('Columns: share, tokens, cost, last active', noColor)}`, width));
+
+  const roiLines = renderCacheRoiBreakdowns(
+    'Cache ROI by Provider',
+    output.more?.cacheRoi?.byProvider ?? [],
+    width,
+    noColor,
+  );
+  if (roiLines.length > 0) {
+    lines.push('', ...roiLines);
+  }
 
   return lines.join('\n');
 }

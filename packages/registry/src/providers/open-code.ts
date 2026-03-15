@@ -12,7 +12,7 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCost } from '../models/cost';
+import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
 
 const PROVIDER_NAME = 'open-code';
@@ -150,12 +150,22 @@ function toIsoTimestamp(createdAt: string | number): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function getRecordCost(record: UsageRecord): number {
-  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
-    return record.explicitCost;
+function toCachePricing(
+  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
+) {
+  if (!pricing) {
+    return undefined;
   }
 
-  return estimateCost(
+  return {
+    input: pricing.input,
+    cacheRead: pricing.cacheRead,
+    cacheWrite: pricing.cacheWrite,
+  };
+}
+
+function getEstimatedCostBreakdown(record: UsageRecord) {
+  return estimateCostBreakdown(
     record.model,
     record.inputTokens,
     record.outputTokens,
@@ -164,12 +174,21 @@ function getRecordCost(record: UsageRecord): number {
   );
 }
 
+function getRecordCost(record: UsageRecord): number {
+  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
+    return record.explicitCost;
+  }
+
+  return getEstimatedCostBreakdown(record).totalCost;
+}
+
 function toUsageEvent(record: UsageRecord): UsageEvent {
   const totalTokens =
     record.inputTokens +
     record.outputTokens +
     record.cacheReadTokens +
     record.cacheWriteTokens;
+  const estimated = getEstimatedCostBreakdown(record);
   return {
     provider: PROVIDER_NAME,
     timestamp: record.timestamp,
@@ -181,6 +200,7 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
     cost: getRecordCost(record),
+    pricing: toCachePricing(estimated.pricing),
     sessionId: record.sessionId,
     projectId: record.projectId,
     durationMs: record.durationMs,
@@ -199,7 +219,11 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
 
     const normalized = normalizeModelName(record.model);
     const existing = dateMap.get(normalized);
-    const recordCost = getRecordCost(record);
+    const estimated = getEstimatedCostBreakdown(record);
+    const recordCost = typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)
+      ? record.explicitCost
+      : estimated.totalCost;
+    const pricing = toCachePricing(estimated.pricing);
 
     if (existing) {
       existing.inputTokens += record.inputTokens;
@@ -209,6 +233,9 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
       existing.totalTokens +=
         record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
       existing.cost += recordCost;
+      if (!existing.pricing && pricing) {
+        existing.pricing = pricing;
+      }
     } else {
       dateMap.set(normalized, {
         model: normalized,
@@ -222,6 +249,7 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
           record.cacheReadTokens +
           record.cacheWriteTokens,
         cost: recordCost,
+        pricing,
       });
     }
   }

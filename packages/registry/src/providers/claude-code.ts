@@ -12,7 +12,7 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCost } from '../models/cost';
+import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
 
 const DEFAULT_CONFIG_DIR = join(homedir(), '.claude');
@@ -135,6 +135,20 @@ function extractUsage(record: unknown): UsageRecord | null {
   };
 }
 
+function toCachePricing(
+  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
+) {
+  if (!pricing) {
+    return undefined;
+  }
+
+  return {
+    input: pricing.input,
+    cacheRead: pricing.cacheRead,
+    cacheWrite: pricing.cacheWrite,
+  };
+}
+
 /**
  * Builds the DailyUsage array from a flat list of usage records,
  * grouping by date and model.
@@ -144,13 +158,14 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
 
   for (const rec of records) {
     const normalizedModel = normalizeModelName(rec.model);
-    const cost = estimateCost(
+    const costBreakdown = estimateCostBreakdown(
       rec.model,
       rec.inputTokens,
       rec.outputTokens,
       rec.cacheReadTokens,
       rec.cacheWriteTokens,
     );
+    const pricing = toCachePricing(costBreakdown.pricing);
 
     let dateModels = byDate.get(rec.date);
     if (!dateModels) {
@@ -168,8 +183,11 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
         cacheWriteTokens: 0,
         totalTokens: 0,
         cost: 0,
+        pricing,
       };
       dateModels.set(normalizedModel, mb);
+    } else if (!mb.pricing && pricing) {
+      mb.pricing = pricing;
     }
 
     mb.inputTokens += rec.inputTokens;
@@ -178,7 +196,7 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
     mb.cacheWriteTokens += rec.cacheWriteTokens;
     mb.totalTokens +=
       rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
-    mb.cost += cost;
+    mb.cost += costBreakdown.totalCost;
   }
 
   const daily: DailyUsage[] = [];
@@ -271,7 +289,7 @@ export class ClaudeCodeProvider implements IProvider {
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {
       const normalizedModel = normalizeModelName(record.model);
-      const cost = estimateCost(
+      const costBreakdown = estimateCostBreakdown(
         record.model,
         record.inputTokens,
         record.outputTokens,
@@ -292,7 +310,8 @@ export class ClaudeCodeProvider implements IProvider {
           record.outputTokens +
           record.cacheReadTokens +
           record.cacheWriteTokens,
-        cost,
+        cost: costBreakdown.totalCost,
+        pricing: toCachePricing(costBreakdown.pricing),
         sessionId: record.sessionId,
         projectId: record.projectId,
       });

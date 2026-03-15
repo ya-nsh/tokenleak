@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type {
   DailyUsage,
   ModelBreakdown,
+  CachePricingDetails,
   ProviderData,
   ProviderColors,
   AggregatedStats,
@@ -34,6 +35,11 @@ describe('core types', () => {
   });
 
   it('ModelBreakdown has required shape', () => {
+    const pricing: CachePricingDetails = {
+      input: 3,
+      cacheRead: 0.3,
+      cacheWrite: 3.75,
+    };
     const breakdown: ModelBreakdown = {
       model: 'claude-sonnet-4-20250514',
       inputTokens: 500,
@@ -42,9 +48,11 @@ describe('core types', () => {
       cacheWriteTokens: 50,
       totalTokens: 950,
       cost: 0.02,
+      pricing,
     };
     expect(breakdown.model).toBe('claude-sonnet-4-20250514');
     expect(breakdown.totalTokens).toBe(950);
+    expect(breakdown.pricing).toEqual(pricing);
   });
 
   it('ProviderData has required shape', () => {

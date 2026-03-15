@@ -17,6 +17,13 @@ export interface ModelBreakdown {
   cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
+  pricing?: CachePricingDetails | null;
+}
+
+export interface CachePricingDetails {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 export interface ProviderData {
@@ -68,6 +75,7 @@ export interface UsageEvent {
   cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
+  pricing?: CachePricingDetails | null;
   sessionId?: string;
   projectId?: string;
   repoRoot?: string;

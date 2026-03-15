@@ -16,6 +16,11 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
       cacheWriteTokens: 10,
       totalTokens: 190,
       cost: 0.2,
+      pricing: {
+        input: 15,
+        cacheRead: 1.5,
+        cacheWrite: 18.75,
+      },
       sessionId: 'session-a',
       projectId: 'project-alpha',
       durationMs: 60_000,
@@ -31,6 +36,11 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
       cacheWriteTokens: 5,
       totalTokens: 250,
       cost: 0.25,
+      pricing: {
+        input: 3,
+        cacheRead: 0.3,
+        cacheWrite: 3.75,
+      },
       sessionId: 'session-a',
       projectId: 'project-alpha',
       durationMs: 120_000,
@@ -46,6 +56,11 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
       cacheWriteTokens: 5,
       totalTokens: 215,
       cost: 0.15,
+      pricing: {
+        input: 0.25,
+        cacheRead: 0.03,
+        cacheWrite: 0.3,
+      },
       sessionId: 'session-b',
       projectId: 'project-beta',
       durationMs: 90_000,
@@ -75,6 +90,11 @@ function createProvider(overrides: Partial<ProviderData> = {}): ProviderData {
             cacheWriteTokens: 10,
             totalTokens: 190,
             cost: 0.2,
+            pricing: {
+              input: 15,
+              cacheRead: 1.5,
+              cacheWrite: 18.75,
+            },
           },
           {
             model: 'claude-3-sonnet',
@@ -84,6 +104,11 @@ function createProvider(overrides: Partial<ProviderData> = {}): ProviderData {
             cacheWriteTokens: 5,
             totalTokens: 250,
             cost: 0.25,
+            pricing: {
+              input: 3,
+              cacheRead: 0.3,
+              cacheWrite: 3.75,
+            },
           },
         ],
       },
@@ -104,6 +129,11 @@ function createProvider(overrides: Partial<ProviderData> = {}): ProviderData {
             cacheWriteTokens: 5,
             totalTokens: 215,
             cost: 0.15,
+            pricing: {
+              input: 0.25,
+              cacheRead: 0.03,
+              cacheWrite: 0.3,
+            },
           },
         ],
       },
@@ -132,6 +162,14 @@ describe('buildMoreStats', () => {
     expect(more.inputOutput.outputPerInput).toBeCloseTo(205 / 370, 5);
     expect(more.cacheEconomics.readTokens).toBe(60);
     expect(more.cacheEconomics.writeTokens).toBe(20);
+    expect(more.cacheRoi?.summary.readTokens).toBe(60);
+    expect(more.cacheRoi?.summary.writeTokens).toBe(20);
+    expect(more.cacheRoi?.summary.readSavings).toBeCloseTo(0.0004612, 10);
+    expect(more.cacheRoi?.summary.writeCost).toBeCloseTo(0.00020775, 10);
+    expect(more.cacheRoi?.summary.netSavings).toBeCloseTo(0.00025345, 10);
+    expect(more.cacheRoi?.byProvider[0]?.label).toBe('Claude Code');
+    expect(more.cacheRoi?.byModel[0]?.label).toBe('claude-3-opus');
+    expect(more.cacheRoi?.byProject[0]?.label).toBe('project-alpha');
     expect(more.hourOfDay[9]?.tokens).toBe(190);
     expect(more.hourOfDay[14]?.tokens).toBe(215);
     expect(more.sessionMetrics.totalSessions).toBe(2);

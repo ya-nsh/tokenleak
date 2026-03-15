@@ -9,6 +9,7 @@ import type {
 import { TerminalRenderer } from './terminal-renderer';
 import {
   createOutput,
+  createMoreStats,
   createRenderOptions,
   createMoreStats,
   createZeroedStats,
@@ -147,6 +148,18 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('Provider Mix');
     expect(result).toContain('Claude Code');
     expect(result).toContain('Codex');
+  });
+
+  it('surfaces cache ROI in the dashboard when more stats are present', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = createMoreStats();
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true }));
+
+    expect(result).toContain('Cache ROI');
+    expect(result).toContain('Cache Payback');
   });
 
   it('collapses inactive providers into a note instead of full empty sections', async () => {
@@ -371,5 +384,64 @@ describe('TerminalRenderer', () => {
 
     expect(result).toContain('Compare');
     expect(result).toContain('streak');
+  });
+
+  it('appends cache ROI details when more stats are enabled', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = {
+      ...(output.more ?? {
+        inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
+        monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
+        cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
+        hourOfDay: [],
+        sessionMetrics: {
+          totalSessions: 0,
+          averageTokens: 0,
+          averageCost: 0,
+          averageMessages: 0,
+          averageDurationMs: null,
+          longestSession: null,
+          projectCount: 0,
+          topProject: null,
+          projectBreakdown: [],
+        },
+        compare: null,
+      }),
+      cacheRoi: {
+        method: 'test',
+        summary: {
+          label: 'all',
+          readTokens: 1200,
+          writeTokens: 400,
+          readSavings: 1.5,
+          writeCost: 0.5,
+          netSavings: 1,
+          reuseRatio: 3,
+          paybackRatio: 3,
+        },
+        byProvider: [],
+        byModel: [],
+        byProject: [
+          {
+            label: '/Users/test/work/tokenleak',
+            readTokens: 1200,
+            writeTokens: 400,
+            readSavings: 1.5,
+            writeCost: 0.5,
+            netSavings: 1,
+            reuseRatio: 3,
+            paybackRatio: 3,
+          },
+        ],
+      },
+    };
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true, more: true }));
+
+    expect(result).toContain('Cache ROI');
+    expect(result).toContain('Net savings $1.00');
+    expect(result).toContain('Top project /Users/test/work/tokenleak');
   });
 });

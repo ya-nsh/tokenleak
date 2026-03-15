@@ -2,6 +2,7 @@ import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, bold256, dim, colorize256, SEMANTIC } from '../colors';
 import { renderTerminalHeatmap } from '../heatmap';
 import { truncateVisible } from '../layout';
+import { renderCacheRoiSummary } from './cache-roi';
 
 const BAR_CHAR = '\u2588';
 
@@ -66,6 +67,12 @@ export function renderTokenView(output: TokenleakOutput, width: number, noColor:
     if (cache.reuseRatio !== null) {
       addLine('Reuse ratio', `${cache.reuseRatio.toFixed(1)}x`);
     }
+    lines.push('');
+  }
+
+  const cacheRoi = output.more?.cacheRoi;
+  if (cacheRoi) {
+    lines.push(...renderCacheRoiSummary(cacheRoi.summary, width, noColor));
     lines.push('');
   }
 
