@@ -199,7 +199,6 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
     peakDay && stats.averageDailyTokens > 0
       ? (peakDay.tokens / stats.averageDailyTokens).toFixed(1)
       : '0';
-  const peakNovels = peakDay ? Math.round(peakDay.tokens / 3000) : 0;
 
   // ── Projection (Slide 11) ──
   const projectedCost =
@@ -240,15 +239,15 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   // ── Donut SVG (Slide 05) ──
   const circumference = 2 * Math.PI * 56; // ~351.86
   let donutSegments = '';
-  let offset = -circumference / 4;
+  let offset = circumference / 4; // start at 12 o'clock
   for (const p of providerMix) {
     const dash = (p.pct / 100) * circumference;
-    donutSegments += `<circle cx="75" cy="75" r="56" fill="none" stroke="${p.color}" stroke-width="16" stroke-linecap="butt" stroke-dasharray="${dash.toFixed(0)} ${circumference.toFixed(0)}" stroke-dashoffset="${(-offset).toFixed(0)}"/>`;
+    donutSegments += `<circle cx="75" cy="75" r="56" fill="none" stroke="${p.color}" stroke-width="16" stroke-linecap="butt" stroke-dasharray="${dash.toFixed(0)} ${circumference.toFixed(0)}" stroke-dashoffset="${offset.toFixed(0)}"/>`;
     offset -= dash;
   }
 
   // ── Cache ring SVG (Slide 08) ──
-  const ringCircumference = 2 * Math.PI * 52; // ~326.73
+  const ringCircumference = 2 * Math.PI * 72; // ~452.39
   const ringDash = (cacheHitPct / 100) * ringCircumference;
   const ringOffset = ringCircumference / 4;
 
@@ -260,7 +259,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   <h1 class="hero">AI<br>Wrapped<br><span class="hl">&rsquo;${esc(year.slice(2))}</span></h1>
   <div class="dt-range"><em>${formatDate(since)}</em> &mdash; <em>${formatDate(until)}, ${esc(year)}</em></div>
   <div class="rule"></div>
-  <div class="info">Claude Code &amp; Codex sessions &mdash; every token, every session, laid bare.</div>
+  <div class="info">Every prompt has a price. Here&rsquo;s yours.</div>
   <div style="margin-top:10px;display:flex;align-items:center"><span class="pulse"></span><span style="font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.14em">${totalDaysInRange} DAYS OF DATA</span></div>
   <div style="margin-top:auto;padding-top:34px">${stamp}</div>
 </div>`;
@@ -399,9 +398,9 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   <div class="slide-tag"><em>08</em> &nbsp;/&nbsp; 12 &nbsp;&middot;&nbsp; Cache Efficiency</div>
   <h2 class="title"><span class="hl">${cacheHitPct}%</span> cache<br>hit rate</h2>
   <div class="ring-wrap">
-    <svg width="161" height="161" viewBox="0 0 140 140">
-      <circle cx="70" cy="70" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12"/>
-      <circle cx="70" cy="70" r="52" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${ringDash.toFixed(0)} ${ringCircumference.toFixed(0)}" stroke-dashoffset="${ringOffset.toFixed(0)}" transform="rotate(-90 70 70)"/>
+    <svg width="200" height="200" viewBox="0 0 200 200">
+      <circle cx="100" cy="100" r="72" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="14"/>
+      <circle cx="100" cy="100" r="72" fill="none" stroke="var(--gold)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${ringDash.toFixed(0)} ${ringCircumference.toFixed(0)}" stroke-dashoffset="${ringOffset.toFixed(0)}" transform="rotate(-90 100 100)"/>
     </svg>
     <div class="ring-center">
       <div class="ring-pct">${cacheHitPct}%</div>
@@ -435,13 +434,13 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   <div class="rule"></div>
   <div class="g2">
     <div class="sc">
-      <div class="lb">vs Average</div>
+      <div class="lb">vs Daily Avg</div>
       <div class="vl">${esc(peakMultiplier)}<span class="un">x</span></div>
     </div>
     <div class="sc">
-      <div class="lb">\u2248 Novels</div>
-      <div class="vl">${peakNovels}</div>
-      <div class="un">@ 3K TOK EACH</div>
+      <div class="lb">Daily Avg</div>
+      <div class="vl">${esc(formatNumber(stats.averageDailyTokens))}</div>
+      <div class="un">TOKENS</div>
     </div>
   </div>`
     : `<div class="info">No peak day data available for this period.</div>`;
@@ -486,7 +485,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
     </div>
   </div>
   <div class="rule"></div>
-  <div class="info">At <span class="hi">${esc(avgDailyCostStr)}</span> per day, you&rsquo;re on track for <span class="hi">$${projectedDollars}.${String(projectedCents).padStart(2, '0')}</span> this month.</div>
+  <div class="info" style="font-size:19px">At <span class="hi">${esc(avgDailyCostStr)}</span> per day, you&rsquo;re on track for <span class="hi">$${projectedDollars}.${String(projectedCents).padStart(2, '0')}</span> this month.</div>
   <div style="margin-top:auto;padding-top:34px">${stamp}</div>
 </div>`;
 

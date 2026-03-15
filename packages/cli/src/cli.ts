@@ -1295,17 +1295,20 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   // Wrapped live server mode
   if (config.wrappedLive) {
     process.stderr.write('Generating wrapped presentation...\n');
-    const { port } = await startWrappedLiveServer(output);
+    const { port, stop } = await startWrappedLiveServer(output);
     process.stderr.write('Press Ctrl+C to stop the server.\n');
     await new Promise<void>((resolve) => {
       process.on('SIGINT', () => {
         process.stderr.write('\nShutting down wrapped live server...\n');
+        stop();
         resolve();
       });
       process.on('SIGTERM', () => {
+        stop();
         resolve();
       });
     });
+    process.exit(0);
     return;
   }
 

@@ -7,7 +7,7 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
   return [
     {
       provider,
-      timestamp: '2026-03-01T09:00:00.000Z',
+      timestamp: '2026-03-01T09:00:00.000',
       date: '2026-03-01',
       model: 'claude-3-opus',
       inputTokens: 100,
@@ -27,7 +27,7 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
     },
     {
       provider,
-      timestamp: '2026-03-01T21:00:00.000Z',
+      timestamp: '2026-03-01T21:00:00.000',
       date: '2026-03-01',
       model: 'claude-3-sonnet',
       inputTokens: 150,
@@ -47,7 +47,7 @@ function createEvents(provider: string = 'claude-code'): UsageEvent[] {
     },
     {
       provider,
-      timestamp: '2026-03-02T14:00:00.000Z',
+      timestamp: '2026-03-02T14:00:00.000',
       date: '2026-03-02',
       model: 'claude-3-haiku',
       inputTokens: 120,
@@ -242,12 +242,12 @@ describe('buildMoreStats', () => {
     expect(more.compare?.previousRange.until).toBe('2026-02-14');
   });
 
-  it('uses UTC hour bucketing so charts stay stable across machine timezones', () => {
+  it('uses local hour bucketing so charts match the user perspective', () => {
     const provider = createProvider({
       events: [
         {
           provider: 'claude-code',
-          timestamp: '2026-03-01T00:30:00+05:30',
+          timestamp: '2026-03-01T22:15:00.000',
           date: '2026-03-01',
           model: 'claude-3-opus',
           inputTokens: 100,
@@ -266,7 +266,7 @@ describe('buildMoreStats', () => {
       { since: '2026-03-01', until: '2026-03-14' },
     );
 
-    expect(more.hourOfDay[19]?.tokens).toBe(150);
+    expect(more.hourOfDay[22]?.tokens).toBe(150);
     expect(more.hourOfDay[0]?.tokens).toBe(0);
   });
 
