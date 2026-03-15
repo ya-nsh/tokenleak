@@ -6,11 +6,13 @@ import {
   DEFAULT_DAYS,
   SCHEMA_VERSION,
   aggregate,
+  buildFocusReport,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
 import type {
   DateRange,
+  FocusReport,
   RenderOptions,
   TokenleakOutput,
   ProviderData,
@@ -41,6 +43,7 @@ import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 export { computeDateRange };
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
+const FOCUS_FORMAT_VALUES = ['json', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
 const PROVIDER_SHORTCUTS = {
   claude: 'claude-code',
@@ -68,12 +71,35 @@ const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'open-code': ['opencode', 'open_code'],
 };
 
+interface ProviderFilterConfig {
+  provider?: string;
+  claude: boolean;
+  codex: boolean;
+  pi: boolean;
+  openCode: boolean;
+}
+
+interface ProviderLoadConfig extends ProviderFilterConfig {
+  since?: string;
+  until?: string;
+  days: number;
+  allProviders: boolean;
+}
+
+interface FocusConfig extends ProviderLoadConfig {
+  format: typeof FOCUS_FORMAT_VALUES[number];
+  output: string | null;
+  width: number;
+  noColor: boolean;
+  listProviders: boolean;
+}
+
 function normalizeProviderToken(token: string): string {
   const normalized = token.trim().toLowerCase().replace(/\s+/g, '-');
   return PROVIDER_ALIASES[normalized] ?? normalized;
 }
 
-function getRequestedProviders(config: ReturnType<typeof resolveConfig>): Set<string> {
+function getRequestedProviders(config: ProviderFilterConfig): Set<string> {
   const requested = new Set<string>();
 
   if (config.provider) {
@@ -112,6 +138,10 @@ function buildHelpText(): string {
     '',
     'Usage:',
     '  tokenleak [flags]',
+    '  tokenleak focus [flags]',
+    '',
+    'Subcommands:',
+    '  focus                  Rank sessions by deep-work score',
     '',
     'Provider Shortcuts:',
     '  --claude                Only include Claude Code',
@@ -152,10 +182,45 @@ function buildHelpText(): string {
     '  tokenleak --list-providers',
     '  tokenleak --compare auto --format terminal',
     '  tokenleak --live-server --theme light',
+    '  tokenleak focus --provider codex --days 30',
     '',
     'Version:',
     `  CLI ${VERSION}`,
     `  Schema ${SCHEMA_VERSION}`,
+    '',
+  ].join('\n');
+}
+
+function buildFocusHelpText(): string {
+  return [
+    `tokenleak focus ${VERSION}`,
+    'Rank sessions by a deep-work score built from duration, token density, and project streaks.',
+    '',
+    'Usage:',
+    '  tokenleak focus [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file and infer format from extension',
+    '  -w, --width <number>    Terminal render width',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --claude            Only include Claude Code',
+    '      --codex             Only include Codex',
+    '      --pi                Only include Pi',
+    '      --open-code         Only include OpenCode',
+    '      --all-providers     Ignore provider filters and use every available provider',
+    '      --list-providers    Show registered providers and aliases',
+    '      --no-color          Disable ANSI colors in terminal output',
+    '      --help              Show this help',
+    '      --version           Show version information',
+    '',
+    'Examples:',
+    '  tokenleak focus',
+    '  tokenleak focus --provider claude,codex --days 30',
+    '  tokenleak focus --format json --output focus.json',
     '',
   ].join('\n');
 }
@@ -321,6 +386,78 @@ function buildProviderList(providers: IProvider[], availability: Map<string, boo
 
   lines.push('');
   return lines.join('\n');
+}
+
+function createRegistry(): ProviderRegistry {
+  const registry = new ProviderRegistry();
+  registerBuiltInProviders(registry);
+  return registry;
+}
+
+function validateProviderSelection(config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig): void {
+  if (config.allProviders && (
+    config.provider ||
+    config.claude ||
+    config.codex ||
+    config.pi ||
+    config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+}
+
+async function selectAvailableProviders(
+  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
+): Promise<IProvider[]> {
+  validateProviderSelection(config);
+
+  const registry = createRegistry();
+  let available = await registry.getAvailable();
+
+  const requestedProviders = getRequestedProviders(config);
+  if (!config.allProviders && requestedProviders.size > 0) {
+    if (config.provider && (config.claude || config.codex || config.pi || config.openCode)) {
+      process.stderr.write(
+        `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
+      );
+    }
+    available = available.filter((provider) => providerMatchesFilter(provider, requestedProviders));
+  }
+
+  return available;
+}
+
+async function loadProviderData(config: ProviderLoadConfig): Promise<{
+  dateRange: DateRange;
+  providerDataList: ProviderData[];
+}> {
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+
+  const available = await selectAvailableProviders(config);
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const results = await Promise.all(
+    available.map(async (provider) => {
+      try {
+        return await provider.load(dateRange);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const providerDataList = results.filter((result): result is ProviderData => result !== null);
+  if (providerDataList.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  return { dateRange, providerDataList };
 }
 
 /** Infer format from output file extension. */
@@ -509,6 +646,97 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   return result;
 }
 
+export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfig {
+  const fileConfig = loadConfig();
+  const envConfig = loadEnvOverrides();
+
+  const merged: FocusConfig = {
+    format: 'terminal',
+    since: undefined,
+    until: undefined,
+    days: DEFAULT_DAYS,
+    output: null,
+    width: 80,
+    noColor: false,
+    provider: undefined,
+    claude: false,
+    codex: false,
+    pi: false,
+    openCode: false,
+    allProviders: false,
+    listProviders: false,
+  };
+
+  if (fileConfig.format && FOCUS_FORMAT_VALUES.includes(fileConfig.format as typeof FOCUS_FORMAT_VALUES[number])) {
+    merged.format = fileConfig.format as typeof FOCUS_FORMAT_VALUES[number];
+  }
+  if (fileConfig.days !== undefined) merged.days = fileConfig.days;
+  if (fileConfig.width !== undefined) merged.width = fileConfig.width;
+  if (fileConfig.noColor !== undefined) merged.noColor = fileConfig.noColor;
+
+  if (
+    envConfig.format &&
+    FOCUS_FORMAT_VALUES.includes(envConfig.format as typeof FOCUS_FORMAT_VALUES[number])
+  ) {
+    merged.format = envConfig.format as typeof FOCUS_FORMAT_VALUES[number];
+  }
+  if (envConfig.days !== undefined) merged.days = envConfig.days;
+
+  const result: FocusConfig = { ...merged };
+
+  if (cliArgs['format'] !== undefined) {
+    result.format = cliArgs['format'] as typeof FOCUS_FORMAT_VALUES[number];
+  }
+  if (cliArgs['since'] !== undefined) {
+    result.since = cliArgs['since'] as string;
+  }
+  if (cliArgs['until'] !== undefined) {
+    result.until = cliArgs['until'] as string;
+  }
+  if (cliArgs['days'] !== undefined) {
+    result.days = cliArgs['days'] as number;
+  }
+  if (cliArgs['output'] !== undefined) {
+    const outputPath = cliArgs['output'] as string;
+    result.output = outputPath;
+    if (cliArgs['format'] === undefined) {
+      const inferred = inferFormatFromPath(outputPath);
+      if (inferred === 'json') {
+        result.format = 'json';
+      }
+    }
+  }
+  if (cliArgs['width'] !== undefined) {
+    result.width = cliArgs['width'] as number;
+  }
+  if (cliArgs['noColor'] !== undefined) {
+    result.noColor = cliArgs['noColor'] as boolean;
+  }
+  if (cliArgs['provider'] !== undefined) {
+    result.provider = cliArgs['provider'] as string;
+  }
+  if (cliArgs['claude'] !== undefined) {
+    result.claude = cliArgs['claude'] as boolean;
+  }
+  if (cliArgs['codex'] !== undefined) {
+    result.codex = cliArgs['codex'] as boolean;
+  }
+  if (cliArgs['pi'] !== undefined) {
+    result.pi = cliArgs['pi'] as boolean;
+  }
+  if (cliArgs['openCode'] !== undefined) {
+    result.openCode = cliArgs['openCode'] as boolean;
+  }
+  if (cliArgs['allProviders'] !== undefined) {
+    result.allProviders = cliArgs['allProviders'] as boolean;
+  }
+  if (cliArgs['listProviders'] !== undefined) {
+    result.listProviders = cliArgs['listProviders'] as boolean;
+  }
+
+  return result;
+}
+
 /** Get a renderer for the given format. */
 function getRenderer(format: string): IRenderer {
   switch (format) {
@@ -527,22 +755,120 @@ function getRenderer(format: string): IRenderer {
   }
 }
 
+function padCell(value: string, width: number): string {
+  return value.length >= width ? value : value.padEnd(width, ' ');
+}
+
+function truncateCell(value: string, width: number): string {
+  if (value.length <= width) {
+    return value;
+  }
+
+  if (width <= 3) {
+    return value.slice(0, width);
+  }
+
+  return `${value.slice(0, width - 3)}...`;
+}
+
+function formatFocusDuration(durationMs: number | null): string {
+  if (!durationMs || durationMs <= 0) {
+    return '-';
+  }
+
+  const minutes = Math.round(durationMs / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+
+  if (hours === 0) {
+    return `${remainder}m`;
+  }
+
+  if (remainder === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h${String(remainder).padStart(2, '0')}m`;
+}
+
+function formatFocusDensity(tokensPerHour: number): string {
+  return `${Math.round(tokensPerHour).toLocaleString('en-US')}/h`;
+}
+
+function renderFocusReport(report: FocusReport, width: number): string {
+  const safeWidth = Math.max(72, width || 80);
+  const labelWidth = Math.max(16, safeWidth - 50);
+  const lines = [
+    'Tokenleak Focus',
+    report.method,
+    '',
+    `${report.entries.length} sessions ranked by deep-work score.`,
+  ];
+
+  if (report.entries.length === 0) {
+    lines.push('', 'No session data available.');
+    return lines.join('\n');
+  }
+
+  lines.push(
+    '',
+    `${padCell('Score', 6)} ${padCell('Dur', 7)} ${padCell('Density', 12)} ${padCell('Stk', 4)} ${padCell('Provider', 11)} ${padCell('Label', labelWidth)}`,
+    `${'-'.repeat(6)} ${'-'.repeat(7)} ${'-'.repeat(12)} ${'-'.repeat(4)} ${'-'.repeat(11)} ${'-'.repeat(labelWidth)}`,
+  );
+
+  for (const entry of report.entries) {
+    lines.push(
+      `${padCell(entry.score.toFixed(1), 6)} ${padCell(formatFocusDuration(entry.durationMs), 7)} ${padCell(formatFocusDensity(entry.tokensPerHour), 12)} ${padCell(`${entry.streak}d`, 4)} ${padCell(entry.provider, 11)} ${truncateCell(entry.label, labelWidth)}`,
+    );
+    lines.push(`       ${truncateCell(entry.rationale.join(' | '), safeWidth - 7)}`);
+  }
+
+  return lines.join('\n');
+}
+
+export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveFocusConfig(cliArgs);
+
+  if (!FOCUS_FORMAT_VALUES.includes(config.format)) {
+    throw new TokenleakError(
+      `Format "${config.format}" is not supported for focus. Available formats: json, terminal`,
+    );
+  }
+
+  if (config.listProviders) {
+    const registry = createRegistry();
+    const providers = registry.getAll();
+    const availabilityResults = await Promise.all(
+      providers.map(async (provider) => [provider.name, await provider.isAvailable()] as const),
+    );
+    process.stdout.write(buildProviderList(providers, new Map(availabilityResults)));
+    return;
+  }
+
+  const { providerDataList } = await loadProviderData(config);
+  const report = buildFocusReport(providerDataList.flatMap((provider) => provider.events ?? []));
+
+  if (report.entries.length === 0) {
+    throw new TokenleakError('No event-level data found for focus analysis');
+  }
+
+  const rendered = config.format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderFocusReport(report, config.width);
+
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else {
+    process.stdout.write(`${rendered}\n`);
+  }
+}
+
 /** Main execution function, exported for testing. */
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
+  validateProviderSelection(config);
 
-  if (config.allProviders && (
-    config.provider ||
-    config.claude ||
-    config.codex ||
-    config.pi ||
-    config.openCode
-  )) {
-    throw new TokenleakError('--all-providers cannot be combined with provider filters');
-  }
-
-  const registry = new ProviderRegistry();
-  registerBuiltInProviders(registry);
+  const registry = createRegistry();
 
   if (config.listProviders) {
     const providers = registry.getAll();
@@ -553,25 +879,13 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
-  // Build date range
   const dateRange = computeDateRange({
     since: config.since,
     until: config.until,
     days: config.days,
   });
 
-  // Get available providers
-  let available = await registry.getAvailable();
-
-  const requestedProviders = getRequestedProviders(config);
-  if (!config.allProviders && requestedProviders.size > 0) {
-    if (config.provider && (config.claude || config.codex || config.pi || config.openCode)) {
-      process.stderr.write(
-        `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
-      );
-    }
-    available = available.filter((provider) => providerMatchesFilter(provider, requestedProviders));
-  }
+  const available = await selectAvailableProviders(config);
 
   if (available.length === 0) {
     throw new TokenleakError('No provider data found');
@@ -639,24 +953,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
-  // Load data from available providers
-  const results = await Promise.all(
-    available.map(async (p) => {
-      try {
-        return await p.load(dateRange);
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  const providerDataList: ProviderData[] = results.filter(
-    (r): r is ProviderData => r !== null,
-  );
-
-  if (providerDataList.length === 0) {
-    throw new TokenleakError('No provider data found');
-  }
+  const { providerDataList } = await loadProviderData(config);
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);
@@ -913,6 +1210,109 @@ const main = defineCommand({
   },
 });
 
+const focusMain = defineCommand({
+  meta: {
+    name: 'focus',
+    version: VERSION,
+    description: 'Rank sessions by deep-work score',
+  },
+  args: {
+    format: {
+      type: 'string',
+      alias: 'f',
+      description: 'Output format: terminal, json',
+    },
+    since: {
+      type: 'string',
+      alias: 's',
+      description: 'Start date (YYYY-MM-DD)',
+    },
+    until: {
+      type: 'string',
+      alias: 'u',
+      description: 'End date (YYYY-MM-DD), defaults to today',
+    },
+    days: {
+      type: 'string',
+      alias: 'd',
+      description: `Number of days to look back (default: ${DEFAULT_DAYS}, overridden by --since)`,
+    },
+    output: {
+      type: 'string',
+      alias: 'o',
+      description: 'Output file path',
+    },
+    width: {
+      type: 'string',
+      alias: 'w',
+      description: 'Terminal width (default: 80)',
+    },
+    noColor: {
+      type: 'boolean',
+      description: 'Disable ANSI colors',
+      default: false,
+    },
+    provider: {
+      type: 'string',
+      alias: 'p',
+      description: 'Filter to specific provider(s), comma-separated',
+    },
+    claude: {
+      type: 'boolean',
+      description: 'Shortcut for --provider claude-code',
+      default: false,
+    },
+    codex: {
+      type: 'boolean',
+      description: 'Shortcut for --provider codex',
+      default: false,
+    },
+    pi: {
+      type: 'boolean',
+      description: 'Shortcut for --provider pi',
+      default: false,
+    },
+    openCode: {
+      type: 'boolean',
+      description: 'Shortcut for --provider open-code',
+      default: false,
+    },
+    allProviders: {
+      type: 'boolean',
+      description: 'Ignore provider filters and use every available provider',
+      default: false,
+    },
+    listProviders: {
+      type: 'boolean',
+      description: 'List registered providers and aliases',
+      default: false,
+    },
+  },
+  async run({ args }) {
+    try {
+      const cliArgs: Record<string, unknown> = {};
+      if (args.format !== undefined) cliArgs['format'] = args.format;
+      if (args.since !== undefined) cliArgs['since'] = args.since;
+      if (args.until !== undefined) cliArgs['until'] = args.until;
+      if (args.days !== undefined) cliArgs['days'] = Number(args.days);
+      if (args.output !== undefined) cliArgs['output'] = args.output;
+      if (args.width !== undefined) cliArgs['width'] = Number(args.width);
+      if (args.noColor) cliArgs['noColor'] = true;
+      if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+      if (args.claude) cliArgs['claude'] = true;
+      if (args.codex) cliArgs['codex'] = true;
+      if (args.pi) cliArgs['pi'] = true;
+      if (args.openCode) cliArgs['openCode'] = true;
+      if (args.allProviders) cliArgs['allProviders'] = true;
+      if (args.listProviders) cliArgs['listProviders'] = true;
+
+      await runFocus(cliArgs);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  },
+});
+
 // Only run when executed directly, not when imported by tests
 const isDirectExecution =
   typeof Bun !== 'undefined'
@@ -922,8 +1322,27 @@ const isDirectExecution =
 
 if (isDirectExecution) {
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
-  process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   const argv = normalizedArgv;
+
+  if (argv[0] === 'focus') {
+    const focusArgv = argv.slice(1);
+    process.argv = [...process.argv.slice(0, 2), ...focusArgv];
+
+    if (focusArgv.includes('--help') || focusArgv.includes('-h')) {
+      process.stdout.write(buildFocusHelpText());
+      process.exit(0);
+    }
+
+    if (focusArgv.includes('--version') || focusArgv.includes('-v')) {
+      process.stdout.write(buildVersionText());
+      process.exit(0);
+    }
+
+    await runMain(focusMain);
+    process.exit(0);
+  }
+
+  process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
 
   if (argv.includes('--help') || argv.includes('-h')) {
     process.stdout.write(buildHelpText());
@@ -936,8 +1355,7 @@ if (isDirectExecution) {
   }
 
   if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
-    const registry = new ProviderRegistry();
-    registerBuiltInProviders(registry);
+    const registry = createRegistry();
     const available = await registry.getAvailable();
 
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {

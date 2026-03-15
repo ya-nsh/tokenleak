@@ -9,6 +9,7 @@ export { aggregate } from './aggregate';
 export { mergeProviderData } from './merge';
 export { compareRanges, computeDeltas, buildCompareOutput, parseCompareRange, computePreviousPeriod } from './compare';
 export { buildMoreStats, computeModelMixShift } from './more';
+export { buildFocusReport } from './focus';
 export {
   buildSessionRollups,
   buildProjectRollups,
