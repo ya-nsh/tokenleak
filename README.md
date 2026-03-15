@@ -6,10 +6,18 @@ See where your AI tokens actually go. Tokenleak reads local usage logs from **Cl
 
 ## Install
 
-Tokenleak requires [Bun](https://bun.sh) (v1.0+).
+Install Tokenleak with the package manager you already use:
 
 ```bash
+# Bun
 bun install -g tokenleak
+
+# npm
+npm install -g tokenleak
+
+# Run without a global install
+bunx tokenleak --help
+npx tokenleak --help
 ```
 
 After installing, run `tokenleak` in your terminal. It auto-detects supported providers from their local logs.
@@ -19,6 +27,8 @@ In an interactive TTY, plain `tokenleak` opens a launcher where you can:
 - open a tabbed terminal dashboard
 - export JSON, SVG, or PNG
 - build compare reports
+- run explain reports for a specific day
+- run focus reports for deep-work sessions
 - inspect richer analytics such as model efficiency, cache ROI, session/project drill-downs, and attribution clusters
 - start the local live dashboard
 - inspect provider availability and aliases
