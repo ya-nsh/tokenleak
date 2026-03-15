@@ -105,17 +105,18 @@ async function createConnectedClient(registry?: ProviderRegistry) {
 // ---------------------------------------------------------------------------
 
 describe('MCP Server', () => {
-  it('lists all 6 tools', async () => {
+  it('lists all 7 tools', async () => {
     const { client } = await createConnectedClient();
 
     const result = await client.listTools();
 
-    expect(result.tools).toHaveLength(6);
+    expect(result.tools).toHaveLength(7);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'compare_periods',
       'get_cost_breakdown',
       'get_daily_usage',
+      'get_efficiency_advice',
       'get_streaks_and_habits',
       'get_usage_summary',
       'list_providers',
@@ -265,6 +266,25 @@ describe('MCP Server', () => {
     expect(parsed.deltas).toBeDefined();
     expect(typeof parsed.deltas.tokens).toBe('number');
     expect(typeof parsed.deltas.cost).toBe('number');
+  });
+
+  it('calls get_efficiency_advice and returns advisor report', async () => {
+    const { client } = await createConnectedClient();
+
+    const result = await client.callTool({
+      name: 'get_efficiency_advice',
+      arguments: { days: 30 },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0]!.text);
+
+    expect(parsed.recommendations).toBeDefined();
+    expect(Array.isArray(parsed.recommendations)).toBe(true);
+    expect(typeof parsed.totalCurrentMonthlyCost).toBe('number');
+    expect(typeof parsed.totalMonthlySavings).toBe('number');
+    expect(typeof parsed.analyzedDays).toBe('number');
   });
 
   it('handles empty registry gracefully for get_usage_summary', async () => {
