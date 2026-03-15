@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, and shareable image cards from the CLI.
+See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
 ![Tokenleak preview card](./docs/preview.png)
 
@@ -19,6 +19,7 @@ In an interactive TTY, plain `tokenleak` opens a launcher where you can:
 - open a tabbed terminal dashboard
 - export JSON, SVG, or PNG
 - build compare reports
+- inspect richer analytics such as model efficiency, cache ROI, session/project drill-downs, and attribution clusters
 - start the local live dashboard
 - inspect provider availability and aliases
 
@@ -61,9 +62,38 @@ tokenleak -o report.json
 tokenleak -o heatmap.svg
 tokenleak -o card.png
 
+# Explain one day's usage
+tokenleak explain 2026-03-10
+tokenleak explain 2026-03-10 --format json
+
+# Rank deep-work sessions
+tokenleak focus
+tokenleak focus --provider codex --days 30
+
 # Show registered providers, availability, and aliases
 tokenleak --list-providers
 ```
+
+### Analysis commands
+
+Tokenleak ships two dedicated investigation commands in addition to the main dashboard flow:
+
+```bash
+# Explain what drove a specific day
+tokenleak explain 2026-03-10
+
+# Emit the explain report as JSON
+tokenleak explain 2026-03-10 --format json --output explain.json
+
+# Rank sessions by deep-work score
+tokenleak focus --days 30
+
+# Focus report as JSON
+tokenleak focus --format json --provider pi --output focus.json
+```
+
+- `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
+- `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
 
 ### Date filtering
 
@@ -157,9 +187,16 @@ tokenleak --no-color
 # Hide the insights panel
 tokenleak --no-insights
 
-# Add expanded image stats and extra terminal data in JSON output
+# Add expanded analytics to terminal/image/json output
 tokenleak --more
 ```
+
+With `--more`, Tokenleak surfaces:
+
+- model efficiency scoring with transparent component breakdowns
+- prompt-cache ROI analysis by provider, model, and project
+- session and project drill-down tables
+- attribution clusters that group work by repo/directory and time window
 
 ### Sharing
 
@@ -191,7 +228,7 @@ The launcher can open a full-screen terminal dashboard with:
 - metric tabs: `overview`, `sess`, `tok`, `model`, `cwd`, `dow`, `tod`
 - keyboard navigation for scrolling and switching views
 
-This mode uses event-level data when available, so session, token, project, and hour-of-day views are most useful for providers that include session metadata in their local logs.
+This mode uses event-level data when available, so session, token, project, attribution, model-efficiency, and hour-of-day views are most useful for providers that include session metadata in their local logs.
 
 ### Live dashboard
 
@@ -200,6 +237,12 @@ This mode uses event-level data when available, so session, token, project, and 
 ## All flags
 
 When you run bare `tokenleak` in a real terminal, the launcher shows these flags in-app before you run anything.
+
+Subcommands:
+
+- `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
+- `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
+- `tokenleak explain --help` and `tokenleak focus --help` print the subcommand-specific help text.
 
 | Flag | Alias | Default | Description |
 | --- | --- | --- | --- |
@@ -283,6 +326,8 @@ A rendered terminal dashboard with:
 - overview and provider sections with tokens, cost, streaks, rolling totals, and model leaders
 - day-of-week breakdown showing which days you code most
 - top models ranked by token usage
+- model efficiency and cache ROI sections when `--more` is enabled
+- session/project drill-down and attribution detail in the tabbed dashboard
 - insights such as peak day, top model, and provider mix
 
 Falls back to a compact one-liner when terminal width is under 40 characters.
@@ -336,7 +381,24 @@ Structured JSON output containing:
 }
 ```
 
-When `--more` is enabled, the `more` field contains expanded metrics such as input/output ratios, cache economics, hour-of-day activity, session metrics, project breakdowns, and compare metadata when applicable.
+When `--more` is enabled, the `more` field contains expanded metrics such as:
+
+- `inputOutput`, `monthlyBurn`, `cacheEconomics`, and `hourOfDay`
+- `modelEfficiency` rankings and ineligible-model reasons
+- `cacheRoi` summary plus provider/model/project ROI breakdowns
+- `sessionMetrics`, `sessionDrilldown`, and `projectDrilldown`
+- `attribution` clusters for repo/directory-oriented work grouping
+- compare metadata when applicable
+
+The dedicated analysis commands also support JSON output:
+
+```bash
+tokenleak explain 2026-03-10 --format json
+tokenleak focus --format json
+```
+
+- `tokenleak explain ... --format json` returns an explain report with headline, summary bullets, evidence tables, and anomaly flags.
+- `tokenleak focus ... --format json` returns a ranked focus report with deep-work scores, durations, densities, streaks, and rationales per session.
 
 When `--compare` is used with `--format json`, the output is a compare payload with:
 
@@ -371,7 +433,7 @@ A self-contained SVG image with:
 
 Same layout as SVG, rendered to a PNG image via [sharp](https://sharp.pixelplumbing.com/). Useful for embedding in documents or sharing on platforms that do not support SVG.
 
-With `--more`, PNG output includes expanded stat blocks such as input/output efficiency, projected monthly burn, cache economics, session metrics, hour-of-day activity, and model mix shift for compare renders.
+With `--more`, PNG output includes expanded stat blocks such as input/output efficiency, projected monthly burn, cache economics, session metrics, hour-of-day activity, and model mix shift for compare renders. The newest drill-down analytics are optimized first for terminal and JSON output.
 
 ## Configuration file
 
@@ -426,6 +488,11 @@ It then computes:
 - **Cache hit rate** — percentage of input tokens served from cache
 - **Top models** — models ranked by total token consumption
 - **Daily averages** — mean tokens and cost per day
+- **Model efficiency** — output-per-dollar, output/input ratio, cache coverage, and a composite score
+- **Prompt-cache ROI** — read savings, write cost, net savings, reuse ratio, and payback ratio
+- **Session and project drill-downs** — duration, dominant models, active days, and streaks
+- **Attribution clusters** — repo/directory-oriented groupings of sessions into investigations or feature work
+- **Explain and focus reports** — narrative daily diagnostics and deep-work session rankings
 
 
 ## MCP Server
