@@ -1001,6 +1001,10 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
 
   lines.push(hLine('\u2514', '\u2534', '\u2518'));
 
+  // Legend
+  lines.push('');
+  lines.push(dim('Stk = project streak (consecutive days)  Density = tokens per hour', noColor));
+
   return lines.join('\n');
 }
 
