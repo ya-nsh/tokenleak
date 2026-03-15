@@ -175,6 +175,12 @@ describe('buildMoreStats', () => {
     expect(more.sessionMetrics.totalSessions).toBe(2);
     expect(more.sessionMetrics.topProject?.name).toBe('project-alpha');
     expect(more.sessionMetrics.projectBreakdown).toHaveLength(2);
+    expect(more.sessionDrilldown).toHaveLength(2);
+    expect(more.sessionDrilldown[0]?.sessionId).toBe('session-a');
+    expect(more.sessionDrilldown[0]?.topModels[0]?.model).toBe('claude-3-sonnet');
+    expect(more.projectDrilldown).toHaveLength(2);
+    expect(more.projectDrilldown[0]?.projectId).toBe('project-alpha');
+    expect(more.projectDrilldown[0]?.topSessions[0]?.label).toBe('project-alpha');
     expect(more.sessionMetrics.projectBreakdown[0]?.name).toBe('project-alpha');
     expect(more.sessionMetrics.projectBreakdown[1]?.name).toBe('project-beta');
     expect(more.sessionMetrics.projectBreakdown[0]!.tokens).toBeGreaterThan(
@@ -503,6 +509,7 @@ describe('buildMoreStats', () => {
 
     expect(more.sessionMetrics.longestSession?.label).toBe('project-upgraded');
     expect(more.sessionMetrics.topProject?.name).toBe('project-upgraded');
+    expect(more.sessionDrilldown[0]?.label).toBe('project-upgraded');
   });
 });
 

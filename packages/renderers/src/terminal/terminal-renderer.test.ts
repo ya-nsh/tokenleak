@@ -11,7 +11,6 @@ import {
   createOutput,
   createMoreStats,
   createRenderOptions,
-  createMoreStats,
   createZeroedStats,
 } from '../__test-fixtures__';
 
@@ -103,6 +102,8 @@ function createEmptyMoreStats(): MoreStats {
       topProject: null,
       projectBreakdown: [],
     },
+    sessionDrilldown: [],
+    projectDrilldown: [],
     compare: null,
   };
 }
@@ -319,6 +320,8 @@ describe('TerminalRenderer', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
         compare: null,
       }),
       compare: {
@@ -363,6 +366,8 @@ describe('TerminalRenderer', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
         compare: null,
       }),
       compare: {

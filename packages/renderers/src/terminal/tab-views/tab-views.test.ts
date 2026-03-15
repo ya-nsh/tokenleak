@@ -177,8 +177,9 @@ describe('renderSessionView', () => {
   it('shows longest session when available', () => {
     const output = createOutput({ more: createMoreStats() });
     const result = renderSessionView(output, 80, true);
-    expect(result).toContain('Longest Session');
+    expect(result).toContain('Top Sessions');
     expect(result).toContain('project-alpha');
+    expect(result).toContain('claude-code');
   });
 
   it('produces no ANSI codes with noColor', () => {
@@ -250,6 +251,7 @@ describe('renderCwdView', () => {
     expect(result).toContain('Projects');
     expect(result).toContain('project-alpha');
     expect(result).toContain('Cache ROI by Project');
+    expect(result).toContain('1 sess');
   });
 
   it('handles missing more stats', () => {
@@ -272,6 +274,8 @@ describe('renderCwdView', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
       }),
     });
     const result = renderCwdView(output, 80, false);

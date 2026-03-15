@@ -175,6 +175,108 @@ export function createUsageEvents(provider: string = 'claude-code'): UsageEvent[
 }
 
 export function createMoreStats(overrides: Partial<MoreStats> = {}): MoreStats {
+  const sessionDrilldown: MoreStats['sessionDrilldown'] = [
+    {
+      sessionId: 'claude-code-session-a',
+      label: 'project-alpha',
+      provider: 'claude-code',
+      projectId: 'project-alpha',
+      repoRoot: null,
+      directory: 'project-alpha',
+      start: '2026-03-01T09:15:00.000Z',
+      end: '2026-03-01T21:45:00.000Z',
+      durationMs: 300000,
+      eventCount: 2,
+      inputTokens: 1800,
+      outputTokens: 900,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 70,
+      totalTokens: 3070,
+      cost: 0.32,
+      topModels: [
+        { model: 'claude-3-opus', tokens: 1750, cost: 0.2, percentage: 1750 / 3070 },
+        { model: 'claude-3-sonnet', tokens: 1320, cost: 0.12, percentage: 1320 / 3070 },
+      ],
+    },
+    {
+      sessionId: 'claude-code-session-b',
+      label: 'project-beta',
+      provider: 'claude-code',
+      projectId: 'project-beta',
+      repoRoot: null,
+      directory: 'project-beta',
+      start: '2026-03-02T14:30:00.000Z',
+      end: '2026-03-02T14:30:00.000Z',
+      durationMs: 90000,
+      eventCount: 1,
+      inputTokens: 600,
+      outputTokens: 300,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 15,
+      totalTokens: 995,
+      cost: 0.08,
+      topModels: [
+        { model: 'claude-3-haiku', tokens: 995, cost: 0.08, percentage: 1 },
+      ],
+    },
+  ];
+
+  const projectDrilldown: MoreStats['projectDrilldown'] = [
+    {
+      projectId: 'project-alpha',
+      repoRoot: null,
+      directory: 'project-alpha',
+      sessionCount: 1,
+      activeDays: 1,
+      streak: 1,
+      inputTokens: 1800,
+      outputTokens: 900,
+      cacheReadTokens: 300,
+      cacheWriteTokens: 70,
+      totalTokens: 3070,
+      cost: 0.32,
+      topModels: [
+        { model: 'claude-3-opus', tokens: 1750, cost: 0.2, percentage: 1750 / 3070 },
+        { model: 'claude-3-sonnet', tokens: 1320, cost: 0.12, percentage: 1320 / 3070 },
+      ],
+      topSessions: [
+        {
+          label: 'project-alpha',
+          tokens: 3070,
+          cost: 0.32,
+          count: 2,
+          durationMs: 300000,
+        },
+      ],
+    },
+    {
+      projectId: 'project-beta',
+      repoRoot: null,
+      directory: 'project-beta',
+      sessionCount: 1,
+      activeDays: 1,
+      streak: 1,
+      inputTokens: 600,
+      outputTokens: 300,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 15,
+      totalTokens: 995,
+      cost: 0.08,
+      topModels: [
+        { model: 'claude-3-haiku', tokens: 995, cost: 0.08, percentage: 1 },
+      ],
+      topSessions: [
+        {
+          label: 'project-beta',
+          tokens: 995,
+          cost: 0.08,
+          count: 1,
+          durationMs: 90000,
+        },
+      ],
+    },
+  ];
+
   return {
     inputOutput: {
       inputPerOutput: 2,
@@ -201,25 +303,25 @@ export function createMoreStats(overrides: Partial<MoreStats> = {}): MoreStats {
     })),
     sessionMetrics: {
       totalSessions: 2,
-      averageTokens: 24000,
-      averageCost: 0.6,
-      averageMessages: 4,
-      averageDurationMs: 240000,
+      averageTokens: 2032.5,
+      averageCost: 0.2,
+      averageMessages: 1.5,
+      averageDurationMs: 195000,
       longestSession: {
         label: 'project-alpha',
-        tokens: 33000,
-        cost: 1.2,
-        count: 6,
-        durationMs: 420000,
+        tokens: 3070,
+        cost: 0.32,
+        count: 2,
+        durationMs: 300000,
       },
       projectCount: 2,
       topProject: {
         name: 'project-alpha',
-        tokens: 33000,
+        tokens: 3070,
       },
       projectBreakdown: [
-        { name: 'project-alpha', tokens: 33000 },
-        { name: 'project-beta', tokens: 15000 },
+        { name: 'project-alpha', tokens: 3070 },
+        { name: 'project-beta', tokens: 995 },
       ],
     },
     modelEfficiency: {
@@ -344,6 +446,8 @@ export function createMoreStats(overrides: Partial<MoreStats> = {}): MoreStats {
         },
       ],
     },
+    sessionDrilldown,
+    projectDrilldown,
     compare: null,
     ...overrides,
   };
