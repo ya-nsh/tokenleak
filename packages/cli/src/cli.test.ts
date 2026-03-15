@@ -159,6 +159,20 @@ describe('flag serialization', () => {
     );
     expect(buildCliPreview({})).toBe('tokenleak');
   });
+
+  test('buildCliPreview includes --advisor flag', () => {
+    expect(buildCliPreview({ advisor: true })).toBe('tokenleak --advisor');
+  });
+
+  test('buildCliPreview combines advisor with other flags', () => {
+    expect(buildCliPreview({ advisor: true, format: 'terminal', days: 30 })).toBe(
+      'tokenleak --format terminal --days 30 --advisor',
+    );
+  });
+
+  test('buildCliArgTokens emits --advisor', () => {
+    expect(buildCliArgTokens({ advisor: true })).toEqual(['--advisor']);
+  });
 });
 
 describe('interactive helpers', () => {

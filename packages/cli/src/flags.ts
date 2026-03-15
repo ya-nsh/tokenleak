@@ -23,6 +23,7 @@ export const CLI_FLAG_ORDER = [
   'liveServer',
   'noColor',
   'noInsights',
+  'advisor',
 ] as const;
 
 export const CLI_FLAG_NAMES: Record<string, string> = {
@@ -48,6 +49,7 @@ export const CLI_FLAG_NAMES: Record<string, string> = {
   liveServer: '--live-server',
   noColor: '--no-color',
   noInsights: '--no-insights',
+  advisor: '--advisor',
 };
 
 export function buildCliArgTokens(cliArgs: CliArgs): string[] {
