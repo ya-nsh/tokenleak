@@ -1090,10 +1090,16 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     days: config.days,
   });
 
+  if (config.wrappedLive) {
+    process.stderr.write('Detecting available providers...\n');
+  }
   const available = await selectAvailableProviders(config);
 
   if (available.length === 0) {
     throw new TokenleakError('No provider data found');
+  }
+  if (config.wrappedLive) {
+    process.stderr.write(`Found ${available.length} provider${available.length > 1 ? 's' : ''}: ${available.map(p => p.name).join(', ')}\n`);
   }
 
   // Handle --compare mode.
@@ -1158,7 +1164,17 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  if (config.wrappedLive) {
+    process.stderr.write(`Loading usage data (${dateRange.since} to ${dateRange.until})...\n`);
+  }
   const { providerDataList } = await loadProviderDataForRange(config, dateRange, available);
+
+  if (config.wrappedLive) {
+    const totalEvents = providerDataList.reduce((s, p) => s + (p.events?.length ?? 0), 0);
+    const totalDays = providerDataList.reduce((s, p) => s + p.daily.length, 0);
+    process.stderr.write(`Loaded ${totalDays} day-records, ${totalEvents} events\n`);
+    process.stderr.write('Aggregating stats...\n');
+  }
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);
@@ -1166,6 +1182,10 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Force --more when --advisor is used (needs event data)
   const needsMore = config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
+
+  if (config.wrappedLive && needsMore) {
+    process.stderr.write('Computing extended analytics (hourOfDay, sessions, cache, projections)...\n');
+  }
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -1274,7 +1294,9 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Wrapped live server mode
   if (config.wrappedLive) {
+    process.stderr.write('Generating wrapped presentation...\n');
     const { port } = await startWrappedLiveServer(output);
+    process.stderr.write('Press Ctrl+C to stop the server.\n');
     await new Promise<void>((resolve) => {
       process.on('SIGINT', () => {
         process.stderr.write('\nShutting down wrapped live server...\n');
