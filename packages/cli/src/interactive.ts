@@ -186,6 +186,15 @@ function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | '
     };
   }
 
+  if (args['wrappedLive']) {
+    return {
+      title: 'Wrapped Live',
+      loadingTitle: 'Starting wrapped live presentation',
+      loadingDetail: 'Loading usage data and launching the local server. Press Ctrl-C to stop it, then you will return here.',
+      executionMode: 'inherit',
+    };
+  }
+
   if (args['listProviders']) {
     return {
       title: 'Provider Registry',
