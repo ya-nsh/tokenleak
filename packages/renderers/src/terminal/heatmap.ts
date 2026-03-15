@@ -1,11 +1,13 @@
 import type { DailyUsage } from '@tokenleak/core';
 import { buildHeatmapModel } from '../shared/heatmap-model';
-import { colorize, intensityColor, HEATMAP_BLOCKS } from './ansi';
-import { visibleLength } from './layout';
+import type { AnsiColor } from './ansi';
+import { colorize, HEATMAP_BLOCKS } from './ansi';
 
 const DAY_LABEL_WIDTH = 5;
 const LABELED_DAYS: Record<number, string> = { 1: 'Mon', 3: 'Wed', 5: 'Fri' };
 const FULL_MODE_THRESHOLD = 40;
+
+const LEVEL_COLORS: AnsiColor[] = ['dim', 'dim', 'cyan', 'yellow', 'green'];
 
 type DisplayMode = 'full' | 'compact';
 
@@ -105,9 +107,11 @@ function buildLegendLine(mode: DisplayMode, noColor: boolean): string {
   ];
   const cellWidth = getCellWidth(mode);
   const gap = getGap(mode);
-  const renderedBlocks = blocks.map((block) =>
-    cellWidth === 2 ? block + block : block,
-  );
+  const renderedBlocks = blocks.map((block, level) => {
+    const text = cellWidth === 2 ? block + block : block;
+    const color = LEVEL_COLORS[level] ?? 'dim';
+    return colorize(text, color, noColor);
+  });
   return `${' '.repeat(DAY_LABEL_WIDTH)}Less ${renderedBlocks.join(gap)} More`;
 }
 
@@ -142,7 +146,7 @@ export function renderTerminalHeatmap(
 
     for (const week of displayWeeks) {
       const cell = week.days[dayIndex] ?? { level: 0, tokens: 0 };
-      const color = intensityColor(cell.tokens, model.maxTokens);
+      const color = LEVEL_COLORS[cell.level] ?? 'dim';
       const rendered = renderCell(cell.level, mode, options.noColor);
       cells.push(colorize(rendered, color, options.noColor));
     }
