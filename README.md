@@ -57,6 +57,14 @@ tokenleak --format svg --output usage.svg
 # Export a PNG image
 tokenleak --format png --output usage.png
 
+# Generate your AI Coding Wrapped story card
+tokenleak --format wrapped
+tokenleak --format wrapped --theme light --output my-wrapped.png --open
+
+# Get model efficiency recommendations
+tokenleak --advisor
+tokenleak --advisor --days 30 --claude
+
 # Save to a file (format is inferred from the extension)
 tokenleak -o report.json
 tokenleak -o heatmap.svg
@@ -165,6 +173,47 @@ Compare mode compares the current selection against an earlier period and report
 When you use `--format json`, the output shape is `periodA`, `periodB`, and `deltas`.
 When you use `--format png` or `--format svg`, Tokenleak enables expanded compare cards automatically.
 
+### AI Coding Wrapped
+
+Generate a Spotify-Wrapped-style story card as a tall PNG image showing your AI coding stats, streaks, model usage, habits, achievements, and more.
+
+```bash
+# Generate your wrapped card (dark theme, opens automatically)
+tokenleak --format wrapped --open
+
+# Light theme, custom output path
+tokenleak --format wrapped --theme light --output my-wrapped.png
+
+# Specific date range
+tokenleak --format wrapped --since 2025-01-01 --until 2025-12-31
+```
+
+The wrapped card includes 12 sections: title, big numbers, streak story, top model donut chart, provider mix, day-of-week bars, time-of-day distribution, cache efficiency gauge, peak day spotlight, earned achievements, monthly burn projection, and footer.
+
+Achievements are computed from your actual data — earn badges like Streak Master (30+ day streak), Cache Master (>50% hit rate), Night Owl (>40% usage 10pm-6am), Power User (>10k avg daily tokens), and more.
+
+The interactive launcher also includes Wrapped as option `5` with a guided setup flow.
+
+### Model Efficiency Advisor
+
+Analyze your usage patterns and get actionable recommendations for reducing costs:
+
+```bash
+# Run the advisor (last 90 days by default)
+tokenleak --advisor
+
+# Analyze last 30 days, Claude Code only
+tokenleak --advisor --days 30 --claude
+```
+
+The advisor detects three types of opportunities:
+
+- **Model downgrades** — identifies expensive models used for short outputs and suggests cheaper alternatives with concrete $/month savings
+- **Cache optimization** — flags low cache hit rates and poor reuse ratios
+- **Usage patterns** — warns about model concentration risk, cost trend increases, and burst days
+
+Each recommendation includes current cost, projected cost, monthly savings, and a confidence level (high/medium/low). The advisor is also available as a `get_efficiency_advice` tool in the MCP server.
+
 ### Themes
 
 ```bash
@@ -266,6 +315,7 @@ Subcommands:
 | `--open` |  | `false` | Open the rendered file in the default app |
 | `--upload` |  |  | Upload output to a service. Supported: `gist` |
 | `--live-server` | `-L` | `false` | Start the local browser dashboard |
+| `--advisor` |  | `false` | Run the model efficiency advisor |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |
 | `--version` |  |  | Print version information |
