@@ -13,7 +13,7 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCost } from '../models/cost';
+import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
 
 const PROVIDER_NAME = 'pi';
@@ -90,6 +90,20 @@ function toIsoTimestamp(value: unknown): string | null {
   }
 
   return null;
+}
+
+function toCachePricing(
+  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
+) {
+  if (!pricing) {
+    return undefined;
+  }
+
+  return {
+    input: pricing.input,
+    cacheRead: pricing.cacheRead,
+    cacheWrite: pricing.cacheWrite,
+  };
 }
 
 function isSessionHeader(record: unknown): record is { type: 'session'; cwd?: string } {
@@ -182,13 +196,13 @@ function getRecordCost(record: PiUsageRecord): number {
     return record.explicitCost;
   }
 
-  return estimateCost(
+  return estimateCostBreakdown(
     record.normalizedModel,
     record.inputTokens,
     record.outputTokens,
     record.cacheReadTokens,
     record.cacheWriteTokens,
-  );
+  ).totalCost;
 }
 
 function toUsageEvent(record: PiUsageRecord): UsageEvent {
@@ -197,6 +211,15 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     record.outputTokens +
     record.cacheReadTokens +
     record.cacheWriteTokens;
+  const pricing = toCachePricing(
+    estimateCostBreakdown(
+      record.normalizedModel,
+      record.inputTokens,
+      record.outputTokens,
+      record.cacheReadTokens,
+      record.cacheWriteTokens,
+    ).pricing,
+  );
 
   return {
     provider: PROVIDER_NAME,
@@ -209,6 +232,7 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
     cost: getRecordCost(record),
+    pricing,
     sessionId: record.sessionId,
     projectId: record.projectId,
   };
@@ -233,6 +257,9 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
       existing.cacheWriteTokens += event.cacheWriteTokens;
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
+      if (!existing.pricing && event.pricing) {
+        existing.pricing = event.pricing;
+      }
     } else {
       dateMap.set(event.model, {
         model: event.model,
@@ -242,6 +269,7 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
         cacheWriteTokens: event.cacheWriteTokens,
         totalTokens: event.totalTokens,
         cost: event.cost,
+        pricing: event.pricing,
       });
     }
   }

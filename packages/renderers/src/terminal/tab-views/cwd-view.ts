@@ -1,6 +1,7 @@
 import type { TokenleakOutput } from '@tokenleak/core';
 import { colorize256, bold, dim, PROJECT_COLORS } from '../colors';
 import { truncateVisible } from '../layout';
+import { renderCacheRoiBreakdowns } from './cache-roi';
 
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
@@ -52,6 +53,16 @@ export function renderCwdView(output: TokenleakOutput, width: number, noColor: b
 
   lines.push('');
   lines.push(`  ${dim(`${breakdown.length} project${breakdown.length === 1 ? '' : 's'} shown (top 10 by tokens)`, noColor)}`);
+
+  const roiLines = renderCacheRoiBreakdowns(
+    'Cache ROI by Project',
+    output.more?.cacheRoi?.byProject ?? [],
+    width,
+    noColor,
+  );
+  if (roiLines.length > 0) {
+    lines.push('', ...roiLines);
+  }
 
   return lines.join('\n');
 }

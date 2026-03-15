@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from '@tokenleak/core';
 import { JsonRenderer } from './json-renderer';
 import {
   createOutput,
+  createMoreStats,
   createRenderOptions,
   createZeroedStats,
 } from '../__test-fixtures__';
@@ -115,5 +116,17 @@ describe('JsonRenderer', () => {
     expect(parsed.aggregated.totalCost).toBe(2.5);
     expect(parsed.aggregated.cacheHitRate).toBe(0.42);
     expect(parsed.aggregated.peakDay).toEqual({ date: '2026-03-01', tokens: 8000 });
+  });
+
+  it('preserves expanded cache ROI metrics in json output', async () => {
+    const output = createMinimalTokenleakOutput({
+      more: createMoreStats(),
+    });
+    const result = await renderer.render(output, options);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.more.cacheRoi.summary.netSavings).toBeCloseTo(0.0105, 10);
+    expect(parsed.more.cacheRoi.byProvider[0].label).toBe('Claude Code');
+    expect(parsed.more.cacheRoi.byProject[0].label).toBe('project-alpha');
   });
 });

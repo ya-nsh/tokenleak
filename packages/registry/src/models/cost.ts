@@ -1,5 +1,16 @@
 import { normalizeModelName } from './normalizer';
+import type { ModelPricing } from './pricing';
 import { getModelPricing, TOKENS_PER_MILLION } from './pricing';
+
+export interface CostBreakdown {
+  normalizedModel: string;
+  pricing: ModelPricing | null;
+  inputCost: number;
+  outputCost: number;
+  cacheReadCost: number;
+  cacheWriteCost: number;
+  totalCost: number;
+}
 
 /**
  * Estimate the cost in USD for a given model and token usage.
@@ -21,11 +32,35 @@ export function estimateCost(
   cacheReadTokens: number,
   cacheWriteTokens: number,
 ): number {
+  return estimateCostBreakdown(
+    model,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+  ).totalCost;
+}
+
+export function estimateCostBreakdown(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+  cacheWriteTokens: number,
+): CostBreakdown {
   const normalized = normalizeModelName(model);
   const pricing = getModelPricing(normalized);
 
   if (!pricing) {
-    return 0;
+    return {
+      normalizedModel: normalized,
+      pricing: null,
+      inputCost: 0,
+      outputCost: 0,
+      cacheReadCost: 0,
+      cacheWriteCost: 0,
+      totalCost: 0,
+    };
   }
 
   const inputCost = (inputTokens / TOKENS_PER_MILLION) * pricing.input;
@@ -33,5 +68,13 @@ export function estimateCost(
   const cacheReadCost = (cacheReadTokens / TOKENS_PER_MILLION) * pricing.cacheRead;
   const cacheWriteCost = (cacheWriteTokens / TOKENS_PER_MILLION) * pricing.cacheWrite;
 
-  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+  return {
+    normalizedModel: normalized,
+    pricing,
+    inputCost,
+    outputCost,
+    cacheReadCost,
+    cacheWriteCost,
+    totalCost: inputCost + outputCost + cacheReadCost + cacheWriteCost,
+  };
 }

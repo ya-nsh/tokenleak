@@ -6,9 +6,10 @@ export {
   getModelPricing,
   TOKENS_PER_MILLION,
   estimateCost,
+  estimateCostBreakdown,
 } from './models';
 
-export type { ModelPricing } from './models';
+export type { ModelPricing, CostBreakdown } from './models';
 
 export type { IProvider } from './provider';
 export { ProviderRegistry } from './registry';

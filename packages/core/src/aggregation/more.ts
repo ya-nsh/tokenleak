@@ -1,5 +1,8 @@
 import type {
   AggregatedStats,
+  CacheRoiBreakdown,
+  CacheRoiMetrics,
+  CacheRoiSummary,
   CompareDeltas,
   DateRange,
   MoreStats,
@@ -8,6 +11,15 @@ import type {
   ModelMixShiftEntry,
   SessionSummary,
 } from '../types';
+
+const TOKENS_PER_MILLION = 1_000_000;
+
+interface CacheRoiAccumulator {
+  readTokens: number;
+  writeTokens: number;
+  readSavings: number;
+  writeCost: number;
+}
 
 function daysInMonth(dateString: string): number {
   const [year, month] = dateString.split('-').map(Number);
@@ -94,6 +106,124 @@ function buildCacheEconomics(providers: ProviderData[]): MoreStats['cacheEconomi
     writeTokens,
     readCoverage,
     reuseRatio: writeTokens > 0 ? readTokens / writeTokens : null,
+  };
+}
+
+function createCacheRoiAccumulator(): CacheRoiAccumulator {
+  return {
+    readTokens: 0,
+    writeTokens: 0,
+    readSavings: 0,
+    writeCost: 0,
+  };
+}
+
+function addCacheRoiUsage(
+  accumulator: CacheRoiAccumulator,
+  readTokens: number,
+  writeTokens: number,
+  pricing: UsageEvent['pricing'] | ProviderData['daily'][number]['models'][number]['pricing'],
+): void {
+  if (!pricing || (!readTokens && !writeTokens)) {
+    return;
+  }
+
+  accumulator.readTokens += readTokens;
+  accumulator.writeTokens += writeTokens;
+  accumulator.readSavings += (readTokens / TOKENS_PER_MILLION) * (pricing.input - pricing.cacheRead);
+  accumulator.writeCost += (writeTokens / TOKENS_PER_MILLION) * pricing.cacheWrite;
+}
+
+function finalizeCacheRoi(
+  accumulator: CacheRoiAccumulator,
+): CacheRoiSummary {
+  return {
+    readTokens: accumulator.readTokens,
+    writeTokens: accumulator.writeTokens,
+    readSavings: accumulator.readSavings,
+    writeCost: accumulator.writeCost,
+    netSavings: accumulator.readSavings - accumulator.writeCost,
+    reuseRatio: accumulator.writeTokens > 0 ? accumulator.readTokens / accumulator.writeTokens : null,
+    paybackRatio: accumulator.writeCost > 0 ? accumulator.readSavings / accumulator.writeCost : null,
+  };
+}
+
+function sortCacheRoiBreakdowns(
+  breakdowns: CacheRoiBreakdown[],
+): CacheRoiBreakdown[] {
+  return breakdowns.sort((left, right) => {
+    if (right.netSavings !== left.netSavings) {
+      return right.netSavings - left.netSavings;
+    }
+    if (right.readSavings !== left.readSavings) {
+      return right.readSavings - left.readSavings;
+    }
+    if (right.readTokens !== left.readTokens) {
+      return right.readTokens - left.readTokens;
+    }
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function buildCacheRoi(
+  providers: ProviderData[],
+  events: UsageEvent[],
+): CacheRoiMetrics | null {
+  const summary = createCacheRoiAccumulator();
+  const byProvider = new Map<string, CacheRoiAccumulator>();
+  const byModel = new Map<string, CacheRoiAccumulator>();
+  const byProject = new Map<string, CacheRoiAccumulator>();
+
+  for (const provider of providers) {
+    const providerAccumulator = byProvider.get(provider.displayName) ?? createCacheRoiAccumulator();
+    byProvider.set(provider.displayName, providerAccumulator);
+
+    for (const day of provider.daily) {
+      for (const model of day.models) {
+        addCacheRoiUsage(summary, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
+        addCacheRoiUsage(providerAccumulator, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
+
+        const modelAccumulator = byModel.get(model.model) ?? createCacheRoiAccumulator();
+        byModel.set(model.model, modelAccumulator);
+        addCacheRoiUsage(modelAccumulator, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
+      }
+    }
+  }
+
+  for (const event of events) {
+    const projectLabel = event.projectId?.trim() || event.repoRoot?.trim() || event.directory?.trim();
+    if (!projectLabel) {
+      continue;
+    }
+
+    const projectAccumulator = byProject.get(projectLabel) ?? createCacheRoiAccumulator();
+    byProject.set(projectLabel, projectAccumulator);
+    addCacheRoiUsage(projectAccumulator, event.cacheReadTokens, event.cacheWriteTokens, event.pricing);
+  }
+
+  const summaryMetrics = finalizeCacheRoi(summary);
+  if (summaryMetrics.readTokens === 0 && summaryMetrics.writeTokens === 0) {
+    return null;
+  }
+
+  return {
+    method: 'cache-pricing-v1',
+    summary: summaryMetrics,
+    byProvider: sortCacheRoiBreakdowns(
+      [...byProvider.entries()]
+        .map(([label, accumulator]) => ({ label, ...finalizeCacheRoi(accumulator) }))
+        .filter((entry) => entry.readTokens > 0 || entry.writeTokens > 0),
+    ),
+    byModel: sortCacheRoiBreakdowns(
+      [...byModel.entries()]
+        .map(([label, accumulator]) => ({ label, ...finalizeCacheRoi(accumulator) }))
+        .filter((entry) => entry.readTokens > 0 || entry.writeTokens > 0),
+    ),
+    byProject: sortCacheRoiBreakdowns(
+      [...byProject.entries()]
+        .map(([label, accumulator]) => ({ label, ...finalizeCacheRoi(accumulator) }))
+        .filter((entry) => entry.readTokens > 0 || entry.writeTokens > 0),
+    ),
   };
 }
 
@@ -314,6 +444,7 @@ export function buildMoreStats(
     inputOutput: buildInputOutput(providers),
     monthlyBurn: buildMonthlyBurn(providers, range),
     cacheEconomics: buildCacheEconomics(providers),
+    cacheRoi: buildCacheRoi(providers, events),
     hourOfDay: buildHourOfDay(events),
     sessionMetrics: buildSessionMetrics(events),
     compare: compare

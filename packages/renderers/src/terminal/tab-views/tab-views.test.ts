@@ -190,10 +190,11 @@ describe('renderSessionView', () => {
 
 describe('renderModelView', () => {
   it('renders model bars', () => {
-    const output = createOutput();
+    const output = createOutput({ more: createMoreStats() });
     const result = renderModelView(output, 80, false);
     expect(result).toContain('Models');
     expect(result).toContain('claude-3-opus');
+    expect(result).toContain('Cache ROI by Model');
   });
 
   it('handles empty models', () => {
@@ -222,6 +223,7 @@ describe('renderTokenView', () => {
     expect(result).toContain('Tokens');
     expect(result).toContain('Heatmap');
     expect(result).toContain('Cache Economics');
+    expect(result).toContain('Prompt Cache ROI');
   });
 
   it('shows burn projection', () => {
@@ -244,6 +246,7 @@ describe('renderCwdView', () => {
     const result = renderCwdView(output, 80, false);
     expect(result).toContain('Projects');
     expect(result).toContain('project-alpha');
+    expect(result).toContain('Cache ROI by Project');
   });
 
   it('handles missing more stats', () => {
@@ -282,6 +285,7 @@ describe('renderCwdView', () => {
 describe('renderProviderView', () => {
   it('renders provider totals and last active dates', () => {
     const output = createOutput({
+      more: createMoreStats(),
       providers: [
         createOutput().providers[0]!,
         {
@@ -297,6 +301,7 @@ describe('renderProviderView', () => {
     expect(result).toContain('Claude Code');
     expect(result).toContain('Codex');
     expect(result).toContain('last active');
+    expect(result).toContain('Cache ROI by Provider');
   });
 
   it('handles no provider activity', () => {

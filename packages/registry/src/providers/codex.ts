@@ -12,7 +12,7 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCost } from '../models/cost';
+import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
 
 /**
@@ -133,6 +133,20 @@ function compactModelDateSuffix(model: string): string {
 function extractDate(timestamp: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
   return match ? match[1]! : null;
+}
+
+function toCachePricing(
+  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
+) {
+  if (!pricing) {
+    return undefined;
+  }
+
+  return {
+    input: pricing.input,
+    cacheRead: pricing.cacheRead,
+    cacheWrite: pricing.cacheWrite,
+  };
 }
 
 function collectJsonlFiles(dir: string): string[] {
@@ -401,7 +415,7 @@ export class CodexProvider implements IProvider {
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
           const cacheWriteTokens = usage.cacheWriteTokens;
-          const cost = estimateCost(
+          const costBreakdown = estimateCostBreakdown(
             normalizedModel,
             inputTokens,
             outputTokens,
@@ -418,7 +432,8 @@ export class CodexProvider implements IProvider {
             cacheReadTokens,
             cacheWriteTokens,
             totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
-            cost,
+            cost: costBreakdown.totalCost,
+            pricing: toCachePricing(costBreakdown.pricing),
             sessionId: usage.sessionId,
             projectId: usage.projectId,
           });
@@ -437,6 +452,7 @@ export class CodexProvider implements IProvider {
               cacheWriteTokens: 0,
               totalTokens: 0,
               cost: 0,
+              pricing: toCachePricing(costBreakdown.pricing),
             });
           }
           const breakdown = modelMap.get(normalizedModel)!;
@@ -445,7 +461,10 @@ export class CodexProvider implements IProvider {
           breakdown.cacheReadTokens += cacheReadTokens;
           breakdown.cacheWriteTokens += cacheWriteTokens;
           breakdown.totalTokens += inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-          breakdown.cost += cost;
+          breakdown.cost += costBreakdown.totalCost;
+          if (!breakdown.pricing) {
+            breakdown.pricing = toCachePricing(costBreakdown.pricing);
+          }
         }
       } catch {
         // Skip files that fail to parse

@@ -1,6 +1,7 @@
 import type { TokenleakOutput } from '@tokenleak/core';
 import { colorize256, bold, dim, MODEL_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
+import { renderCacheRoiBreakdowns } from './cache-roi';
 
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
@@ -66,6 +67,16 @@ export function renderModelView(output: TokenleakOutput, width: number, noColor:
       `  ${ioBar}  ${dim(`input ${(inputShare * 100).toFixed(0)}%`, noColor)} ${dim(`output ${(io.outputShare * 100).toFixed(0)}%`, noColor)}`,
       width,
     ));
+  }
+
+  const roiLines = renderCacheRoiBreakdowns(
+    'Cache ROI by Model',
+    output.more?.cacheRoi?.byModel ?? [],
+    width,
+    noColor,
+  );
+  if (roiLines.length > 0) {
+    lines.push('', ...roiLines);
   }
 
   return lines.join('\n');

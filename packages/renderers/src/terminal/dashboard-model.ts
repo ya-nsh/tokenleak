@@ -1,5 +1,12 @@
 import { aggregate, mergeProviderData } from '@tokenleak/core';
-import type { AggregatedStats, DailyUsage, ProviderData, RenderOptions, TokenleakOutput } from '@tokenleak/core';
+import type {
+  AggregatedStats,
+  CacheRoiSummary,
+  DailyUsage,
+  ProviderData,
+  RenderOptions,
+  TokenleakOutput,
+} from '@tokenleak/core';
 
 export type DashboardMode = 'full' | 'compact' | 'summary';
 
@@ -95,7 +102,10 @@ function getLastActiveDate(provider: ProviderData): string | null {
   return activeDays.at(-1)?.date ?? null;
 }
 
-function buildMetricEntries(stats: AggregatedStats): MetricEntry[] {
+function buildMetricEntries(
+  stats: AggregatedStats,
+  cacheRoiSummary: CacheRoiSummary | null = null,
+): MetricEntry[] {
   const metrics: MetricEntry[] = [
     { label: 'Current Streak', value: `${stats.currentStreak}d` },
     { label: 'Longest Streak', value: `${stats.longestStreak}d` },
@@ -129,6 +139,19 @@ function buildMetricEntries(stats: AggregatedStats): MetricEntry[] {
       label: 'Peak Day',
       value: `${stats.peakDay.date} (${formatTokens(stats.peakDay.tokens)})`,
     });
+  }
+
+  if (cacheRoiSummary) {
+    metrics.push({
+      label: 'Cache ROI',
+      value: `${cacheRoiSummary.netSavings >= 0 ? '+' : '-'}${formatCost(Math.abs(cacheRoiSummary.netSavings))}`,
+    });
+    if (cacheRoiSummary.paybackRatio !== null) {
+      metrics.push({
+        label: 'Cache Payback',
+        value: `${cacheRoiSummary.paybackRatio.toFixed(1)}x`,
+      });
+    }
   }
 
   return metrics;
@@ -227,7 +250,7 @@ function buildOverview(output: TokenleakOutput, activeProviders: ProviderDashboa
     `${output.aggregated.activeDays} active day${output.aggregated.activeDays === 1 ? '' : 's'}`,
   ];
 
-  const metrics = buildMetricEntries(output.aggregated);
+  const metrics = buildMetricEntries(output.aggregated, output.more?.cacheRoi?.summary ?? null);
   const maxProviderTokens = Math.max(...activeProviders.map((entry) => entry.stats.totalTokens), 0);
   const providerLeaders = activeProviders
     .slice()
