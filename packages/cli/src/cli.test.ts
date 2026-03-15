@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { buildInteractiveSummary, resolveConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run } from './cli';
+import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
@@ -377,6 +377,37 @@ describe('resolveConfig', () => {
   });
 });
 
+describe('resolveFocusConfig', () => {
+  test('returns focus defaults when no flags provided', () => {
+    const config = resolveFocusConfig({});
+    expect(config.format).toBe('terminal');
+    expect(config.days).toBe(90);
+    expect(config.width).toBe(80);
+    expect(config.noColor).toBe(false);
+    expect(config.output).toBeNull();
+    expect(config.listProviders).toBe(false);
+  });
+
+  test('infers json output from the file extension', () => {
+    const config = resolveFocusConfig({ output: 'focus.json' });
+    expect(config.format).toBe('json');
+    expect(config.output).toBe('focus.json');
+  });
+
+  test('passes provider filters through', () => {
+    const config = resolveFocusConfig({ provider: 'codex', pi: true, allProviders: false });
+    expect(config.provider).toBe('codex');
+    expect(config.pi).toBe(true);
+    expect(config.allProviders).toBe(false);
+  });
+
+  test('rejects invalid focus formats at config resolution time', () => {
+    expect(() => resolveFocusConfig({ format: 'png' })).toThrow(
+      'Unsupported focus format: "png". Available: json, terminal',
+    );
+  });
+});
+
 // ─── loadEnvOverrides ───────────────────────────────────────────────────
 
 describe('loadEnvOverrides', () => {
@@ -488,6 +519,20 @@ describe('run', () => {
   });
 });
 
+describe('runFocus', () => {
+  test('throws when the focus format is unsupported', async () => {
+    let thrown: unknown;
+    try {
+      await runFocus({ format: 'png' });
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(TokenleakError);
+    expect((thrown as TokenleakError).message).toContain('Unsupported focus format');
+  });
+});
+
 // ─── CLI invocation tests (using Bun.spawn) ─────────────────────────────
 
 describe('CLI invocation', () => {
@@ -508,8 +553,23 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('--more');
     expect(stdout).toContain('tokenleak explain <date>');
+    expect(stdout).toContain('focus');
     expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
+  });
+
+  test('focus --help exits with code 0 and prints focus usage', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'focus', '--help'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('tokenleak focus');
+    expect(stdout).toContain('deep-work score');
+    expect(stdout).toContain('--format <format>');
   });
 
   test('--version prints version', async () => {
@@ -619,6 +679,52 @@ describe('CLI invocation', () => {
       expect(stdout).toContain('Tokenleak');
       expect(stdout).toContain('Compare');
       expect(stdout).not.toContain('"periodA"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('focus --format json emits a ranked focus report', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, 'focus', '--format', 'json', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+      const parsed = JSON.parse(stdout);
+
+      expect(exitCode).toBe(0);
+      expect(parsed.method).toContain('Deep-work score');
+      expect(Array.isArray(parsed.entries)).toBe(true);
+      expect(parsed.entries.length).toBeGreaterThan(0);
+      expect(parsed.entries[0]).toHaveProperty('provider', 'pi');
+      expect(parsed.entries[0]).toHaveProperty('score');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('focus terminal output includes session ranking details', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, 'focus', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('Tokenleak Focus');
+      expect(stdout).toContain('deep-work score');
+      expect(stdout).toContain('Score');
+      expect(stdout).toContain('Provider');
     } finally {
       cleanup();
     }

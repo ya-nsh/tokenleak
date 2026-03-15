@@ -66,6 +66,7 @@ export {
   parseCompareRange,
   computePreviousPeriod,
   buildMoreStats,
+  buildFocusReport,
   computeModelMixShift,
   buildExplainReport,
 } from './aggregation';
