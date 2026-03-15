@@ -416,7 +416,7 @@ function renderTitleSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 420;
+  const height = 340;
   const parts: string[] = [];
   const gradColors = theme.sectionBgs[0] ?? ['#120828', '#0a1628'];
 
@@ -436,12 +436,12 @@ function renderTitleSlide(
 
   // Main title
   const titleColor = theme.mode === 'dark' ? '#f1f5f9' : '#1e1b4b';
-  parts.push(svgText(INNER_PAD, 130, 'Your AI Coding', {
+  parts.push(svgText(INNER_PAD, 120, 'Your AI Coding', {
     fill: titleColor,
     size: 56,
     weight: 800,
   }));
-  parts.push(svgText(INNER_PAD, 198, 'Wrapped', {
+  parts.push(svgText(INNER_PAD, 188, 'Wrapped', {
     fill: theme.heroAccent,
     size: 64,
     weight: 800,
@@ -450,13 +450,13 @@ function renderTitleSlide(
   // Date range
   const { since, until } = output.dateRange;
   const rangeText = `${formatDateLong(since)} \u2014 ${formatDateLong(until)}`;
-  parts.push(svgText(INNER_PAD, 250, rangeText, {
+  parts.push(svgText(INNER_PAD, 232, rangeText, {
     fill: theme.subtitleColor,
     size: 18,
     weight: 500,
   }));
 
-  parts.push(svgText(INNER_PAD, 290, 'tokenleak', {
+  parts.push(svgText(INNER_PAD, 268, 'tokenleak', {
     fill: theme.heroAccent,
     size: 16,
     weight: 600,
@@ -476,7 +476,7 @@ function renderBigNumbersSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 440;
+  const height = 280;
   const parts: string[] = [];
   const stats = output.aggregated;
   const gradColors = theme.sectionBgs[1] ?? ['#0a1628', '#0d1b2a'];
@@ -496,14 +496,14 @@ function renderBigNumbersSlide(
     size: 80,
     weight: 800,
   }));
-  parts.push(svgText(INNER_PAD, 180, 'total tokens', {
+  parts.push(svgText(INNER_PAD, 185, 'total tokens', {
     fill: theme.subtitleColor,
     size: 20,
     weight: 500,
   }));
 
   // Grid of supporting stats
-  const gridY = 230;
+  const gridY = 220;
   const colWidth = (WIDTH - INNER_PAD * 2) / 3;
 
   const supportStats = [
@@ -515,14 +515,12 @@ function renderBigNumbersSlide(
   for (let i = 0; i < supportStats.length; i++) {
     const sx = INNER_PAD + i * colWidth;
     const stat = supportStats[i]!;
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(sx, gridY, colWidth - 24, 140, cardBg, 16));
-    parts.push(svgText(sx + 24, gridY + 60, stat.value, {
+    parts.push(svgText(sx + 24, gridY + 6, stat.value, {
       fill: stat.accent ? theme.greenAccent : (theme.mode === 'dark' ? '#e2e8f0' : '#1e293b'),
-      size: 42,
+      size: 32,
       weight: 700,
     }));
-    parts.push(svgText(sx + 24, gridY + 95, stat.label, {
+    parts.push(svgText(sx + 24, gridY + 30, stat.label, {
       fill: theme.subtitleColor,
       size: 14,
       weight: 600,
@@ -538,7 +536,7 @@ function renderStreakSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
+  const height = 280;
   const parts: string[] = [];
   const stats = output.aggregated;
   const gradColors = theme.sectionBgs[2] ?? ['#1a0e00', '#0d1117'];
@@ -567,7 +565,7 @@ function renderStreakSlide(
   }));
 
   // Big streak number
-  parts.push(svgText(INNER_PAD, 210, `${stats.longestStreak}`, {
+  parts.push(svgText(INNER_PAD, 170, `${stats.longestStreak}`, {
     fill: theme.warmAccent,
     size: 72,
     weight: 800,
@@ -575,10 +573,10 @@ function renderStreakSlide(
 
   // Fire icon beside the number
   const fireX = INNER_PAD + 160;
-  parts.push(svgIconFire(fireX, 155, 56, theme.warmAccent));
+  parts.push(svgIconFire(fireX, 125, 56, theme.warmAccent));
 
   // Current streak
-  parts.push(svgText(INNER_PAD, 270, `Current streak: ${stats.currentStreak} days`, {
+  parts.push(svgText(INNER_PAD, 220, `Current streak: ${stats.currentStreak} days`, {
     fill: theme.subtitleColor,
     size: 16,
     weight: 500,
@@ -588,7 +586,7 @@ function renderStreakSlide(
   const dotsToShow = Math.min(stats.longestStreak, 30);
   const dotSize = 10;
   const dotGap = 6;
-  const dotsY = 300;
+  const dotsY = 248;
   for (let i = 0; i < dotsToShow; i++) {
     const dx = INNER_PAD + i * (dotSize + dotGap);
     const opacity = 0.3 + (i / Math.max(dotsToShow, 1)) * 0.7;
@@ -612,7 +610,7 @@ function renderTopModelSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 420;
+  const height = 340;
   const parts: string[] = [];
   const stats = output.aggregated;
   const topModels = stats.topModels.slice(0, 3);
@@ -640,7 +638,7 @@ function renderTopModelSlide(
 
   // Donut chart on the right
   const donutCx = WIDTH - 220;
-  const donutCy = 200;
+  const donutCy = 190;
   const donutR = 100;
   const donutWidth = 24;
   const arcColors = [theme.coolAccent, theme.purpleAccent, theme.greenAccent, theme.warmAccent];
@@ -687,11 +685,11 @@ function renderTopModelSlide(
   }));
 
   // Model bars
-  const barsY = 210;
+  const barsY = 200;
   const barMaxWidth = 450;
   for (let i = 0; i < topModels.length; i++) {
     const model = topModels[i]!;
-    const by = barsY + i * 56;
+    const by = barsY + i * 48;
     parts.push(svgText(INNER_PAD, by + 20, `#${i + 1}`, {
       fill: arcColors[i % arcColors.length]!,
       size: 14,
@@ -723,7 +721,7 @@ function renderProviderMixSlide(
 ): SlideResult {
   const providers = output.providers;
   const baseHeight = 200;
-  const perProviderHeight = 70;
+  const perProviderHeight = 60;
   const height = Math.max(baseHeight, 130 + providers.length * perProviderHeight);
   const parts: string[] = [];
   const gradColors = theme.sectionBgs[4] ?? ['#0d1117', '#0f1520'];
@@ -788,7 +786,7 @@ function renderDayOfWeekSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 400;
+  const height = 380;
   const parts: string[] = [];
   const dow = output.aggregated.dayOfWeek;
   const gradColors = theme.sectionBgs[5] ?? ['#0a1628', '#0d1117'];
@@ -824,12 +822,13 @@ function renderDayOfWeekSlide(
   const chartX = INNER_PAD;
   const chartY = 140;
   const barAreaWidth = WIDTH - INNER_PAD * 2;
-  const barWidth = Math.floor((barAreaWidth - 6 * 20) / 7);
-  const barMaxHeight = 180;
+  const gapSize = 16;
+  const barWidth = Math.floor((barAreaWidth - 6 * gapSize) / 7);
+  const barMaxHeight = 200;
 
   for (let i = 0; i < 7 && i < dow.length; i++) {
     const entry = dow[i]!;
-    const bx = chartX + i * (barWidth + 20);
+    const bx = chartX + i * (barWidth + gapSize);
     const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
     const barH = Math.max(8, ratio * barMaxHeight);
     const by = chartY + barMaxHeight - barH;
@@ -877,7 +876,7 @@ function renderTimeOfDaySlide(
   const totalTokens = hourOfDay.reduce((s, e) => s + e.tokens, 0);
   if (totalTokens === 0) return { svg: '', height: 0 };
 
-  const height = 400;
+  const height = 380;
   const parts: string[] = [];
   const gradColors = theme.sectionBgs[6] ?? ['#180830', '#0d1117'];
 
@@ -964,7 +963,7 @@ function renderCacheSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
+  const height = 320;
   const parts: string[] = [];
   const stats = output.aggregated;
   const gradColors = theme.sectionBgs[7] ?? ['#001a0d', '#0d1117'];
@@ -983,7 +982,7 @@ function renderCacheSlide(
 
   // Gauge arc
   const gaugeCx = WIDTH - 240;
-  const gaugeCy = 190;
+  const gaugeCy = 180;
   const gaugeR = 90;
   const gaugeWidth = 18;
 
@@ -1049,7 +1048,7 @@ function renderPeakDaySlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 320;
+  const height = 290;
   const parts: string[] = [];
   const stats = output.aggregated;
   const gradColors = theme.sectionBgs[8] ?? ['#1a1500', '#0d1117'];
@@ -1110,8 +1109,8 @@ function renderAchievementsSlide(
 ): SlideResult {
   const achievements = computeAchievements(output);
   const rows = Math.ceil(achievements.length / 2);
-  const rowHeight = 100;
-  const height = Math.max(240, 100 + rows * rowHeight + 40);
+  const rowHeight = 95;
+  const height = Math.max(240, 100 + rows * rowHeight + 30);
   const parts: string[] = [];
   const gradColors = theme.sectionBgs[9] ?? ['#120828', '#0a1628'];
 
@@ -1174,7 +1173,7 @@ function renderMonthlyBurnSlide(
   output: TokenleakOutput,
   theme: WrappedTheme,
 ): SlideResult {
-  const height = 300;
+  const height = 280;
   const parts: string[] = [];
   const gradColors = theme.sectionBgs[10] ?? ['#0a1628', '#0d1117'];
 
