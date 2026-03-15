@@ -31,6 +31,7 @@ In an interactive TTY, plain `tokenleak` opens a launcher where you can:
 - run focus reports for deep-work sessions
 - inspect richer analytics such as model efficiency, cache ROI, session/project drill-downs, and attribution clusters
 - start the local live dashboard
+- launch the interactive AI Wrapped presentation in a browser
 - inspect provider availability and aliases
 
 ### From source
@@ -70,6 +71,10 @@ tokenleak --format png --output usage.png
 # Generate your AI Coding Wrapped story card
 tokenleak --format wrapped
 tokenleak --format wrapped --theme light --output my-wrapped.png --open
+
+# Launch the interactive AI Wrapped presentation in a browser
+tokenleak --wrapped-live
+tokenleak --wrapped-live --days 365
 
 # Get model efficiency recommendations
 tokenleak --advisor
@@ -202,7 +207,26 @@ The wrapped card includes 12 sections: title, big numbers, streak story, top mod
 
 Achievements are computed from your actual data — earn badges like Streak Master (30+ day streak), Cache Master (>50% hit rate), Night Owl (>40% usage 10pm-6am), Power User (>10k avg daily tokens), and more.
 
-The interactive launcher also includes Wrapped as option `5` with a guided setup flow.
+The interactive launcher also includes Wrapped as option `3` with a guided setup flow.
+
+### Wrapped Live
+
+Launch the AI Wrapped as an interactive 12-slide presentation in your browser with smooth transitions, keyboard/swipe navigation, and progress dots:
+
+```bash
+# Start the wrapped live server (opens on localhost:3456)
+tokenleak --wrapped-live
+
+# With a full year of data
+tokenleak --wrapped-live --days 365 --claude
+
+# Filter to specific providers
+tokenleak --wrapped-live --provider claude-code,codex
+```
+
+The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
+
+The interactive launcher includes Wrapped Live as option `4`.
 
 ### Model Efficiency Advisor
 
@@ -325,6 +349,7 @@ Subcommands:
 | `--open` |  | `false` | Open the rendered file in the default app |
 | `--upload` |  |  | Upload output to a service. Supported: `gist` |
 | `--live-server` | `-L` | `false` | Start the local browser dashboard |
+| `--wrapped-live` |  | `false` | Start the interactive AI Wrapped presentation in a browser |
 | `--advisor` |  | `false` | Run the model efficiency advisor |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |
