@@ -679,4 +679,16 @@ describe('CLI invocation', () => {
     expect(exitCode).toBe(1);
     expect(stderr).toContain('only supports --format terminal or --format json');
   });
+
+  test('explain rejects invalid date input', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'explain', 'not-a-date'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+  });
 });

@@ -1,4 +1,4 @@
-import type { ExplainEvidenceRow, ExplainReport } from '../../core/dist/index.js';
+import type { ExplainEvidenceRow, ExplainReport } from '@tokenleak/core';
 
 function formatTokens(tokens: number): string {
   return Math.round(tokens).toLocaleString('en-US');

@@ -91,22 +91,6 @@ function averageForDates(
   return total / dates.length;
 }
 
-function averageCostForDates(
-  byDate: Map<string, number>,
-  dates: string[],
-): number {
-  if (dates.length === 0) {
-    return 0;
-  }
-
-  let total = 0;
-  for (const date of dates) {
-    total += byDate.get(date) ?? 0;
-  }
-
-  return total / dates.length;
-}
-
 function buildMergedDailyTotals(providers: ProviderData[]): Map<string, DailyTotals> {
   const merged = mergeProviderData(providers);
   const totals = new Map<string, DailyTotals>();
@@ -458,10 +442,14 @@ function buildLongSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnom
 
 function buildDenseSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnomaly | null {
   const candidates = sessions
-    .filter((entry) => entry.durationMs !== null && entry.durationMs > 0 && entry.totalTokens >= DENSE_SESSION_MIN_TOKENS)
+    .filter((
+      entry,
+    ): entry is SessionDrilldownEntry & { durationMs: number } => (
+      entry.durationMs !== null && entry.durationMs > 0 && entry.totalTokens >= DENSE_SESSION_MIN_TOKENS
+    ))
     .map((entry) => ({
       session: entry,
-      tokensPerHour: entry.totalTokens / (entry.durationMs! / 3_600_000),
+      tokensPerHour: entry.totalTokens / (entry.durationMs / 3_600_000),
     }))
     .filter((entry) => entry.tokensPerHour >= DENSE_SESSION_TOKENS_PER_HOUR)
     .sort((left, right) => right.tokensPerHour - left.tokensPerHour || right.session.totalTokens - left.session.totalTokens)[0];
@@ -499,11 +487,11 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
     new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.tokens] as const)),
     previous30Dates,
   );
-  const average7dCost = averageCostForDates(
+  const average7dCost = averageForDates(
     new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.cost] as const)),
     previous7Dates,
   );
-  const average30dCost = averageCostForDates(
+  const average30dCost = averageForDates(
     new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.cost] as const)),
     previous30Dates,
   );

@@ -6,6 +6,7 @@ import {
   DEFAULT_DAYS,
   SCHEMA_VERSION,
   aggregate,
+  buildExplainReport,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
@@ -15,7 +16,6 @@ import type {
   TokenleakOutput,
   ProviderData,
 } from '@tokenleak/core';
-import { buildExplainReport } from '../../core/dist/index.js';
 import {
   ProviderRegistry,
   ClaudeCodeProvider,
@@ -766,12 +766,25 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   }
 }
 
+function isValidDateArgument(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
+
 function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
   if (argv.length === 0 || argv[0]?.startsWith('-')) {
     throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
   }
 
   const date = argv[0]!;
+  if (!isValidDateArgument(date)) {
+    throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+  }
+
   const cliArgs: Record<string, unknown> = {};
   let index = 1;
 
@@ -833,14 +846,17 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
         index += 1;
         break;
       case '--openCode':
+      case '--open-code':
         cliArgs['openCode'] = true;
         index += 1;
         break;
       case '--allProviders':
+      case '--all-providers':
         cliArgs['allProviders'] = true;
         index += 1;
         break;
       case '--noColor':
+      case '--no-color':
         cliArgs['noColor'] = true;
         index += 1;
         break;
@@ -901,7 +917,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 
   const explainOutput = await loadTokenleakData(available, explainRange);
-  const report = buildExplainReport(explainOutput.providers, explainRange.until);
+  const report = buildExplainReport(explainOutput.providers, date);
   const rendered = format === 'json'
     ? JSON.stringify(report, null, 2)
     : renderExplainTerminal(report, config.width);
