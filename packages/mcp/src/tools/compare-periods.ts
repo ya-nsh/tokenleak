@@ -38,10 +38,21 @@ export async function handleComparePeriods(
         `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`,
     };
 
-    const previousRange: DateRange =
-      args.previous_since && args.previous_until
-        ? { since: args.previous_since, until: args.previous_until }
-        : computePreviousPeriod(currentRange);
+    let previousRange: DateRange;
+    if (args.previous_since && args.previous_until) {
+      previousRange = { since: args.previous_since, until: args.previous_until };
+    } else if (args.previous_since) {
+      previousRange = { since: args.previous_since, until: currentRange.since };
+    } else if (args.previous_until) {
+      const currentDays = Math.round(
+        (new Date(currentRange.until).getTime() - new Date(currentRange.since).getTime()) / 86400000,
+      );
+      const end = new Date(args.previous_until);
+      end.setDate(end.getDate() - currentDays);
+      previousRange = { since: end.toISOString().slice(0, 10), until: args.previous_until };
+    } else {
+      previousRange = computePreviousPeriod(currentRange);
+    }
 
     const available = await registry.getAvailable();
 
@@ -51,8 +62,8 @@ export async function handleComparePeriods(
     ]);
 
     const compareOutput = buildCompareOutput(
-      { range: currentRange, stats: currentResult.stats },
       { range: previousRange, stats: previousResult.stats },
+      { range: currentRange, stats: currentResult.stats },
     );
 
     return {
