@@ -59,6 +59,11 @@ describe('ClaudeCodeProvider', () => {
       expect(day1.cacheReadTokens).toBe(200 + 50 + 100);
       expect(day1.cacheWriteTokens).toBe(100 + 0 + 50);
       expect(day1.models).toHaveLength(1); // all claude-sonnet-4
+      expect(day1.models[0]!.pricing).toEqual({
+        input: 3,
+        cacheRead: 0.3,
+        cacheWrite: 3.75,
+      });
 
       // 2025-06-16: one record with claude-opus-4
       const day2 = data.daily[1]!;
@@ -78,6 +83,11 @@ describe('ClaudeCodeProvider', () => {
         data.daily.reduce((sum, d) => sum + d.cost, 0),
         10,
       );
+      expect(data.events?.[0]?.pricing).toEqual({
+        input: 3,
+        cacheRead: 0.3,
+        cacheWrite: 3.75,
+      });
     });
   });
 

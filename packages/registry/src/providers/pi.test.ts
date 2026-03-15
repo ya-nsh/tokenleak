@@ -60,6 +60,11 @@ describe('PiProvider', () => {
     expect(day1.cost).toBeCloseTo(0.0062175, 10);
     expect(day1.models).toHaveLength(1);
     expect(day1.models[0]!.model).toBe('claude-sonnet-4');
+    expect(day1.models[0]!.pricing).toEqual({
+      input: 3,
+      cacheRead: 0.3,
+      cacheWrite: 3.75,
+    });
 
     const day2 = data.daily[1]!;
     expect(day2.date).toBe('2026-03-11');
@@ -97,5 +102,10 @@ describe('PiProvider', () => {
 
     expect(firstEvent?.sessionId).toBe('--Users-test-alpha--/2026-03-10_sess-alpha.jsonl');
     expect(firstEvent?.projectId).toBe('/Users/test/alpha');
+    expect(firstEvent?.pricing).toEqual({
+      input: 3,
+      cacheRead: 0.3,
+      cacheWrite: 3.75,
+    });
   });
 });
