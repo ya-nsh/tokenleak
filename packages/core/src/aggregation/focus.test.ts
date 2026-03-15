@@ -107,4 +107,42 @@ describe('buildFocusReport', () => {
       entries: [],
     });
   });
+
+  it('does not give perfect duration or density scores when every session lacks duration', () => {
+    const report = buildFocusReport([
+      {
+        provider: 'pi',
+        timestamp: '2026-03-03T12:00:00.000Z',
+        date: '2026-03-03',
+        model: 'pi-fast',
+        inputTokens: 2500,
+        outputTokens: 3500,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 6000,
+        cost: 0.7,
+        sessionId: 'session-x',
+      },
+      {
+        provider: 'pi',
+        timestamp: '2026-03-04T12:00:00.000Z',
+        date: '2026-03-04',
+        model: 'pi-fast',
+        inputTokens: 1500,
+        outputTokens: 1000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 2500,
+        cost: 0.3,
+        sessionId: 'session-y',
+      },
+    ]);
+
+    expect(report.entries).toHaveLength(2);
+    for (const entry of report.entries) {
+      expect(entry.scoreBreakdown.duration).toBe(0);
+      expect(entry.scoreBreakdown.density).toBe(0);
+      expect(entry.rationale).toContain('single-event session with no duration signal');
+    }
+  });
 });

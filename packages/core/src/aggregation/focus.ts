@@ -38,6 +38,18 @@ function formatTokensPerHour(tokensPerHour: number): string {
   return `${Math.round(tokensPerHour).toLocaleString('en-US')} tok/hr`;
 }
 
+function normalizeFocusScores(values: number[]): number[] {
+  if (values.length === 0) {
+    return [];
+  }
+
+  if (values.every((value) => value === 0)) {
+    return values.map(() => 0);
+  }
+
+  return normalizeScores(values);
+}
+
 function buildRationale(
   session: SessionDrilldownEntry,
   streak: number,
@@ -83,9 +95,9 @@ export function buildFocusReport(events: UsageEvent[]): FocusReport {
     session.projectId ? (streakByProject.get(session.projectId) ?? 1) : 1
   ));
 
-  const durationScores = normalizeScores(durations).map((value) => round(value * 100, 1));
-  const densityScores = normalizeScores(densityValues).map((value) => round(value * 100, 1));
-  const streakScores = normalizeScores(streakValues).map((value) => round(value * 100, 1));
+  const durationScores = normalizeFocusScores(durations).map((value) => round(value * 100, 1));
+  const densityScores = normalizeFocusScores(densityValues).map((value) => round(value * 100, 1));
+  const streakScores = normalizeFocusScores(streakValues).map((value) => round(value * 100, 1));
 
   const entries: FocusEntry[] = sessions
     .map((session, index) => {

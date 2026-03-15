@@ -437,13 +437,25 @@ async function loadProviderData(config: ProviderLoadConfig): Promise<{
     days: config.days,
   });
 
-  const available = await selectAvailableProviders(config);
-  if (available.length === 0) {
+  return loadProviderDataForRange(config, dateRange);
+}
+
+async function loadProviderDataForRange(
+  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
+  dateRange: DateRange,
+  available: IProvider[] | null = null,
+): Promise<{
+  dateRange: DateRange;
+  providerDataList: ProviderData[];
+}> {
+  const resolvedProviders = available ?? await selectAvailableProviders(config);
+  const availableProviders = resolvedProviders;
+  if (availableProviders.length === 0) {
     throw new TokenleakError('No provider data found');
   }
 
   const results = await Promise.all(
-    available.map(async (provider) => {
+    availableProviders.map(async (provider) => {
       try {
         return await provider.load(dateRange);
       } catch {
@@ -685,7 +697,13 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
   const result: FocusConfig = { ...merged };
 
   if (cliArgs['format'] !== undefined) {
-    result.format = cliArgs['format'] as typeof FOCUS_FORMAT_VALUES[number];
+    const format = cliArgs['format'] as string;
+    if (!FOCUS_FORMAT_VALUES.includes(format as typeof FOCUS_FORMAT_VALUES[number])) {
+      throw new TokenleakError(
+        `Unsupported focus format: "${format}". Available: ${FOCUS_FORMAT_VALUES.join(', ')}`,
+      );
+    }
+    result.format = format as typeof FOCUS_FORMAT_VALUES[number];
   }
   if (cliArgs['since'] !== undefined) {
     result.since = cliArgs['since'] as string;
@@ -795,7 +813,7 @@ function formatFocusDensity(tokensPerHour: number): string {
   return `${Math.round(tokensPerHour).toLocaleString('en-US')}/h`;
 }
 
-function renderFocusReport(report: FocusReport, width: number): string {
+function renderFocusReport(report: FocusReport, width: number, _noColor: boolean): string {
   const safeWidth = Math.max(72, width || 80);
   const labelWidth = Math.max(16, safeWidth - 50);
   const lines = [
@@ -854,7 +872,7 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
 
   const rendered = config.format === 'json'
     ? JSON.stringify(report, null, 2)
-    : renderFocusReport(report, config.width);
+    : renderFocusReport(report, config.width, config.noColor);
 
   if (config.output) {
     writeFileSync(config.output, rendered);
@@ -953,7 +971,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
-  const { providerDataList } = await loadProviderData(config);
+  const { providerDataList } = await loadProviderDataForRange(config, dateRange, available);
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);

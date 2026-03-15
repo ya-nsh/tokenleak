@@ -400,6 +400,12 @@ describe('resolveFocusConfig', () => {
     expect(config.pi).toBe(true);
     expect(config.allProviders).toBe(false);
   });
+
+  test('rejects invalid focus formats at config resolution time', () => {
+    expect(() => resolveFocusConfig({ format: 'png' })).toThrow(
+      'Unsupported focus format: "png". Available: json, terminal',
+    );
+  });
 });
 
 // ─── loadEnvOverrides ───────────────────────────────────────────────────
@@ -523,7 +529,7 @@ describe('runFocus', () => {
     }
 
     expect(thrown).toBeInstanceOf(TokenleakError);
-    expect((thrown as TokenleakError).message).toContain('not supported for focus');
+    expect((thrown as TokenleakError).message).toContain('Unsupported focus format');
   });
 });
 
