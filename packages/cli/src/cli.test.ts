@@ -77,7 +77,7 @@ describe('interactive launcher', () => {
   });
 
   test('flag panel includes key interactive flags', () => {
-    expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json');
+    expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json | wrapped');
     expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
     expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
   });

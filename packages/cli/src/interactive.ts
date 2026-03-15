@@ -6,7 +6,7 @@ import { buildCliPreview } from './flags.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export const INTERACTIVE_FLAG_LINES = [
-  '-f, --format <format>   terminal | png | svg | json',
+  '-f, --format <format>   terminal | png | svg | json | wrapped',
   '-t, --theme <theme>     dark | light',
   '-s, --since <date>      YYYY-MM-DD start date',
   '-u, --until <date>      YYYY-MM-DD end date',
@@ -990,6 +990,25 @@ async function buildImagePreset(format: 'svg' | 'png'): Promise<InteractiveComma
   return createRunCommand(args);
 }
 
+async function buildWrappedPreset(): Promise<InteractiveCommand> {
+  const theme = await promptTheme();
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection('Provider Filter');
+  const output = await promptOutputPath('tokenleak-wrapped.png');
+  const shouldOpen = await askYesNo('Open the image when done', true);
+
+  const args: CliArgs = {
+    format: 'wrapped',
+    theme,
+    output,
+    open: shouldOpen,
+    ...rangeArgs,
+  };
+  applySelectedProviders(args, providers);
+
+  return createRunCommand(args);
+}
+
 async function buildComparePreset(): Promise<InteractiveCommand> {
   const rangeArgs = await promptDateWindow();
   const providers = await promptProviderSelection();
@@ -1045,6 +1064,7 @@ async function askFormatChoice(): Promise<string> {
       { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
       { value: 'svg', label: 'SVG', description: 'Shareable vector export' },
       { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
+      { value: 'wrapped', label: '\u{1F389} Wrapped', description: 'Your AI coding story card (PNG)' },
     ],
   );
 }
@@ -1139,31 +1159,31 @@ function createMenuOptions(): MenuOption[] {
     },
     {
       digit: '5',
+      title: '\u{1F389} AI Wrapped',
+      description: 'your personal AI coding story card',
+      preview: 'tokenleak --format wrapped --output tokenleak-wrapped.png --open',
+      select: buildWrappedPreset,
+    },
+    {
+      digit: '6',
       title: 'Compare Periods',
       description: 'diff current vs previous usage',
       preview: 'tokenleak --compare auto --format json',
       select: buildComparePreset,
     },
     {
-      digit: '6',
+      digit: '7',
       title: 'Start Live Server',
       description: 'browser dashboard on localhost',
       preview: 'tokenleak --live-server --theme dark',
       select: buildLivePreset,
     },
     {
-      digit: '7',
+      digit: '8',
       title: 'Build Custom Command',
       description: 'configure flags interactively',
       preview: 'tokenleak --format terminal --days 90',
       select: buildCustomCommand,
-    },
-    {
-      digit: '8',
-      title: 'Full Help',
-      description: 'examples and complete usage',
-      preview: 'tokenleak --help',
-      select: async () => ({ type: 'show-help' }),
     },
     {
       digit: '9',

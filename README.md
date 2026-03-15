@@ -246,7 +246,7 @@ Subcommands:
 
 | Flag | Alias | Default | Description |
 | --- | --- | --- | --- |
-| `--format` | `-f` | `terminal` | Output format: `json`, `svg`, `png`, `terminal` |
+| `--format` | `-f` | `terminal` | Output format: `json`, `svg`, `png`, `terminal`, `wrapped` |
 | `--theme` | `-t` | `dark` | Theme for `png`, `svg`, and live output: `dark`, `light` |
 | `--since` | `-s` |  | Start date (`YYYY-MM-DD`). Overrides `--days` |
 | `--until` | `-u` | today | End date (`YYYY-MM-DD`) |
