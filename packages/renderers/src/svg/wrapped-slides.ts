@@ -5,11 +5,13 @@ import type { SvgTheme } from './theme';
 
 // ── Constants ────────────────────────────────────────────────────────
 const WIDTH = 1200;
-const INNER_PAD = 80;
-const FONT_FAMILY =
-  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+const PAD = 80;
+const DISPLAY_FONT =
+  "'SF Pro Display', 'Helvetica Neue', 'Segoe UI', -apple-system, sans-serif";
 const MONO_FONT =
-  "'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace";
+  "'SF Mono', 'Menlo', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace";
+const BODY_FONT =
+  "'SF Pro Text', 'Helvetica Neue', 'Segoe UI', -apple-system, sans-serif";
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -18,7 +20,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// ── Theme extension for wrapped ──────────────────────────────────────
+// ── Theme ────────────────────────────────────────────────────────────
 interface WrappedTheme {
   base: SvgTheme;
   mode: 'dark' | 'light';
@@ -40,54 +42,54 @@ function getWrappedTheme(mode: 'dark' | 'light'): WrappedTheme {
       base,
       mode,
       sectionBgs: [
-        ['#120828', '#0a1628'],
-        ['#0a1628', '#0d1b2a'],
-        ['#1a0e00', '#0d1117'],
-        ['#0a1a2e', '#0d1117'],
-        ['#0d1117', '#0f1520'],
-        ['#0a1628', '#0d1117'],
-        ['#180830', '#0d1117'],
-        ['#001a0d', '#0d1117'],
-        ['#1a1500', '#0d1117'],
-        ['#120828', '#0a1628'],
-        ['#0a1628', '#0d1117'],
-        ['#09090b', '#09090b'],
+        ['#08080c', '#0c0c14'],  // title — near black
+        ['#0a0a12', '#0e0e18'],  // big numbers
+        ['#0c0a08', '#100e0c'],  // streak — warm black
+        ['#080c14', '#0c1018'],  // model — cool black
+        ['#0a0a0e', '#0e0e12'],  // provider
+        ['#080c14', '#0c1018'],  // day of week
+        ['#0c0814', '#100c18'],  // time of day
+        ['#080e0c', '#0c1210'],  // cache
+        ['#0c0a06', '#100e0a'],  // peak day
+        ['#08080c', '#0c0c14'],  // achievements
+        ['#0a0c10', '#0e1014'],  // projection
+        ['#060608', '#060608'],  // footer
       ],
       heroAccent: '#a78bfa',
-      warmAccent: '#f59e0b',
+      warmAccent: '#fb923c',
       coolAccent: '#38bdf8',
-      greenAccent: '#34d399',
+      greenAccent: '#4ade80',
       goldAccent: '#fbbf24',
       purpleAccent: '#c084fc',
-      narrativeColor: '#cbd5e1',
-      subtitleColor: '#94a3b8',
+      narrativeColor: '#d1d5db',
+      subtitleColor: '#6b7280',
     };
   }
   return {
     base,
     mode,
     sectionBgs: [
-      ['#ede9fe', '#e0e7ff'],
-      ['#e0e7ff', '#eff6ff'],
-      ['#fef3c7', '#fffbeb'],
-      ['#dbeafe', '#eff6ff'],
-      ['#f8fafc', '#f1f5f9'],
-      ['#dbeafe', '#eff6ff'],
-      ['#ede9fe', '#f5f3ff'],
-      ['#d1fae5', '#ecfdf5'],
-      ['#fef9c3', '#fefce8'],
-      ['#ede9fe', '#e0e7ff'],
-      ['#dbeafe', '#eff6ff'],
-      ['#f8fafc', '#f8fafc'],
+      ['#fafaf9', '#f5f5f4'],
+      ['#f5f5f4', '#fafaf9'],
+      ['#fefce8', '#fef9c3'],
+      ['#eff6ff', '#dbeafe'],
+      ['#fafaf9', '#f5f5f4'],
+      ['#eff6ff', '#dbeafe'],
+      ['#faf5ff', '#f3e8ff'],
+      ['#ecfdf5', '#d1fae5'],
+      ['#fffbeb', '#fef3c7'],
+      ['#faf5ff', '#f3e8ff'],
+      ['#eff6ff', '#dbeafe'],
+      ['#fafaf9', '#fafaf9'],
     ],
     heroAccent: '#7c3aed',
-    warmAccent: '#d97706',
+    warmAccent: '#ea580c',
     coolAccent: '#2563eb',
-    greenAccent: '#059669',
-    goldAccent: '#b45309',
+    greenAccent: '#16a34a',
+    goldAccent: '#ca8a04',
     purpleAccent: '#7c3aed',
-    narrativeColor: '#334155',
-    subtitleColor: '#64748b',
+    narrativeColor: '#1f2937',
+    subtitleColor: '#6b7280',
   };
 }
 
@@ -97,7 +99,7 @@ interface SlideResult {
   height: number;
 }
 
-// ── SVG icon shapes (replacing emoji) ────────────────────────────────
+// ── SVG icon shapes ──────────────────────────────────────────────────
 function svgIconFire(x: number, y: number, size: number, color: string): string {
   const s = size / 24;
   return `<g transform="translate(${x},${y}) scale(${s})">` +
@@ -188,7 +190,6 @@ function svgIconSun(x: number, y: number, size: number, color: string): string {
   const cy = y + size / 2;
   const r = size * 0.3;
   let svg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${escapeXml(color)}" opacity="0.85"/>`;
-  // Rays
   for (let i = 0; i < 8; i++) {
     const angle = (i * 45 * Math.PI) / 180;
     const x1 = cx + r * 1.4 * Math.cos(angle);
@@ -209,30 +210,20 @@ function svgIconRocket(x: number, y: number, size: number, color: string): strin
     `</g>`;
 }
 
-// Map icon names to SVG renderers
 type IconName = 'fire' | 'star' | 'circle' | 'diamond' | 'bolt' | 'trophy' |
   'target' | 'mountain' | 'palette' | 'calendar' | 'moon' | 'sun' | 'rocket';
 
 function renderIcon(name: IconName, x: number, y: number, size: number, color: string): string {
   const fns: Record<IconName, (x: number, y: number, s: number, c: string) => string> = {
-    fire: svgIconFire,
-    star: svgIconStar,
-    circle: svgIconCircle,
-    diamond: svgIconDiamond,
-    bolt: svgIconBolt,
-    trophy: svgIconTrophy,
-    target: svgIconTarget,
-    mountain: svgIconMountain,
-    palette: svgIconPalette,
-    calendar: svgIconCalendar,
-    moon: svgIconMoon,
-    sun: svgIconSun,
-    rocket: svgIconRocket,
+    fire: svgIconFire, star: svgIconStar, circle: svgIconCircle,
+    diamond: svgIconDiamond, bolt: svgIconBolt, trophy: svgIconTrophy,
+    target: svgIconTarget, mountain: svgIconMountain, palette: svgIconPalette,
+    calendar: svgIconCalendar, moon: svgIconMoon, sun: svgIconSun, rocket: svgIconRocket,
   };
   return fns[name](x, y, size, color);
 }
 
-// ── Achievement types & computation ──────────────────────────────────
+// ── Achievements ─────────────────────────────────────────────────────
 export interface Achievement {
   icon: IconName;
   title: string;
@@ -249,7 +240,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
   if (stats.longestStreak > 30) {
     all.push({ icon: 'fire', title: 'Streak Master', subtitle: `${stats.longestStreak} day streak`, color: '#f59e0b' });
   }
-
   if (more?.hourOfDay) {
     const totalTokens = more.hourOfDay.reduce((s, e) => s + e.tokens, 0);
     const nightTokens = more.hourOfDay.filter((e) => e.hour >= 22 || e.hour < 6).reduce((s, e) => s + e.tokens, 0);
@@ -257,7 +247,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
       all.push({ icon: 'moon', title: 'Night Owl', subtitle: `${((nightTokens / totalTokens) * 100).toFixed(0)}% between 10pm-6am`, color: '#818cf8' });
     }
   }
-
   if (more?.hourOfDay) {
     const totalTokens = more.hourOfDay.reduce((s, e) => s + e.tokens, 0);
     const morningTokens = more.hourOfDay.filter((e) => e.hour < 12).reduce((s, e) => s + e.tokens, 0);
@@ -265,36 +254,27 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
       all.push({ icon: 'sun', title: 'Early Bird', subtitle: `${((morningTokens / totalTokens) * 100).toFixed(0)}% before noon`, color: '#fbbf24' });
     }
   }
-
   if (stats.totalCost > 100) {
     all.push({ icon: 'diamond', title: 'Big Spender', subtitle: `${formatCost(stats.totalCost)} total`, color: '#34d399' });
   }
-
   if (stats.cacheHitRate > 0.5) {
     all.push({ icon: 'target', title: 'Cache Master', subtitle: `${(stats.cacheHitRate * 100).toFixed(0)}% hit rate`, color: '#f472b6' });
   }
-
   if (stats.topModels.length >= 4) {
     all.push({ icon: 'circle', title: 'Model Hopper', subtitle: `${stats.topModels.length} models used`, color: '#a78bfa' });
   }
-
   if (stats.totalDays > 0 && stats.activeDays / stats.totalDays > 0.8) {
     all.push({ icon: 'calendar', title: 'Daily Driver', subtitle: `${stats.activeDays}/${stats.totalDays} days active`, color: '#38bdf8' });
   }
-
   if (stats.averageDailyTokens > 10000) {
     all.push({ icon: 'bolt', title: 'Power User', subtitle: `${formatNumber(stats.averageDailyTokens)} avg/day`, color: '#fbbf24' });
   }
-
   if (stats.peakDay && stats.peakDay.tokens > 50000) {
     all.push({ icon: 'mountain', title: 'Summit Day', subtitle: `${formatNumber(stats.peakDay.tokens)} in one day`, color: '#34d399' });
   }
-
   if (providers.length >= 3) {
     all.push({ icon: 'palette', title: 'Multi-Tool', subtitle: `${providers.length} providers`, color: '#c084fc' });
   }
-
-  // Fallbacks if fewer than 3
   if (all.length < 3) {
     if (all.length < 3 && stats.longestStreak > 7 && !all.some((a) => a.title === 'Streak Master')) {
       all.push({ icon: 'fire', title: 'Streak Builder', subtitle: `${stats.longestStreak} day streak`, color: '#f59e0b' });
@@ -305,7 +285,6 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
     if (all.length < 3 && stats.activeDays > 0) {
       all.push({ icon: 'star', title: 'Active Coder', subtitle: `${stats.activeDays} active days`, color: '#fbbf24' });
     }
-    // Guaranteed fallback so there's always at least one
     if (all.length < 3 && stats.totalTokens > 0) {
       all.push({ icon: 'bolt', title: 'Token User', subtitle: `${formatNumber(stats.totalTokens)} tokens`, color: '#a78bfa' });
     }
@@ -313,16 +292,12 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
       all.push({ icon: 'rocket', title: 'Just Getting Started', subtitle: 'Your journey begins', color: '#38bdf8' });
     }
   }
-
   return all.slice(0, 6);
 }
 
 // ── SVG Helpers ──────────────────────────────────────────────────────
 function sectionBg(
-  y: number,
-  height: number,
-  gradColors: [string, string],
-  gradId: string,
+  y: number, height: number, gradColors: [string, string], gradId: string,
 ): string {
   return [
     `<defs><linearGradient id="${escapeXml(gradId)}" x1="0%" y1="0%" x2="100%" y2="100%">`,
@@ -334,25 +309,17 @@ function sectionBg(
 }
 
 function svgText(
-  x: number,
-  y: number,
-  content: string,
+  x: number, y: number, content: string,
   opts: {
-    fill?: string;
-    size?: number;
-    weight?: number | string;
-    family?: string;
-    anchor?: string;
-    spacing?: number;
-    opacity?: number;
+    fill?: string; size?: number; weight?: number | string;
+    family?: string; anchor?: string; spacing?: number; opacity?: number;
   } = {},
 ): string {
   const attrs = [
-    `x="${x}"`,
-    `y="${y}"`,
+    `x="${x}"`, `y="${y}"`,
     `fill="${escapeXml(opts.fill ?? '#ffffff')}"`,
     `font-size="${opts.size ?? 14}"`,
-    `font-family="${escapeXml(opts.family ?? FONT_FAMILY)}"`,
+    `font-family="${escapeXml(opts.family ?? BODY_FONT)}"`,
     `font-weight="${opts.weight ?? 400}"`,
   ];
   if (opts.anchor) attrs.push(`text-anchor="${escapeXml(opts.anchor)}"`);
@@ -361,13 +328,9 @@ function svgText(
   return `<text ${attrs.join(' ')}>${escapeXml(content)}</text>`;
 }
 
-function roundedRect(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  fill: string,
-  rx: number = 16,
+function rect(
+  x: number, y: number, w: number, h: number, fill: string,
+  rx: number = 4,
   opts: { opacity?: number; stroke?: string; strokeWidth?: number } = {},
 ): string {
   const extra: string[] = [];
@@ -376,13 +339,8 @@ function roundedRect(
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${escapeXml(fill)}" ${extra.join(' ')}/>`;
 }
 
-// ── SVG arc helpers ──────────────────────────────────────────────────
 function describeArc(
-  cx: number,
-  cy: number,
-  radius: number,
-  startAngle: number,
-  endAngle: number,
+  cx: number, cy: number, radius: number, startAngle: number, endAngle: number,
 ): string {
   const start = polarToCartesian(cx, cy, radius, endAngle);
   const end = polarToCartesian(cx, cy, radius, startAngle);
@@ -391,19 +349,55 @@ function describeArc(
 }
 
 function polarToCartesian(
-  cx: number,
-  cy: number,
-  radius: number,
-  angleDeg: number,
+  cx: number, cy: number, radius: number, angleDeg: number,
 ): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return {
-    x: cx + radius * Math.cos(rad),
-    y: cy + radius * Math.sin(rad),
-  };
+  return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
 }
 
-// ── Date formatting helper ───────────────────────────────────────────
+// ── Geometric decorations ────────────────────────────────────────────
+/** Corner bracket: draws an L-shape at the given corner */
+function cornerMark(
+  x: number, y: number, size: number, color: string,
+  corner: 'tl' | 'tr' | 'bl' | 'br',
+): string {
+  const s = size;
+  const paths: Record<string, string> = {
+    tl: `M${x} ${y + s} L${x} ${y} L${x + s} ${y}`,
+    tr: `M${x - s} ${y} L${x} ${y} L${x} ${y + s}`,
+    bl: `M${x} ${y - s} L${x} ${y} L${x + s} ${y}`,
+    br: `M${x - s} ${y} L${x} ${y} L${x} ${y - s}`,
+  };
+  return `<path d="${paths[corner]}" fill="none" stroke="${escapeXml(color)}" stroke-width="1.5" opacity="0.3"/>`;
+}
+
+/** Section label with thin tracking and an accent dash before it */
+function sectionLabel(x: number, y: number, text: string, color: string, accent: string): string {
+  return [
+    `<line x1="${x}" y1="${y - 4}" x2="${x + 24}" y2="${y - 4}" stroke="${escapeXml(accent)}" stroke-width="2" opacity="0.6"/>`,
+    svgText(x + 32, y, text, { fill: color, size: 11, weight: 600, spacing: 3, family: MONO_FONT }),
+  ].join('\n');
+}
+
+/** Thin horizontal rule */
+function rule(x: number, y: number, width: number, color: string, opacity: number = 0.1): string {
+  return `<line x1="${x}" y1="${y}" x2="${x + width}" y2="${y}" stroke="${escapeXml(color)}" stroke-width="1" opacity="${opacity}"/>`;
+}
+
+/** Dot grid pattern for background texture */
+function dotGrid(
+  x: number, y: number, w: number, h: number, color: string, spacing: number = 24, radius: number = 1,
+): string {
+  const dots: string[] = [];
+  for (let gx = x; gx <= x + w; gx += spacing) {
+    for (let gy = y; gy <= y + h; gy += spacing) {
+      dots.push(`<circle cx="${gx}" cy="${gy}" r="${radius}" fill="${escapeXml(color)}" opacity="0.06"/>`);
+    }
+  }
+  return dots.join('\n');
+}
+
+// ── Date formatting ──────────────────────────────────────────────────
 function formatDateLong(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00Z');
   if (Number.isNaN(d.getTime())) return dateStr;
@@ -411,464 +405,383 @@ function formatDateLong(dateStr: string): string {
   return `${month} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
+// ── Global SVG defs (noise filter, etc.) ─────────────────────────────
+function globalDefs(isDark: boolean): string {
+  const noiseOpacity = isDark ? 0.035 : 0.025;
+  return [
+    '<defs>',
+    '<filter id="grain" x="0" y="0" width="100%" height="100%">',
+    '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch" result="noise"/>',
+    '<feColorMatrix type="saturate" values="0" in="noise" result="mono"/>',
+    `<feBlend in="SourceGraphic" in2="mono" mode="multiply"/>`,
+    '</filter>',
+    '</defs>',
+    // Full-width noise overlay
+    `<rect width="${WIDTH}" height="99999" fill="transparent" filter="url(#grain)" opacity="${noiseOpacity}" pointer-events="none"/>`,
+  ].join('\n');
+}
+
 // ── Slide 1: Title Card ──────────────────────────────────────────────
 function renderTitleSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 420;
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[0] ?? ['#120828', '#0a1628'];
+  const height = 300;
+  const p: string[] = [];
+  const gc = theme.sectionBgs[0] ?? ['#08080c', '#0c0c14'];
+  p.push(sectionBg(0, height, gc as [string, string], 'title-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'title-bg'));
+  // Dot grid texture in top-right
+  const gridColor = theme.mode === 'dark' ? '#ffffff' : '#000000';
+  p.push(dotGrid(WIDTH - 300, 30, 220, 120, gridColor, 20, 1.2));
 
-  // Decorative glow circles
-  const glowColor = theme.mode === 'dark' ? theme.purpleAccent : '#7c3aed';
-  parts.push(
-    `<circle cx="200" cy="210" r="200" fill="${escapeXml(glowColor)}" opacity="0.04"/>`,
-    `<circle cx="1000" cy="150" r="160" fill="${escapeXml(theme.coolAccent)}" opacity="0.03"/>`,
-  );
+  // Corner marks
+  p.push(cornerMark(PAD - 16, 40, 20, theme.heroAccent, 'tl'));
+  p.push(cornerMark(WIDTH - PAD + 16, height - 40, 20, theme.heroAccent, 'br'));
 
-  // Decorative top accent bar
-  parts.push(
-    `<rect x="${INNER_PAD}" y="50" width="60" height="4" rx="2" fill="${escapeXml(theme.heroAccent)}" opacity="0.6"/>`,
-  );
-
-  // Main title
-  const titleColor = theme.mode === 'dark' ? '#f1f5f9' : '#1e1b4b';
-  parts.push(svgText(INNER_PAD, 130, 'Your AI Coding', {
-    fill: titleColor,
-    size: 56,
-    weight: 800,
-  }));
-  parts.push(svgText(INNER_PAD, 198, 'Wrapped', {
-    fill: theme.heroAccent,
-    size: 64,
-    weight: 800,
+  // "Your AI Coding" — smaller, lighter
+  const titleColor = theme.mode === 'dark' ? '#e5e7eb' : '#1f2937';
+  p.push(svgText(PAD, 100, 'Your AI Coding', {
+    fill: titleColor, size: 36, weight: 300, family: DISPLAY_FONT, spacing: -0.5,
   }));
 
-  // Date range
+  // "Wrapped" — massive, accent color
+  p.push(svgText(PAD, 160, 'Wrapped', {
+    fill: theme.heroAccent, size: 80, weight: 800, family: DISPLAY_FONT, spacing: -3,
+  }));
+
+  // Thin accent line under title
+  p.push(`<line x1="${PAD}" y1="${178}" x2="${PAD + 120}" y2="${178}" stroke="${escapeXml(theme.heroAccent)}" stroke-width="2" opacity="0.4"/>`);
+
+  // Date range in mono
   const { since, until } = output.dateRange;
-  const rangeText = `${formatDateLong(since)} \u2014 ${formatDateLong(until)}`;
-  parts.push(svgText(INNER_PAD, 250, rangeText, {
-    fill: theme.subtitleColor,
-    size: 18,
-    weight: 500,
+  const rangeText = `${formatDateLong(since)} — ${formatDateLong(until)}`;
+  p.push(svgText(PAD, 210, rangeText, {
+    fill: theme.subtitleColor, size: 14, weight: 400, family: MONO_FONT,
   }));
 
-  parts.push(svgText(INNER_PAD, 290, 'tokenleak', {
-    fill: theme.heroAccent,
-    size: 16,
-    weight: 600,
-    opacity: 0.7,
+  // Watermark
+  p.push(svgText(PAD, 248, 'tokenleak', {
+    fill: theme.heroAccent, size: 13, weight: 500, family: MONO_FONT, opacity: 0.4,
   }));
 
-  // Decorative bottom line
-  parts.push(
-    `<rect x="${INNER_PAD}" y="${height - 40}" width="100" height="3" rx="1.5" fill="${escapeXml(theme.heroAccent)}" opacity="0.3"/>`,
-  );
+  // Bottom rule
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
 
-  return { svg: parts.join('\n'), height };
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 2: Big Numbers ─────────────────────────────────────────────
 function renderBigNumbersSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 440;
-  const parts: string[] = [];
+  const height = 260;
+  const p: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[1] ?? ['#0a1628', '#0d1b2a'];
+  const gc = theme.sectionBgs[1] ?? ['#0a0a12', '#0e0e18'];
+  p.push(sectionBg(0, height, gc as [string, string], 'bignums-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'bignums-bg'));
+  p.push(sectionLabel(PAD, 40, 'THE BIG NUMBERS', theme.subtitleColor, theme.heroAccent));
 
-  parts.push(svgText(INNER_PAD, 60, 'THE BIG NUMBERS', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
+  // Massive token count
+  const numColor = theme.mode === 'dark' ? '#f9fafb' : '#111827';
+  p.push(svgText(PAD, 130, formatNumber(stats.totalTokens), {
+    fill: numColor, size: 96, weight: 800, family: MONO_FONT, spacing: -4,
+  }));
+  p.push(svgText(PAD, 158, 'total tokens', {
+    fill: theme.subtitleColor, size: 14, weight: 500, family: BODY_FONT, spacing: 1,
   }));
 
-  // Hero: Total tokens
-  parts.push(svgText(INNER_PAD, 150, formatNumber(stats.totalTokens), {
-    fill: theme.mode === 'dark' ? '#f8fafc' : '#0f172a',
-    size: 80,
-    weight: 800,
-  }));
-  parts.push(svgText(INNER_PAD, 180, 'total tokens', {
-    fill: theme.subtitleColor,
-    size: 20,
-    weight: 500,
-  }));
-
-  // Grid of supporting stats
-  const gridY = 230;
-  const colWidth = (WIDTH - INNER_PAD * 2) / 3;
-
+  // Three supporting stats separated by thin vertical rules
+  const statsY = 200;
+  const colW = (WIDTH - PAD * 2) / 3;
   const supportStats = [
-    { value: formatCost(stats.totalCost), label: 'Total Cost', accent: true },
-    { value: `${stats.activeDays}`, label: 'Active Days', accent: false },
-    { value: `${stats.totalDays}`, label: 'Total Days', accent: false },
+    { value: formatCost(stats.totalCost), label: 'TOTAL COST', accent: true },
+    { value: `${stats.activeDays}`, label: 'ACTIVE DAYS', accent: false },
+    { value: `${stats.totalDays}`, label: 'TOTAL DAYS', accent: false },
   ];
 
   for (let i = 0; i < supportStats.length; i++) {
-    const sx = INNER_PAD + i * colWidth;
+    const sx = PAD + i * colW;
     const stat = supportStats[i]!;
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(sx, gridY, colWidth - 24, 140, cardBg, 16));
-    parts.push(svgText(sx + 24, gridY + 60, stat.value, {
-      fill: stat.accent ? theme.greenAccent : (theme.mode === 'dark' ? '#e2e8f0' : '#1e293b'),
-      size: 42,
-      weight: 700,
+    // Vertical separator
+    if (i > 0) {
+      p.push(`<line x1="${sx}" y1="${statsY - 10}" x2="${sx}" y2="${statsY + 32}" stroke="${theme.mode === 'dark' ? '#ffffff' : '#000000'}" stroke-width="1" opacity="0.08"/>`);
+    }
+    p.push(svgText(sx + (i > 0 ? 20 : 0), statsY + 4, stat.value, {
+      fill: stat.accent ? theme.greenAccent : numColor,
+      size: 28, weight: 700, family: MONO_FONT,
     }));
-    parts.push(svgText(sx + 24, gridY + 95, stat.label, {
-      fill: theme.subtitleColor,
-      size: 14,
-      weight: 600,
-      spacing: 1,
+    p.push(svgText(sx + (i > 0 ? 20 : 0), statsY + 28, stat.label, {
+      fill: theme.subtitleColor, size: 10, weight: 600, spacing: 2, family: MONO_FONT,
     }));
   }
 
-  return { svg: parts.join('\n'), height };
+  // Bottom rule
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 3: Streak Story ────────────────────────────────────────────
 function renderStreakSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
-  const parts: string[] = [];
+  const height = 250;
+  const p: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[2] ?? ['#1a0e00', '#0d1117'];
+  const gc = theme.sectionBgs[2] ?? ['#0c0a08', '#100e0c'];
+  p.push(sectionBg(0, height, gc as [string, string], 'streak-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'streak-bg'));
-
-  // Warm glow
-  parts.push(
-    `<circle cx="${WIDTH - 180}" cy="170" r="120" fill="${escapeXml(theme.warmAccent)}" opacity="0.05"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'STREAK STORY', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'STREAK STORY', theme.subtitleColor, theme.warmAccent));
 
   const narrative = stats.longestStreak > 0
     ? `Your longest coding streak was ${stats.longestStreak} days`
     : 'Start your first coding streak!';
-  parts.push(svgText(INNER_PAD, 120, narrative, {
-    fill: theme.narrativeColor,
-    size: 24,
-    weight: 600,
+  p.push(svgText(PAD, 85, narrative, {
+    fill: theme.narrativeColor, size: 20, weight: 500, family: DISPLAY_FONT,
   }));
 
-  // Big streak number
-  parts.push(svgText(INNER_PAD, 210, `${stats.longestStreak}`, {
-    fill: theme.warmAccent,
-    size: 72,
-    weight: 800,
+  // Giant streak number
+  p.push(svgText(PAD, 170, `${stats.longestStreak}`, {
+    fill: theme.warmAccent, size: 88, weight: 800, family: MONO_FONT, spacing: -4,
   }));
 
-  // Fire icon beside the number
-  const fireX = INNER_PAD + 160;
-  parts.push(svgIconFire(fireX, 155, 56, theme.warmAccent));
-
-  // Current streak
-  parts.push(svgText(INNER_PAD, 270, `Current streak: ${stats.currentStreak} days`, {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
+  // "days" label beside the number
+  const numWidth = Math.max(60, `${stats.longestStreak}`.length * 50);
+  p.push(svgText(PAD + numWidth + 8, 170, 'days', {
+    fill: theme.subtitleColor, size: 20, weight: 400, family: DISPLAY_FONT,
   }));
 
-  // Streak dots
-  const dotsToShow = Math.min(stats.longestStreak, 30);
-  const dotSize = 10;
-  const dotGap = 6;
-  const dotsY = 300;
-  for (let i = 0; i < dotsToShow; i++) {
-    const dx = INNER_PAD + i * (dotSize + dotGap);
-    const opacity = 0.3 + (i / Math.max(dotsToShow, 1)) * 0.7;
-    parts.push(
-      `<rect x="${dx}" y="${dotsY}" width="${dotSize}" height="${dotSize}" rx="3" fill="${escapeXml(theme.warmAccent)}" opacity="${opacity.toFixed(2)}"/>`,
-    );
-  }
-  if (stats.longestStreak > 30) {
-    parts.push(svgText(INNER_PAD + 30 * (dotSize + dotGap) + 8, dotsY + 9, `+${stats.longestStreak - 30}`, {
-      fill: theme.warmAccent,
-      size: 11,
-      weight: 600,
-    }));
+  // Fire icon
+  p.push(svgIconFire(PAD + numWidth + 8, 120, 40, theme.warmAccent));
+
+  // Current streak — right aligned
+  p.push(svgText(WIDTH - PAD, 170, `Current: ${stats.currentStreak}`, {
+    fill: theme.subtitleColor, size: 14, weight: 500, family: MONO_FONT, anchor: 'end',
+  }));
+
+  // Streak bar — a continuous gradient strip instead of dots
+  const barY = 198;
+  const barW = WIDTH - PAD * 2;
+  const barH = 6;
+  const streakRatio = Math.min(stats.longestStreak / 30, 1);
+  const trackColor = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  p.push(rect(PAD, barY, barW, barH, trackColor, 3));
+  if (streakRatio > 0) {
+    p.push(rect(PAD, barY, Math.max(8, streakRatio * barW), barH, theme.warmAccent, 3, { opacity: 0.7 }));
   }
 
-  return { svg: parts.join('\n'), height };
+  // Tick marks on streak bar
+  for (let i = 0; i <= 30 && i <= stats.longestStreak; i += 5) {
+    if (i === 0) continue;
+    const tx = PAD + (i / 30) * barW;
+    p.push(`<line x1="${tx}" y1="${barY + barH + 2}" x2="${tx}" y2="${barY + barH + 6}" stroke="${escapeXml(theme.subtitleColor)}" stroke-width="1" opacity="0.3"/>`);
+  }
+
+  // Bottom rule
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 4: Top Model ───────────────────────────────────────────────
 function renderTopModelSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 420;
-  const parts: string[] = [];
+  const height = 300;
+  const p: string[] = [];
   const stats = output.aggregated;
   const topModels = stats.topModels.slice(0, 3);
-  const gradColors = theme.sectionBgs[3] ?? ['#0a1a2e', '#0d1117'];
+  const gc = theme.sectionBgs[3] ?? ['#080c14', '#0c1018'];
+  p.push(sectionBg(0, height, gc as [string, string], 'model-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'model-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'YOUR TOP MODEL', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'YOUR TOP MODEL', theme.subtitleColor, theme.coolAccent));
 
   if (topModels.length === 0) {
-    parts.push(svgText(INNER_PAD, 200, 'No model data available', {
-      fill: theme.subtitleColor,
-      size: 20,
-      weight: 500,
+    p.push(svgText(PAD, 160, 'No model data available', {
+      fill: theme.subtitleColor, size: 18, weight: 500,
     }));
-    return { svg: parts.join('\n'), height };
+    return { svg: p.join('\n'), height };
   }
 
   const topModel = topModels[0]!;
-
-  // Donut chart on the right
-  const donutCx = WIDTH - 220;
-  const donutCy = 200;
-  const donutR = 100;
-  const donutWidth = 24;
   const arcColors = [theme.coolAccent, theme.purpleAccent, theme.greenAccent, theme.warmAccent];
 
-  // Background ring
-  const ringBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-  parts.push(
-    `<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${ringBg}" stroke-width="${donutWidth}"/>`,
-  );
+  // Top model name + percentage — large
+  p.push(svgText(PAD, 100, topModel.model, {
+    fill: theme.coolAccent, size: 32, weight: 700, family: MONO_FONT, spacing: -1,
+  }));
+  p.push(svgText(PAD, 128, `${topModel.percentage.toFixed(0)}% of all tokens`, {
+    fill: theme.subtitleColor, size: 14, weight: 500,
+  }));
 
-  // Model arcs
-  let startAngle = 0;
+  // Segmented bar — full width, showing model proportions
+  const segBarY = 150;
+  const segBarH = 20;
+  const segBarW = WIDTH - PAD * 2;
+  const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  p.push(rect(PAD, segBarY, segBarW, segBarH, trackBg, 4));
+
+  let segX = PAD;
   for (let i = 0; i < topModels.length; i++) {
     const model = topModels[i]!;
-    const sweep = (model.percentage / 100) * 360;
-    if (sweep < 0.5) continue;
-    const endAngle = startAngle + sweep;
-    const clampedEnd = sweep >= 359.5 ? startAngle + 359.5 : endAngle;
-    const arcPath = describeArc(donutCx, donutCy, donutR, startAngle, clampedEnd);
-    parts.push(
-      `<path d="${arcPath}" fill="none" stroke="${escapeXml(arcColors[i % arcColors.length]!)}" stroke-width="${donutWidth}" stroke-linecap="round"/>`,
-    );
-    startAngle = endAngle;
+    const w = Math.max(4, (model.percentage / 100) * segBarW);
+    const gap = i > 0 ? 2 : 0;
+    p.push(rect(segX + gap, segBarY, w - gap, segBarH, arcColors[i % arcColors.length]!, 4, { opacity: 0.85 }));
+    segX += w;
   }
 
-  // Percentage in center
-  parts.push(svgText(donutCx, donutCy + 12, `${topModel.percentage.toFixed(0)}%`, {
-    fill: theme.mode === 'dark' ? '#f8fafc' : '#0f172a',
-    size: 32,
-    weight: 800,
-    anchor: 'middle',
-  }));
-
-  // Top model name
-  parts.push(svgText(INNER_PAD, 130, topModel.model, {
-    fill: theme.coolAccent,
-    size: 32,
-    weight: 700,
-  }));
-  parts.push(svgText(INNER_PAD, 165, `${topModel.percentage.toFixed(0)}% of all tokens`, {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
-  }));
-
-  // Model bars
-  const barsY = 210;
-  const barMaxWidth = 450;
+  // Model list below
+  const listY = 195;
   for (let i = 0; i < topModels.length; i++) {
     const model = topModels[i]!;
-    const by = barsY + i * 56;
-    parts.push(svgText(INNER_PAD, by + 20, `#${i + 1}`, {
+    const my = listY + i * 32;
+    // Color dot
+    p.push(`<rect x="${PAD}" y="${my + 2}" width="4" height="16" rx="2" fill="${escapeXml(arcColors[i % arcColors.length]!)}" opacity="0.9"/>`);
+    // Rank
+    p.push(svgText(PAD + 16, my + 14, `${model.model}`, {
+      fill: theme.mode === 'dark' ? '#e5e7eb' : '#1f2937',
+      size: 14, weight: 600, family: MONO_FONT,
+    }));
+    // Percentage — right aligned
+    p.push(svgText(WIDTH - PAD, my + 14, `${model.percentage.toFixed(0)}%`, {
       fill: arcColors[i % arcColors.length]!,
-      size: 14,
-      weight: 700,
+      size: 14, weight: 700, family: MONO_FONT, anchor: 'end',
     }));
-    parts.push(svgText(INNER_PAD + 40, by + 20, model.model, {
-      fill: theme.mode === 'dark' ? '#e2e8f0' : '#1e293b',
-      size: 15,
-      weight: 600,
-    }));
-    const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-    parts.push(roundedRect(INNER_PAD + 40, by + 30, barMaxWidth, 12, trackBg, 6));
-    const barW = Math.max(8, (model.percentage / 100) * barMaxWidth);
-    parts.push(roundedRect(INNER_PAD + 40, by + 30, barW, 12, arcColors[i % arcColors.length]!, 6, { opacity: 0.8 }));
-    parts.push(svgText(INNER_PAD + 40 + barMaxWidth + 16, by + 42, `${model.percentage.toFixed(0)}%`, {
-      fill: theme.subtitleColor,
-      size: 13,
-      weight: 600,
-    }));
+    // Thin bar
+    const barW = Math.max(4, (model.percentage / 100) * (segBarW - 200));
+    p.push(rect(PAD + 16, my + 20, barW, 4, arcColors[i % arcColors.length]!, 2, { opacity: 0.4 }));
   }
 
-  return { svg: parts.join('\n'), height };
+  // Bottom rule
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 5: Provider Mix ────────────────────────────────────────────
 function renderProviderMixSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
   const providers = output.providers;
-  const baseHeight = 200;
-  const perProviderHeight = 70;
-  const height = Math.max(baseHeight, 130 + providers.length * perProviderHeight);
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[4] ?? ['#0d1117', '#0f1520'];
+  const perRow = 52;
+  const height = Math.max(180, 100 + providers.length * perRow);
+  const p: string[] = [];
+  const gc = theme.sectionBgs[4] ?? ['#0a0a0e', '#0e0e12'];
+  p.push(sectionBg(0, height, gc as [string, string], 'provider-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'provider-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'PROVIDER MIX', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'PROVIDER MIX', theme.subtitleColor, theme.purpleAccent));
 
   if (providers.length === 0) {
-    parts.push(svgText(INNER_PAD, 130, 'No provider data', {
-      fill: theme.subtitleColor,
-      size: 18,
-      weight: 500,
-    }));
-    return { svg: parts.join('\n'), height: baseHeight };
+    p.push(svgText(PAD, 110, 'No provider data', { fill: theme.subtitleColor, size: 16, weight: 500 }));
+    return { svg: p.join('\n'), height: 180 };
   }
 
-  const totalTokens = providers.reduce((s, p) => s + p.totalTokens, 0);
+  const totalTokens = providers.reduce((s, pv) => s + pv.totalTokens, 0);
   const topProvider = providers.reduce((a, b) => (a.totalTokens >= b.totalTokens ? a : b));
   const topPct = totalTokens > 0 ? ((topProvider.totalTokens / totalTokens) * 100).toFixed(0) : '0';
 
-  parts.push(svgText(INNER_PAD, 100, `${topProvider.displayName} was your go-to (${topPct}%)`, {
-    fill: theme.narrativeColor,
-    size: 22,
-    weight: 600,
+  p.push(svgText(PAD, 80, `${topProvider.displayName} — ${topPct}%`, {
+    fill: theme.narrativeColor, size: 20, weight: 600, family: DISPLAY_FONT,
   }));
 
-  const barMaxWidth = WIDTH - INNER_PAD * 2 - 200;
+  const barMaxWidth = WIDTH - PAD * 2 - 160;
   for (let i = 0; i < providers.length; i++) {
-    const p = providers[i]!;
-    const py = 130 + i * perProviderHeight;
-    const pct = totalTokens > 0 ? (p.totalTokens / totalTokens) * 100 : 0;
+    const pv = providers[i]!;
+    const py = 105 + i * perRow;
+    const pct = totalTokens > 0 ? (pv.totalTokens / totalTokens) * 100 : 0;
 
-    parts.push(`<circle cx="${INNER_PAD + 8}" cy="${py + 18}" r="8" fill="${escapeXml(p.colors.primary)}"/>`);
-    parts.push(svgText(INNER_PAD + 28, py + 23, p.displayName, {
-      fill: theme.mode === 'dark' ? '#e2e8f0' : '#1e293b',
-      size: 16,
-      weight: 600,
+    // Color indicator
+    p.push(`<rect x="${PAD}" y="${py + 4}" width="4" height="14" rx="2" fill="${escapeXml(pv.colors.primary)}"/>`);
+    p.push(svgText(PAD + 16, py + 15, pv.displayName, {
+      fill: theme.mode === 'dark' ? '#e5e7eb' : '#1f2937',
+      size: 14, weight: 600, family: MONO_FONT,
     }));
-    parts.push(svgText(WIDTH - INNER_PAD, py + 23, `${pct.toFixed(0)}%`, {
-      fill: theme.subtitleColor,
-      size: 15,
-      weight: 700,
-      anchor: 'end',
+    p.push(svgText(WIDTH - PAD, py + 15, `${pct.toFixed(0)}%`, {
+      fill: theme.subtitleColor, size: 13, weight: 700, anchor: 'end', family: MONO_FONT,
     }));
     const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-    parts.push(roundedRect(INNER_PAD + 28, py + 36, barMaxWidth, 14, trackBg, 7));
-    const barW = Math.max(8, (pct / 100) * barMaxWidth);
-    parts.push(roundedRect(INNER_PAD + 28, py + 36, barW, 14, p.colors.primary, 7, { opacity: 0.75 }));
+    p.push(rect(PAD + 16, py + 24, barMaxWidth, 8, trackBg, 4));
+    const barW = Math.max(4, (pct / 100) * barMaxWidth);
+    p.push(rect(PAD + 16, py + 24, barW, 8, pv.colors.primary, 4, { opacity: 0.75 }));
   }
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 6: Day of Week ─────────────────────────────────────────────
 function renderDayOfWeekSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 400;
-  const parts: string[] = [];
+  const height = 340;
+  const p: string[] = [];
   const dow = output.aggregated.dayOfWeek;
-  const gradColors = theme.sectionBgs[5] ?? ['#0a1628', '#0d1117'];
+  const gc = theme.sectionBgs[5] ?? ['#080c14', '#0c1018'];
+  p.push(sectionBg(0, height, gc as [string, string], 'dow-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'dow-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'CODING DAYS', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'CODING DAYS', theme.subtitleColor, theme.coolAccent));
 
   if (dow.length === 0) {
-    parts.push(svgText(INNER_PAD, 200, 'No day-of-week data', {
-      fill: theme.subtitleColor,
-      size: 18,
-      weight: 500,
-    }));
-    return { svg: parts.join('\n'), height };
+    p.push(svgText(PAD, 170, 'No day-of-week data', { fill: theme.subtitleColor, size: 16, weight: 500 }));
+    return { svg: p.join('\n'), height };
   }
 
   const peak = dow.reduce((a, b) => (a.tokens >= b.tokens ? a : b));
   const peakName = DAY_NAMES[peak.day] ?? 'Unknown';
   const maxTokens = Math.max(...dow.map((d) => d.tokens), 1);
 
-  parts.push(svgText(INNER_PAD, 100, `${peakName}s are your power day`, {
-    fill: theme.narrativeColor,
-    size: 22,
-    weight: 600,
+  p.push(svgText(PAD, 80, `${peakName}s are your power day`, {
+    fill: theme.narrativeColor, size: 20, weight: 600, family: DISPLAY_FONT,
   }));
 
-  const chartX = INNER_PAD;
-  const chartY = 140;
-  const barAreaWidth = WIDTH - INNER_PAD * 2;
-  const barWidth = Math.floor((barAreaWidth - 6 * 20) / 7);
-  const barMaxHeight = 180;
+  const chartX = PAD;
+  const chartY = 110;
+  const barAreaWidth = WIDTH - PAD * 2;
+  const gapSize = 12;
+  const barWidth = Math.floor((barAreaWidth - 6 * gapSize) / 7);
+  const barMaxHeight = 170;
 
   for (let i = 0; i < 7 && i < dow.length; i++) {
     const entry = dow[i]!;
-    const bx = chartX + i * (barWidth + 20);
+    const bx = chartX + i * (barWidth + gapSize);
     const ratio = maxTokens > 0 ? entry.tokens / maxTokens : 0;
-    const barH = Math.max(8, ratio * barMaxHeight);
+    const barH = Math.max(4, ratio * barMaxHeight);
     const by = chartY + barMaxHeight - barH;
     const isPeak = entry.day === peak.day;
 
-    const barColor = isPeak ? theme.coolAccent : (theme.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)');
-    parts.push(roundedRect(bx, by, barWidth, barH, barColor, 8, { opacity: isPeak ? 1 : 0.6 }));
+    const barColor = isPeak
+      ? theme.coolAccent
+      : (theme.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)');
+    p.push(rect(bx, by, barWidth, barH, barColor, 4, { opacity: isPeak ? 1 : 0.7 }));
 
+    // Peak highlight — thin top accent
     if (isPeak) {
-      parts.push(
-        `<rect x="${bx - 4}" y="${by - 4}" width="${barWidth + 8}" height="${barH + 8}" rx="10" fill="${escapeXml(theme.coolAccent)}" opacity="0.12"/>`,
-      );
+      p.push(`<line x1="${bx}" y1="${by}" x2="${bx + barWidth}" y2="${by}" stroke="${escapeXml(theme.coolAccent)}" stroke-width="3" opacity="0.8"/>`);
     }
 
     const dayLabel = DAY_SHORT[i] ?? '';
-    parts.push(svgText(bx + barWidth / 2, chartY + barMaxHeight + 24, dayLabel, {
+    p.push(svgText(bx + barWidth / 2, chartY + barMaxHeight + 20, dayLabel, {
       fill: isPeak ? theme.coolAccent : theme.subtitleColor,
-      size: 13,
-      weight: isPeak ? 700 : 500,
-      anchor: 'middle',
+      size: 11, weight: isPeak ? 700 : 500, anchor: 'middle', family: MONO_FONT,
     }));
 
     if (isPeak) {
-      parts.push(svgText(bx + barWidth / 2, by - 12, formatNumber(entry.tokens), {
-        fill: theme.coolAccent,
-        size: 13,
-        weight: 700,
-        anchor: 'middle',
+      p.push(svgText(bx + barWidth / 2, by - 10, formatNumber(entry.tokens), {
+        fill: theme.coolAccent, size: 11, weight: 700, anchor: 'middle', family: MONO_FONT,
       }));
     }
   }
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 7: Time of Day ─────────────────────────────────────────────
 function renderTimeOfDaySlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
   const more = output.more;
   if (!more?.hourOfDay) return { svg: '', height: 0 };
@@ -877,18 +790,12 @@ function renderTimeOfDaySlide(
   const totalTokens = hourOfDay.reduce((s, e) => s + e.tokens, 0);
   if (totalTokens === 0) return { svg: '', height: 0 };
 
-  const height = 400;
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[6] ?? ['#180830', '#0d1117'];
+  const height = 320;
+  const p: string[] = [];
+  const gc = theme.sectionBgs[6] ?? ['#0c0814', '#100c18'];
+  p.push(sectionBg(0, height, gc as [string, string], 'tod-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'tod-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'WHEN YOU CODE', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'WHEN YOU CODE', theme.subtitleColor, theme.purpleAccent));
 
   const morning = hourOfDay.filter((e) => e.hour >= 6 && e.hour < 12).reduce((s, e) => s + e.tokens, 0);
   const afternoon = hourOfDay.filter((e) => e.hour >= 12 && e.hour < 18).reduce((s, e) => s + e.tokens, 0);
@@ -896,394 +803,332 @@ function renderTimeOfDaySlide(
   const night = hourOfDay.filter((e) => e.hour >= 22 || e.hour < 6).reduce((s, e) => s + e.tokens, 0);
 
   const periods = [
-    { label: 'Morning', icon: 'sun' as IconName, tokens: morning, color: theme.warmAccent },
-    { label: 'Afternoon', icon: 'star' as IconName, tokens: afternoon, color: theme.goldAccent },
-    { label: 'Evening', icon: 'fire' as IconName, tokens: evening, color: theme.purpleAccent },
-    { label: 'Night', icon: 'moon' as IconName, tokens: night, color: theme.coolAccent },
+    { label: 'Morning', icon: 'sun' as IconName, tokens: morning, color: theme.warmAccent, hours: '6am–12pm' },
+    { label: 'Afternoon', icon: 'star' as IconName, tokens: afternoon, color: theme.goldAccent, hours: '12–6pm' },
+    { label: 'Evening', icon: 'fire' as IconName, tokens: evening, color: theme.purpleAccent, hours: '6–10pm' },
+    { label: 'Night', icon: 'moon' as IconName, tokens: night, color: theme.coolAccent, hours: '10pm–6am' },
   ];
 
   const dominant = periods.reduce((a, b) => (a.tokens >= b.tokens ? a : b));
   const dominantPct = totalTokens > 0 ? ((dominant.tokens / totalTokens) * 100).toFixed(0) : '0';
 
   let narrativeText = '';
-  if (dominant.label === 'Night') {
-    narrativeText = `You're a night owl -- ${dominantPct}% of tokens between 10pm-6am`;
-  } else if (dominant.label === 'Evening') {
-    narrativeText = `You're an evening coder -- ${dominantPct}% between 6-10pm`;
-  } else if (dominant.label === 'Morning') {
-    narrativeText = `You're an early bird -- ${dominantPct}% before noon`;
-  } else {
-    narrativeText = `Afternoons are your peak -- ${dominantPct}% from 12-6pm`;
-  }
-  parts.push(svgText(INNER_PAD, 100, narrativeText, {
-    fill: theme.narrativeColor,
-    size: 22,
-    weight: 600,
+  if (dominant.label === 'Night') narrativeText = `You're a night owl -- ${dominantPct}% of tokens between 10pm-6am`;
+  else if (dominant.label === 'Evening') narrativeText = `You're an evening coder -- ${dominantPct}% between 6-10pm`;
+  else if (dominant.label === 'Morning') narrativeText = `You're an early bird -- ${dominantPct}% before noon`;
+  else narrativeText = `Afternoons are your peak -- ${dominantPct}% from 12-6pm`;
+
+  p.push(svgText(PAD, 80, narrativeText, {
+    fill: theme.narrativeColor, size: 18, weight: 500, family: DISPLAY_FONT,
   }));
 
-  const cardWidth = (WIDTH - INNER_PAD * 2 - 3 * 20) / 4;
-  const cardsY = 140;
+  // Four period cards — sharp edges, minimal
+  const cardGap = 16;
+  const cardWidth = (WIDTH - PAD * 2 - 3 * cardGap) / 4;
+  const cardsY = 110;
+  const cardH = 170;
+
   for (let i = 0; i < periods.length; i++) {
     const period = periods[i]!;
-    const cx = INNER_PAD + i * (cardWidth + 20);
+    const cx = PAD + i * (cardWidth + cardGap);
     const pct = totalTokens > 0 ? (period.tokens / totalTokens) * 100 : 0;
+    const isDominant = period.label === dominant.label;
 
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(cx, cardsY, cardWidth, 200, cardBg, 16));
+    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+    const borderColor = isDominant ? period.color : 'transparent';
+    p.push(rect(cx, cardsY, cardWidth, cardH, cardBg, 6, {
+      stroke: borderColor,
+      strokeWidth: isDominant ? 1.5 : 0,
+      opacity: 1,
+    }));
+
+    // Top accent line for dominant
+    if (isDominant) {
+      p.push(`<line x1="${cx}" y1="${cardsY}" x2="${cx + cardWidth}" y2="${cardsY}" stroke="${escapeXml(period.color)}" stroke-width="2" opacity="0.8"/>`);
+    }
 
     // Icon
-    parts.push(renderIcon(period.icon, cx + cardWidth / 2 - 16, cardsY + 24, 32, period.color));
+    p.push(renderIcon(period.icon, cx + cardWidth / 2 - 12, cardsY + 20, 24, period.color));
 
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 90, period.label, {
-      fill: theme.subtitleColor,
-      size: 13,
-      weight: 600,
-      anchor: 'middle',
+    // Period label
+    p.push(svgText(cx + cardWidth / 2, cardsY + 65, period.label, {
+      fill: theme.subtitleColor, size: 11, weight: 600, anchor: 'middle', family: MONO_FONT, spacing: 1,
     }));
 
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 140, `${pct.toFixed(0)}%`, {
-      fill: period.color,
-      size: 36,
-      weight: 800,
-      anchor: 'middle',
+    // Big percentage
+    p.push(svgText(cx + cardWidth / 2, cardsY + 110, `${pct.toFixed(0)}%`, {
+      fill: period.color, size: 36, weight: 800, anchor: 'middle', family: MONO_FONT,
     }));
 
-    parts.push(svgText(cx + cardWidth / 2, cardsY + 170, formatNumber(period.tokens), {
-      fill: theme.subtitleColor,
-      size: 12,
-      weight: 500,
-      anchor: 'middle',
+    // Token count
+    p.push(svgText(cx + cardWidth / 2, cardsY + 135, formatNumber(period.tokens), {
+      fill: theme.subtitleColor, size: 11, weight: 400, anchor: 'middle', family: MONO_FONT,
+    }));
+
+    // Hours label
+    p.push(svgText(cx + cardWidth / 2, cardsY + 155, period.hours, {
+      fill: theme.subtitleColor, size: 10, weight: 400, anchor: 'middle', family: MONO_FONT, opacity: 0.5,
     }));
   }
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 8: Cache Efficiency ────────────────────────────────────────
 function renderCacheSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 340;
-  const parts: string[] = [];
+  const height = 280;
+  const p: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[7] ?? ['#001a0d', '#0d1117'];
+  const gc = theme.sectionBgs[7] ?? ['#080e0c', '#0c1210'];
+  p.push(sectionBg(0, height, gc as [string, string], 'cache-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'cache-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'CACHE EFFICIENCY', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'CACHE EFFICIENCY', theme.subtitleColor, theme.greenAccent));
 
   const hitRate = stats.cacheHitRate;
   const hitPct = (hitRate * 100).toFixed(1);
 
-  // Gauge arc
-  const gaugeCx = WIDTH - 240;
-  const gaugeCy = 190;
-  const gaugeR = 90;
-  const gaugeWidth = 18;
+  // Gauge arc — right side
+  const gaugeCx = WIDTH - 220;
+  const gaugeCy = 160;
+  const gaugeR = 80;
+  const gaugeWidth = 14;
 
   const trackColor = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
   const bgArc = describeArc(gaugeCx, gaugeCy, gaugeR, -90, 270);
-  parts.push(
-    `<path d="${bgArc}" fill="none" stroke="${trackColor}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`,
-  );
+  p.push(`<path d="${bgArc}" fill="none" stroke="${trackColor}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`);
 
   if (hitRate > 0) {
     const sweepAngle = Math.min(hitRate * 360, 359);
     const fillArc = describeArc(gaugeCx, gaugeCy, gaugeR, -90, -90 + sweepAngle);
-    parts.push(
-      `<path d="${fillArc}" fill="none" stroke="${escapeXml(theme.greenAccent)}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`,
-    );
+    p.push(`<path d="${fillArc}" fill="none" stroke="${escapeXml(theme.greenAccent)}" stroke-width="${gaugeWidth}" stroke-linecap="round"/>`);
   }
 
-  parts.push(svgText(gaugeCx, gaugeCy + 10, `${hitPct}%`, {
-    fill: theme.greenAccent,
-    size: 36,
-    weight: 800,
-    anchor: 'middle',
+  // Percentage in center of gauge
+  p.push(svgText(gaugeCx, gaugeCy + 8, `${hitPct}%`, {
+    fill: theme.greenAccent, size: 28, weight: 800, anchor: 'middle', family: MONO_FONT,
   }));
-  parts.push(svgText(gaugeCx, gaugeCy + 35, 'hit rate', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 500,
-    anchor: 'middle',
+  p.push(svgText(gaugeCx, gaugeCy + 28, 'hit rate', {
+    fill: theme.subtitleColor, size: 11, weight: 500, anchor: 'middle', family: MONO_FONT,
   }));
 
-  parts.push(svgText(INNER_PAD, 120, `${hitPct}% Cache Hit Rate`, {
-    fill: theme.narrativeColor,
-    size: 24,
-    weight: 600,
+  // Left side stats
+  p.push(svgText(PAD, 100, `${hitPct}% Cache Hit Rate`, {
+    fill: theme.narrativeColor, size: 22, weight: 600, family: DISPLAY_FONT,
   }));
 
   const cacheEcon = output.more?.cacheEconomics;
   if (cacheEcon) {
-    parts.push(svgText(INNER_PAD, 170, `${formatNumber(cacheEcon.readTokens)} cache reads`, {
-      fill: theme.subtitleColor,
-      size: 16,
-      weight: 500,
-    }));
-    parts.push(svgText(INNER_PAD, 200, `${formatNumber(cacheEcon.writeTokens)} cache writes`, {
-      fill: theme.subtitleColor,
-      size: 16,
-      weight: 500,
-    }));
+    const statItems = [
+      { label: 'Cache Reads', value: formatNumber(cacheEcon.readTokens) },
+      { label: 'Cache Writes', value: formatNumber(cacheEcon.writeTokens) },
+    ];
     if (cacheEcon.reuseRatio !== null && Number.isFinite(cacheEcon.reuseRatio)) {
-      parts.push(svgText(INNER_PAD, 230, `${cacheEcon.reuseRatio.toFixed(1)}x reuse ratio`, {
-        fill: theme.greenAccent,
-        size: 16,
-        weight: 600,
+      statItems.push({ label: 'Reuse Ratio', value: `${cacheEcon.reuseRatio.toFixed(1)}x` });
+    }
+    for (let i = 0; i < statItems.length; i++) {
+      const item = statItems[i]!;
+      const iy = 135 + i * 34;
+      p.push(svgText(PAD, iy, item.value, {
+        fill: theme.mode === 'dark' ? '#e5e7eb' : '#1f2937',
+        size: 18, weight: 700, family: MONO_FONT,
+      }));
+      p.push(svgText(PAD + 140, iy, item.label, {
+        fill: theme.subtitleColor, size: 12, weight: 500, family: MONO_FONT,
       }));
     }
   }
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 9: Peak Day Spotlight ──────────────────────────────────────
 function renderPeakDaySlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 320;
-  const parts: string[] = [];
+  const height = 240;
+  const p: string[] = [];
   const stats = output.aggregated;
-  const gradColors = theme.sectionBgs[8] ?? ['#1a1500', '#0d1117'];
+  const gc = theme.sectionBgs[8] ?? ['#0c0a06', '#100e0a'];
+  p.push(sectionBg(0, height, gc as [string, string], 'peak-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'peak-bg'));
-
-  parts.push(
-    `<circle cx="${WIDTH / 2}" cy="160" r="140" fill="${escapeXml(theme.goldAccent)}" opacity="0.04"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'PEAK DAY SPOTLIGHT', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'PEAK DAY SPOTLIGHT', theme.subtitleColor, theme.goldAccent));
 
   if (!stats.peakDay) {
-    parts.push(svgText(INNER_PAD, 180, 'No usage data recorded yet', {
-      fill: theme.subtitleColor,
-      size: 20,
-      weight: 500,
+    p.push(svgText(PAD, 130, 'No usage data recorded yet', {
+      fill: theme.subtitleColor, size: 16, weight: 500,
     }));
-    return { svg: parts.join('\n'), height };
+    return { svg: p.join('\n'), height };
   }
 
   const formattedDate = formatDateLong(stats.peakDay.date);
-  parts.push(svgText(INNER_PAD, 110, `${formattedDate} was your biggest day`, {
-    fill: theme.narrativeColor,
-    size: 24,
-    weight: 600,
+  p.push(svgText(PAD, 85, `${formattedDate} was your biggest day`, {
+    fill: theme.narrativeColor, size: 20, weight: 500, family: DISPLAY_FONT,
   }));
 
-  parts.push(svgText(INNER_PAD, 210, formatNumber(stats.peakDay.tokens), {
-    fill: theme.goldAccent,
-    size: 72,
-    weight: 800,
+  // Massive token count
+  p.push(svgText(PAD, 160, formatNumber(stats.peakDay.tokens), {
+    fill: theme.goldAccent, size: 72, weight: 800, family: MONO_FONT, spacing: -3,
   }));
-  parts.push(svgText(INNER_PAD, 245, 'tokens in a single day', {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
+  p.push(svgText(PAD, 190, 'tokens in a single day', {
+    fill: theme.subtitleColor, size: 14, weight: 500,
   }));
 
-  // Trophy icon on the right
-  const badgeCx = WIDTH - 200;
-  const badgeCy = 180;
-  parts.push(roundedRect(badgeCx - 60, badgeCy - 50, 120, 100, theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', 20));
-  parts.push(svgIconTrophy(badgeCx - 24, badgeCy - 24, 48, theme.goldAccent));
+  // Trophy on right — inside a sharp-cornered box
+  const badgeCx = WIDTH - 180;
+  const badgeCy = 140;
+  p.push(rect(badgeCx - 40, badgeCy - 36, 80, 72, theme.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', 6));
+  p.push(cornerMark(badgeCx - 40, badgeCy - 36, 12, theme.goldAccent, 'tl'));
+  p.push(cornerMark(badgeCx + 40, badgeCy + 36, 12, theme.goldAccent, 'br'));
+  p.push(svgIconTrophy(badgeCx - 20, badgeCy - 20, 40, theme.goldAccent));
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 10: Achievements ───────────────────────────────────────────
 function renderAchievementsSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
   const achievements = computeAchievements(output);
   const rows = Math.ceil(achievements.length / 2);
-  const rowHeight = 100;
-  const height = Math.max(240, 100 + rows * rowHeight + 40);
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[9] ?? ['#120828', '#0a1628'];
+  const rowHeight = 80;
+  const height = Math.max(200, 90 + rows * rowHeight + 20);
+  const p: string[] = [];
+  const gc = theme.sectionBgs[9] ?? ['#08080c', '#0c0c14'];
+  p.push(sectionBg(0, height, gc as [string, string], 'achieve-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'achieve-bg'));
-
-  parts.push(
-    `<circle cx="600" cy="${height / 2}" r="200" fill="${escapeXml(theme.purpleAccent)}" opacity="0.03"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 55, 'ACHIEVEMENTS UNLOCKED', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'ACHIEVEMENTS UNLOCKED', theme.subtitleColor, theme.purpleAccent));
 
   if (achievements.length === 0) {
-    parts.push(svgText(INNER_PAD, 150, 'Keep coding to unlock achievements!', {
-      fill: theme.subtitleColor,
-      size: 18,
-      weight: 500,
+    p.push(svgText(PAD, 120, 'Keep coding to unlock achievements!', {
+      fill: theme.subtitleColor, size: 16, weight: 500,
     }));
-    return { svg: parts.join('\n'), height: 240 };
+    return { svg: p.join('\n'), height: 200 };
   }
 
-  const colWidth = (WIDTH - INNER_PAD * 2 - 24) / 2;
+  const colWidth = (WIDTH - PAD * 2 - 20) / 2;
   for (let i = 0; i < achievements.length; i++) {
     const a = achievements[i]!;
     const col = i % 2;
     const row = Math.floor(i / 2);
-    const ax = INNER_PAD + col * (colWidth + 24);
-    const ay = 90 + row * rowHeight;
+    const ax = PAD + col * (colWidth + 20);
+    const ay = 70 + row * rowHeight;
 
-    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-    parts.push(roundedRect(ax, ay, colWidth, 80, cardBg, 16));
+    const cardBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+    p.push(rect(ax, ay, colWidth, 66, cardBg, 6));
+
+    // Left accent bar
+    p.push(`<rect x="${ax}" y="${ay}" width="3" height="66" rx="1.5" fill="${escapeXml(a.color)}" opacity="0.7"/>`);
 
     // Icon
-    parts.push(renderIcon(a.icon, ax + 16, ay + 22, 36, a.color));
+    p.push(renderIcon(a.icon, ax + 16, ay + 17, 32, a.color));
 
     // Title
-    parts.push(svgText(ax + 66, ay + 35, a.title, {
-      fill: theme.mode === 'dark' ? '#f1f5f9' : '#1e293b',
-      size: 18,
-      weight: 700,
+    p.push(svgText(ax + 60, ay + 28, a.title, {
+      fill: theme.mode === 'dark' ? '#f3f4f6' : '#1f2937',
+      size: 15, weight: 700, family: DISPLAY_FONT,
     }));
 
     // Subtitle
-    parts.push(svgText(ax + 66, ay + 58, a.subtitle, {
-      fill: theme.subtitleColor,
-      size: 13,
-      weight: 500,
+    p.push(svgText(ax + 60, ay + 48, a.subtitle, {
+      fill: theme.subtitleColor, size: 12, weight: 500, family: MONO_FONT,
     }));
   }
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 11: Monthly Burn Projection ────────────────────────────────
 function renderMonthlyBurnSlide(
-  output: TokenleakOutput,
-  theme: WrappedTheme,
+  output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 300;
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[10] ?? ['#0a1628', '#0d1117'];
+  const height = 260;
+  const p: string[] = [];
+  const gc = theme.sectionBgs[10] ?? ['#0a0c10', '#0e1014'];
+  p.push(sectionBg(0, height, gc as [string, string], 'burn-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'burn-bg'));
-
-  parts.push(svgText(INNER_PAD, 55, 'MONTHLY PROJECTION', {
-    fill: theme.subtitleColor,
-    size: 13,
-    weight: 700,
-    spacing: 3,
-  }));
+  p.push(sectionLabel(PAD, 40, 'MONTHLY PROJECTION', theme.subtitleColor, theme.coolAccent));
 
   const burn = output.more?.monthlyBurn;
   if (!burn) {
     const avgDailyCost = output.aggregated.averageDailyCost;
     const projected = avgDailyCost * 30;
-    parts.push(svgText(INNER_PAD, 120, 'At this rate, you will spend about', {
-      fill: theme.narrativeColor,
-      size: 22,
-      weight: 500,
+    p.push(svgText(PAD, 90, 'At this rate, you will spend about', {
+      fill: theme.narrativeColor, size: 18, weight: 500, family: DISPLAY_FONT,
     }));
-    parts.push(svgText(INNER_PAD, 185, formatCost(projected), {
-      fill: theme.coolAccent,
-      size: 64,
-      weight: 800,
+    p.push(svgText(PAD, 160, formatCost(projected), {
+      fill: theme.coolAccent, size: 64, weight: 800, family: MONO_FONT, spacing: -3,
     }));
-    parts.push(svgText(INNER_PAD, 220, 'per month', {
-      fill: theme.subtitleColor,
-      size: 16,
-      weight: 500,
+    p.push(svgText(PAD, 190, 'per month', {
+      fill: theme.subtitleColor, size: 14, weight: 500,
     }));
-    return { svg: parts.join('\n'), height };
+    return { svg: p.join('\n'), height };
   }
 
-  parts.push(svgText(INNER_PAD, 115, 'At this rate, you will spend', {
-    fill: theme.narrativeColor,
-    size: 22,
-    weight: 500,
+  p.push(svgText(PAD, 90, 'At this rate, you will spend', {
+    fill: theme.narrativeColor, size: 18, weight: 500, family: DISPLAY_FONT,
   }));
-
-  parts.push(svgText(INNER_PAD, 185, formatCost(burn.projectedCost), {
-    fill: theme.coolAccent,
-    size: 64,
-    weight: 800,
+  p.push(svgText(PAD, 155, formatCost(burn.projectedCost), {
+    fill: theme.coolAccent, size: 64, weight: 800, family: MONO_FONT, spacing: -3,
   }));
-  parts.push(svgText(INNER_PAD, 220, 'this month', {
-    fill: theme.subtitleColor,
-    size: 16,
-    weight: 500,
+  p.push(svgText(PAD, 185, 'this month', {
+    fill: theme.subtitleColor, size: 14, weight: 500,
   }));
 
   // Progress bar
-  const barY = 252;
-  const barWidth = WIDTH - INNER_PAD * 2;
-  const barHeight = 16;
+  const barY = 210;
+  const barWidth = WIDTH - PAD * 2;
+  const barHeight = 10;
   const progress = burn.calendarDays > 0 ? burn.observedDays / burn.calendarDays : 0;
 
   const trackBg = theme.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  parts.push(roundedRect(INNER_PAD, barY, barWidth, barHeight, trackBg, 8));
-  parts.push(roundedRect(INNER_PAD, barY, Math.max(8, progress * barWidth), barHeight, theme.coolAccent, 8, { opacity: 0.7 }));
+  p.push(rect(PAD, barY, barWidth, barHeight, trackBg, 5));
+  p.push(rect(PAD, barY, Math.max(6, progress * barWidth), barHeight, theme.coolAccent, 5, { opacity: 0.7 }));
 
-  parts.push(svgText(INNER_PAD, barY + 36, `Based on ${burn.observedDays} of ${burn.calendarDays} days`, {
-    fill: theme.subtitleColor,
-    size: 12,
-    weight: 500,
+  p.push(svgText(PAD, barY + 30, `Based on ${burn.observedDays} of ${burn.calendarDays} days`, {
+    fill: theme.subtitleColor, size: 11, weight: 400, family: MONO_FONT,
   }));
 
-  return { svg: parts.join('\n'), height };
+  p.push(rule(PAD, height - 1, WIDTH - PAD * 2, theme.mode === 'dark' ? '#ffffff' : '#000000', 0.06));
+
+  return { svg: p.join('\n'), height };
 }
 
 // ── Slide 12: Footer ─────────────────────────────────────────────────
 function renderFooterSlide(
-  _output: TokenleakOutput,
-  theme: WrappedTheme,
+  _output: TokenleakOutput, theme: WrappedTheme,
 ): SlideResult {
-  const height = 140;
-  const parts: string[] = [];
-  const gradColors = theme.sectionBgs[11] ?? ['#09090b', '#09090b'];
+  const height = 100;
+  const p: string[] = [];
+  const gc = theme.sectionBgs[11] ?? ['#060608', '#060608'];
+  p.push(sectionBg(0, height, gc as [string, string], 'footer-bg'));
 
-  parts.push(sectionBg(0, height, gradColors as [string, string], 'footer-bg'));
+  // Corner mark
+  p.push(cornerMark(PAD - 16, height - 16, 16, theme.heroAccent, 'bl'));
 
-  parts.push(
-    `<rect x="${INNER_PAD}" y="30" width="60" height="3" rx="1.5" fill="${escapeXml(theme.heroAccent)}" opacity="0.4"/>`,
-  );
-
-  parts.push(svgText(INNER_PAD, 65, 'Generated by tokenleak', {
-    fill: theme.subtitleColor,
-    size: 14,
-    weight: 600,
+  p.push(svgText(PAD, 40, 'Generated by tokenleak', {
+    fill: theme.subtitleColor, size: 12, weight: 500, family: MONO_FONT,
   }));
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  parts.push(svgText(INNER_PAD, 90, now, {
-    fill: theme.subtitleColor,
-    size: 12,
-    weight: 400,
-    opacity: 0.6,
+  p.push(svgText(PAD, 60, now, {
+    fill: theme.subtitleColor, size: 11, weight: 400, family: MONO_FONT, opacity: 0.5,
   }));
 
-  parts.push(svgText(WIDTH - INNER_PAD, 70, 'tokenleak', {
-    fill: theme.heroAccent,
-    size: 18,
-    weight: 700,
-    anchor: 'end',
-    opacity: 0.5,
-    family: MONO_FONT,
+  p.push(svgText(WIDTH - PAD, 50, 'tokenleak', {
+    fill: theme.heroAccent, size: 16, weight: 700, anchor: 'end', family: MONO_FONT, opacity: 0.4,
   }));
 
-  return { svg: parts.join('\n'), height };
+  return { svg: p.join('\n'), height };
 }
 
 // ── Main composer ────────────────────────────────────────────────────
@@ -1320,9 +1165,12 @@ export function renderWrappedSlidesSvg(
     totalHeight += slide.height;
   }
 
+  const bgColor = theme.mode === 'dark' ? '#060608' : '#fafaf9';
+
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${totalHeight}" viewBox="0 0 ${WIDTH} ${totalHeight}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility" color-rendering="optimizeQuality">`,
-    `<rect width="${WIDTH}" height="${totalHeight}" fill="${escapeXml(theme.mode === 'dark' ? '#09090b' : '#f8fafc')}"/>`,
+    `<rect width="${WIDTH}" height="${totalHeight}" fill="${escapeXml(bgColor)}"/>`,
+    globalDefs(theme.mode === 'dark'),
     ...stackedSections,
     '</svg>',
   ].join('\n');
