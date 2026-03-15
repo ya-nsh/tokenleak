@@ -1143,6 +1143,32 @@ async function buildFocusPreset(): Promise<InteractiveCommand> {
   );
 }
 
+async function buildAdvisorPreset(): Promise<InteractiveCommand> {
+  const format = await promptSingleChoice(
+    'Advisor Format',
+    'Choose how the advisor report should be rendered.',
+    [
+      { value: 'terminal', label: 'Terminal', description: 'Efficiency recommendations in the current terminal' },
+      { value: 'json', label: 'JSON', description: 'Structured advisor payload' },
+    ],
+  );
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection();
+  const output = await ask('Output file (blank keeps stdout)');
+  const noColor = format === 'terminal' ? await askYesNo('Disable ANSI colors', false) : false;
+
+  const args: CliArgs = {
+    format,
+    advisor: true,
+    ...rangeArgs,
+  };
+  if (output) args['output'] = output;
+  if (noColor) args['noColor'] = true;
+  applySelectedProviders(args, providers);
+
+  return createRunCommand(args);
+}
+
 async function buildLivePreset(): Promise<InteractiveCommand> {
   const theme = await promptTheme();
   const rangeArgs = await promptDateWindow();
@@ -1249,31 +1275,31 @@ function createMenuOptions(): MenuOption[] {
     },
     {
       shortcut: '3',
-      title: 'Export SVG',
-      description: 'shareable vector card',
-      preview: 'tokenleak --format svg --output tokenleak.svg',
-      select: async () => buildImagePreset('svg'),
-    },
-    {
-      shortcut: '4',
       title: 'Export PNG',
       description: 'social-ready raster image',
       preview: 'tokenleak --format png --output tokenleak.png --more',
       select: async () => buildImagePreset('png'),
     },
     {
-      shortcut: '5',
+      shortcut: '4',
       title: '\u{1F389} AI Wrapped',
       description: 'your personal AI coding story card',
       preview: 'tokenleak --format wrapped --output tokenleak-wrapped.png --open',
       select: buildWrappedPreset,
     },
     {
-      shortcut: '6',
+      shortcut: '5',
       title: 'Compare Periods',
       description: 'diff current vs previous usage',
       preview: 'tokenleak --compare auto --format json',
       select: buildComparePreset,
+    },
+    {
+      shortcut: '6',
+      title: '\u{1F4A1} Advisor',
+      description: 'model efficiency recommendations',
+      preview: 'tokenleak --advisor',
+      select: buildAdvisorPreset,
     },
     {
       shortcut: '7',
