@@ -836,10 +836,21 @@ function formatFocusDensity(tokensPerHour: number): string {
   return `${Math.round(tokensPerHour).toLocaleString('en-US')}/h`;
 }
 
-function renderFocusReport(report: FocusReport, width: number, _noColor: boolean): string {
+export function renderFocusReport(report: FocusReport, width: number, _noColor: boolean): string {
   const safeWidth = Math.max(72, width || 80);
-  const labelWidth = Math.max(16, safeWidth - 50);
-  const lines = [
+
+  // Fixed column widths (content width, not including borders)
+  const COL_SCORE = 7;
+  const COL_DUR = 8;
+  const COL_DENSITY = 13;
+  const COL_STK = 5;
+  const COL_PROVIDER = 13;
+  const FIXED_TOTAL = COL_SCORE + COL_DUR + COL_DENSITY + COL_STK + COL_PROVIDER;
+  const SEPARATORS = 7; // 7 vertical bars per row (including outer borders)
+  const COL_LABEL = Math.max(10, safeWidth - FIXED_TOTAL - SEPARATORS);
+  const colWidths = [COL_SCORE, COL_DUR, COL_DENSITY, COL_STK, COL_PROVIDER, COL_LABEL];
+
+  const lines: string[] = [
     'Tokenleak Focus',
     report.method,
     '',
@@ -851,18 +862,50 @@ function renderFocusReport(report: FocusReport, width: number, _noColor: boolean
     return lines.join('\n');
   }
 
-  lines.push(
-    '',
-    `${padCell('Score', 6)} ${padCell('Dur', 7)} ${padCell('Density', 12)} ${padCell('Stk', 4)} ${padCell('Provider', 11)} ${padCell('Label', labelWidth)}`,
-    `${'-'.repeat(6)} ${'-'.repeat(7)} ${'-'.repeat(12)} ${'-'.repeat(4)} ${'-'.repeat(11)} ${'-'.repeat(labelWidth)}`,
-  );
-
-  for (const entry of report.entries) {
-    lines.push(
-      `${padCell(entry.score.toFixed(1), 6)} ${padCell(formatFocusDuration(entry.durationMs), 7)} ${padCell(formatFocusDensity(entry.tokensPerHour), 12)} ${padCell(`${entry.streak}d`, 4)} ${padCell(entry.provider, 11)} ${truncateCell(entry.label, labelWidth)}`,
-    );
-    lines.push(`       ${truncateCell(entry.rationale.join(' | '), safeWidth - 7)}`);
+  // Box drawing helpers
+  function hLine(left: string, mid: string, right: string): string {
+    return left + colWidths.map(w => '\u2500'.repeat(w)).join(mid) + right;
   }
+
+  function tableRow(cells: string[]): string {
+    return '\u2502' + cells.map((cell, i) => padCell(cell, colWidths[i]!)).join('\u2502') + '\u2502';
+  }
+
+  lines.push('');
+  // Top border
+  lines.push(hLine('\u250C', '\u252C', '\u2510'));
+  // Header
+  lines.push(tableRow([' Score ', '  Dur  ', '   Density   ', ' Stk ', '  Provider   ', ` ${padCell('Label', COL_LABEL - 1)}`]));
+  // Header separator
+  lines.push(hLine('\u251C', '\u253C', '\u2524'));
+
+  for (let i = 0; i < report.entries.length; i++) {
+    const entry = report.entries[i]!;
+    // Data row
+    const scoreStr = ` ${padCell(entry.score.toFixed(1), COL_SCORE - 2)} `;
+    const durStr = ` ${padCell(formatFocusDuration(entry.durationMs), COL_DUR - 2)} `;
+    const densityStr = ` ${padCell(formatFocusDensity(entry.tokensPerHour), COL_DENSITY - 2)} `;
+    const stkStr = ` ${padCell(`${entry.streak}d`, COL_STK - 2)} `;
+    const provStr = ` ${padCell(truncateCell(entry.provider, COL_PROVIDER - 2), COL_PROVIDER - 2)} `;
+    const labelStr = ` ${truncateCell(entry.label, COL_LABEL - 2)}`;
+
+    lines.push(tableRow([scoreStr, durStr, densityStr, stkStr, provStr, padCell(labelStr, COL_LABEL)]));
+
+    // Rationale row (inside same cell block, no horizontal separator)
+    const rationaleText = truncateCell(entry.rationale.join(' \u00B7 '), COL_LABEL - 2);
+    const emptyCell = (w: number) => ' '.repeat(w);
+    lines.push(
+      '\u2502' + emptyCell(COL_SCORE) + '\u2502' + emptyCell(COL_DUR) + '\u2502' + emptyCell(COL_DENSITY) + '\u2502' + emptyCell(COL_STK) + '\u2502' + emptyCell(COL_PROVIDER) + '\u2502' + padCell(` ${rationaleText}`, COL_LABEL) + '\u2502',
+    );
+
+    // Separator between entries (not after the last one)
+    if (i < report.entries.length - 1) {
+      lines.push(hLine('\u251C', '\u253C', '\u2524'));
+    }
+  }
+
+  // Bottom border
+  lines.push(hLine('\u2514', '\u2534', '\u2518'));
 
   return lines.join('\n');
 }
