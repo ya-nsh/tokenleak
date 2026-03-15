@@ -428,6 +428,72 @@ It then computes:
 - **Daily averages** — mean tokens and cost per day
 
 
+## MCP Server
+
+Tokenleak includes an MCP (Model Context Protocol) server that lets AI coding assistants query your token usage directly. Ask Claude Code, Cursor, or any MCP-compatible client "how much have I spent this week?" and get answers from your local data without leaving the editor.
+
+### Setup
+
+Add the server to your MCP client configuration:
+
+**Claude Code** (`.mcp.json` in your project or `~/.claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "tokenleak": {
+      "command": "bun",
+      "args": ["run", "/path/to/tokenleak/packages/mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+**Cursor** (Settings > MCP Servers):
+
+```json
+{
+  "mcpServers": {
+    "tokenleak": {
+      "command": "bun",
+      "args": ["run", "/path/to/tokenleak/packages/mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+> Replace `/path/to/tokenleak` with your actual clone path. Make sure to run `bun run build` first.
+
+### Available tools
+
+| Tool | Description |
+| --- | --- |
+| `list_providers` | List all registered providers and their availability |
+| `get_usage_summary` | Token/cost summary with streaks, rolling windows, and per-provider breakdown |
+| `get_daily_usage` | Day-by-day usage data for trend analysis (default: 14 days) |
+| `get_cost_breakdown` | Models ranked by cost with token counts and share percentages |
+| `get_streaks_and_habits` | Streaks, day-of-week patterns, peak day, session metrics (default: 90 days) |
+| `compare_periods` | Compare two time periods with deltas for tokens, cost, streaks, and cache rate |
+
+All tools accept optional `days`, `since`, and `until` parameters for date filtering. `get_usage_summary` and `get_daily_usage` also accept a `provider` parameter to filter to a specific provider.
+
+### Available resources
+
+| Resource | Description |
+| --- | --- |
+| `tokenleak://overview` | 30-day usage summary as JSON |
+| `tokenleak://provider/{name}` | Per-provider usage data |
+
+### Running the server directly
+
+```bash
+# Build first
+bun run build
+
+# Start the MCP server (stdio transport)
+bun packages/mcp/dist/index.js
+```
+
 ## Project structure
 
 ```
@@ -437,6 +503,7 @@ tokenleak/
     registry/       Provider parsers and model pricing
     renderers/      JSON, SVG, PNG, and terminal output
     cli/            CLI entrypoint and config handling
+    mcp/            MCP server for AI assistant integration
   scripts/
     build-npm.ts    Bundles CLI for npm publishing
   dist/
