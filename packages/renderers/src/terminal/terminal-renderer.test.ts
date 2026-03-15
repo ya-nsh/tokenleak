@@ -3,12 +3,14 @@ import { aggregate, mergeProviderData } from '@tokenleak/core';
 import type {
   CompareDeltas,
   DailyUsage,
+  MoreStats,
   ProviderData,
 } from '@tokenleak/core';
 import { TerminalRenderer } from './terminal-renderer';
 import {
   createOutput,
   createRenderOptions,
+  createMoreStats,
   createZeroedStats,
 } from '../__test-fixtures__';
 
@@ -81,6 +83,27 @@ function createTerminalOptions(overrides: Parameters<typeof createRenderOptions>
 
 function stripAnsi(text: string): string {
   return text.replace(/\u001B\[[0-9;?]*[A-Za-z]/g, '');
+}
+
+function createEmptyMoreStats(): MoreStats {
+  return {
+    inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
+    monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
+    cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
+    hourOfDay: [],
+    sessionMetrics: {
+      totalSessions: 0,
+      averageTokens: 0,
+      averageCost: 0,
+      averageMessages: 0,
+      averageDurationMs: null,
+      longestSession: null,
+      projectCount: 0,
+      topProject: null,
+      projectBreakdown: [],
+    },
+    compare: null,
+  };
 }
 
 describe('TerminalRenderer', () => {
@@ -161,6 +184,23 @@ describe('TerminalRenderer', () => {
     expect(result).not.toContain('Insights');
   });
 
+  it('appends model efficiency details when --more terminal rendering is enabled', async () => {
+    const output = createTerminalOutput([
+      createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
+    ]);
+    output.more = createMoreStats();
+
+    const result = await renderer.render(output, createTerminalOptions({
+      width: 96,
+      noColor: true,
+      more: true,
+    }));
+
+    expect(result).toContain('Model Efficiency');
+    expect(result).toContain('claude-3-sonnet');
+    expect(result).toContain('Ineligible');
+  });
+
   it('produces no ANSI codes when noColor is true', async () => {
     const output = createTerminalOutput([
       createProvider('claude-code', 'Claude Code', createDailyUsageSequence(5)),
@@ -218,24 +258,7 @@ describe('TerminalRenderer', () => {
       createProvider('claude-code', 'Claude Code', createDailyUsageSequence(6)),
     ]);
     output.more = {
-      ...(output.more ?? {
-        inputOutput: { inputPerOutput: null, outputPerInput: null, outputShare: 0 },
-        monthlyBurn: { projectedTokens: 0, projectedCost: 0, observedDays: 0, calendarDays: 0 },
-        cacheEconomics: { readTokens: 0, writeTokens: 0, readCoverage: 0, reuseRatio: null },
-        hourOfDay: [],
-        sessionMetrics: {
-          totalSessions: 0,
-          averageTokens: 0,
-          averageCost: 0,
-          averageMessages: 0,
-          averageDurationMs: null,
-          longestSession: null,
-          projectCount: 0,
-          topProject: null,
-          projectBreakdown: [],
-        },
-        compare: null,
-      }),
+      ...(output.more ?? createEmptyMoreStats()),
       compare: {
         previousRange: { since: '2026-02-15', until: '2026-02-28' },
         previousStats: aggregate(mergeProviderData([

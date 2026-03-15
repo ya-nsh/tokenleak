@@ -248,6 +248,103 @@ describe('buildMoreStats', () => {
     expect(more.sessionMetrics.topProject).toBeNull();
   });
 
+  it('builds explainable model efficiency rankings and tracks ineligible models', () => {
+    const provider = createProvider({
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'claude-3-sonnet',
+          inputTokens: 800,
+          outputTokens: 900,
+          cacheReadTokens: 300,
+          cacheWriteTokens: 80,
+          totalTokens: 2080,
+          cost: 0.18,
+          sessionId: 'session-efficient-a',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-02T10:00:00.000Z',
+          date: '2026-03-02',
+          model: 'claude-3-sonnet',
+          inputTokens: 700,
+          outputTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: 60,
+          totalTokens: 1760,
+          cost: 0.14,
+          sessionId: 'session-efficient-b',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-03T10:00:00.000Z',
+          date: '2026-03-03',
+          model: 'claude-3-opus',
+          inputTokens: 1200,
+          outputTokens: 400,
+          cacheReadTokens: 50,
+          cacheWriteTokens: 20,
+          totalTokens: 1670,
+          cost: 0.35,
+          sessionId: 'session-costly-a',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-04T10:00:00.000Z',
+          date: '2026-03-04',
+          model: 'claude-3-opus',
+          inputTokens: 1000,
+          outputTokens: 300,
+          cacheReadTokens: 20,
+          cacheWriteTokens: 15,
+          totalTokens: 1335,
+          cost: 0.28,
+          sessionId: 'session-costly-b',
+        },
+        {
+          provider: 'claude-code',
+          timestamp: '2026-03-05T10:00:00.000Z',
+          date: '2026-03-05',
+          model: 'claude-3-haiku',
+          inputTokens: 300,
+          outputTokens: 150,
+          cacheReadTokens: 40,
+          cacheWriteTokens: 10,
+          totalTokens: 500,
+          cost: 0.04,
+          sessionId: 'session-small',
+        },
+      ],
+    });
+
+    const more = buildMoreStats(
+      [provider],
+      { since: '2026-03-01', until: '2026-03-14' },
+    );
+
+    expect(more.modelEfficiency?.method).toContain('Eligible models need at least 2 events');
+    expect(more.modelEfficiency?.rankings).toHaveLength(2);
+    expect(more.modelEfficiency?.rankings[0]?.model).toBe('claude-3-sonnet');
+    expect(more.modelEfficiency?.rankings[0]?.score).toBeCloseTo(1, 5);
+    expect(more.modelEfficiency?.rankings[0]?.scoreBreakdown).toEqual({
+      outputPerDollar: 1,
+      outputInputRatio: 1,
+      cacheCoverage: 1,
+    });
+    expect(more.modelEfficiency?.rankings[1]?.model).toBe('claude-3-opus');
+    expect(more.modelEfficiency?.rankings[1]?.score).toBeCloseTo(0, 5);
+    expect(more.modelEfficiency?.ineligibleModels).toEqual([
+      {
+        model: 'claude-3-haiku',
+        eventCount: 1,
+        totalTokens: 500,
+        reason: 'needs at least 2 events; needs at least 1000 total tokens',
+      },
+    ]);
+  });
+
   it('limits projectBreakdown to 10 entries', () => {
     const events: UsageEvent[] = Array.from({ length: 15 }, (_, i) => ({
       provider: 'claude-code',

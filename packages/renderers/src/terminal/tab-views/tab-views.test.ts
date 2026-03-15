@@ -206,6 +206,9 @@ describe('renderModelView', () => {
     const output = createOutput({ more: createMoreStats() });
     const result = renderModelView(output, 80, true);
     expect(result).toContain('Input / Output');
+    expect(result).toContain('Efficiency Ranking');
+    expect(result).toContain('claude-3-sonnet');
+    expect(result).toContain('Ineligible');
   });
 
   it('produces no ANSI codes with noColor', () => {
