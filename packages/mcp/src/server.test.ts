@@ -268,6 +268,25 @@ describe('MCP Server', () => {
     expect(typeof parsed.deltas.cost).toBe('number');
   });
 
+  it('calls get_efficiency_advice and returns advisor report', async () => {
+    const { client } = await createConnectedClient();
+
+    const result = await client.callTool({
+      name: 'get_efficiency_advice',
+      arguments: { days: 30 },
+    });
+
+    expect(result.isError).toBeUndefined();
+    const content = result.content as Array<{ type: string; text: string }>;
+    const parsed = JSON.parse(content[0]!.text);
+
+    expect(parsed.recommendations).toBeDefined();
+    expect(Array.isArray(parsed.recommendations)).toBe(true);
+    expect(typeof parsed.totalCurrentMonthlyCost).toBe('number');
+    expect(typeof parsed.totalMonthlySavings).toBe('number');
+    expect(typeof parsed.analyzedDays).toBe('number');
+  });
+
   it('handles empty registry gracefully for get_usage_summary', async () => {
     const emptyRegistry = new ProviderRegistry();
     const { client } = await createConnectedClient(emptyRegistry);

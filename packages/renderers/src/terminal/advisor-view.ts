@@ -1,5 +1,5 @@
 import type { AdvisorReport, AdvisorRecommendation } from '@tokenleak/core';
-import { colorize256, bold256, bold, dim } from './colors';
+import { bold256, bold, dim } from './colors';
 import { stripAnsi } from './layout';
 
 const COLOR_TITLE = 68;    // steel blue / cyan

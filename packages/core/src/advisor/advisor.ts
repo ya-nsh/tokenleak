@@ -135,6 +135,31 @@ function detectCacheOptimizations(
   const cacheHitRate = output.aggregated.cacheHitRate;
   const cacheEconomics = output.more?.cacheEconomics;
 
+  // Check for low reuse ratio independently of cache hit rate
+  if (
+    cacheEconomics &&
+    cacheEconomics.reuseRatio !== null &&
+    cacheEconomics.reuseRatio < CACHE_REUSE_LOW_THRESHOLD
+  ) {
+    recommendations.push({
+      type: 'cache-optimization',
+      title: 'Reduce wasted cache writes',
+      description:
+        `Your cache reuse ratio is ${cacheEconomics.reuseRatio.toFixed(1)}x ` +
+        `(reads/writes). A ratio below ${CACHE_REUSE_LOW_THRESHOLD}x means cache ` +
+        `writes are not being effectively reused.`,
+      currentCost: 0,
+      projectedCost: 0,
+      monthlySavings: 0,
+      confidence: 'low',
+      details: {
+        reuseRatio: cacheEconomics.reuseRatio,
+        readTokens: cacheEconomics.readTokens,
+        writeTokens: cacheEconomics.writeTokens,
+      },
+    });
+  }
+
   if (cacheHitRate >= CACHE_HIT_LOW_THRESHOLD) return recommendations;
 
   // Estimate savings if cache hit rate improved to target
@@ -203,37 +228,11 @@ function detectCacheOptimizations(
     },
   });
 
-  // Additional recommendation for low reuse ratio
-  if (
-    cacheEconomics &&
-    cacheEconomics.reuseRatio !== null &&
-    cacheEconomics.reuseRatio < CACHE_REUSE_LOW_THRESHOLD
-  ) {
-    recommendations.push({
-      type: 'cache-optimization',
-      title: 'Reduce wasted cache writes',
-      description:
-        `Your cache reuse ratio is ${cacheEconomics.reuseRatio.toFixed(1)}x ` +
-        `(reads/writes). A ratio below ${CACHE_REUSE_LOW_THRESHOLD}x means cache ` +
-        `writes are not being effectively reused.`,
-      currentCost: 0,
-      projectedCost: 0,
-      monthlySavings: 0,
-      confidence: 'low',
-      details: {
-        reuseRatio: cacheEconomics.reuseRatio,
-        readTokens: cacheEconomics.readTokens,
-        writeTokens: cacheEconomics.writeTokens,
-      },
-    });
-  }
-
   return recommendations;
 }
 
 function detectUsagePatterns(
   output: TokenleakOutput,
-  analyzedDays: number,
 ): AdvisorRecommendation[] {
   const recommendations: AdvisorRecommendation[] = [];
 
@@ -373,7 +372,7 @@ export function analyzeEfficiency(
 
   const downgradeRecs = detectModelDowngrades(modelStats, modelPricing, analyzedDays);
   const cacheRecs = detectCacheOptimizations(output, modelPricing, analyzedDays);
-  const patternRecs = detectUsagePatterns(output, analyzedDays);
+  const patternRecs = detectUsagePatterns(output);
 
   const recommendations = [...downgradeRecs, ...cacheRecs, ...patternRecs];
 

@@ -306,9 +306,8 @@ describe('analyzeEfficiency', () => {
     const highRecs = highReport.recommendations.filter(
       (r) => r.type === 'model-downgrade' && r.details['model'] === 'claude-opus-4',
     );
-    if (highRecs.length > 0) {
-      expect(highRecs[0]!.confidence).toBe('high');
-    }
+    expect(highRecs.length).toBeGreaterThan(0);
+    expect(highRecs[0]!.confidence).toBe('high');
 
     // 10 events => medium
     const medEvents = makeEvents(10);
@@ -326,9 +325,8 @@ describe('analyzeEfficiency', () => {
     const medRecs = medReport.recommendations.filter(
       (r) => r.type === 'model-downgrade' && r.details['model'] === 'claude-opus-4',
     );
-    if (medRecs.length > 0) {
-      expect(medRecs[0]!.confidence).toBe('medium');
-    }
+    expect(medRecs.length).toBeGreaterThan(0);
+    expect(medRecs[0]!.confidence).toBe('medium');
 
     // 3 events => low
     const lowEvents = makeEvents(3);
@@ -346,9 +344,8 @@ describe('analyzeEfficiency', () => {
     const lowRecs = lowReport.recommendations.filter(
       (r) => r.type === 'model-downgrade' && r.details['model'] === 'claude-opus-4',
     );
-    if (lowRecs.length > 0) {
-      expect(lowRecs[0]!.confidence).toBe('low');
-    }
+    expect(lowRecs.length).toBeGreaterThan(0);
+    expect(lowRecs[0]!.confidence).toBe('low');
   });
 
   it('calculates monthly savings correctly against known pricing', () => {

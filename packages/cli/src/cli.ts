@@ -1014,6 +1014,12 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Advisor mode — analyze efficiency and render report
   if (config.advisor) {
+    if (config.format !== 'terminal' && config.format !== 'json') {
+      throw new TokenleakError(
+        `--advisor only supports terminal and json formats, got "${config.format}".`,
+      );
+    }
+
     const advisorReport = analyzeEfficiency(output, MODEL_PRICING);
 
     if (config.format === 'json') {

@@ -27,8 +27,25 @@ export const DOWNGRADE_PATHS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Normalize a model name by lower-casing, stripping provider prefixes,
+ * and removing dated suffixes like -YYYYMMDD or -YYYY-MM-DD.
+ */
+function normalizeModelName(model: string): string {
+  let normalized = model.toLowerCase();
+  // Strip provider prefix (e.g., "anthropic/claude-opus-4" → "claude-opus-4")
+  const slashIndex = normalized.lastIndexOf('/');
+  if (slashIndex >= 0) {
+    normalized = normalized.slice(slashIndex + 1);
+  }
+  // Strip dated suffixes: -YYYYMMDD or -YYYY-MM-DD
+  normalized = normalized.replace(/-\d{4}-?\d{2}-?\d{2}$/, '');
+  return normalized;
+}
+
+/**
  * Return the cheaper alternative for a model, or null if none exists.
  */
 export function getDowngradePath(model: string): string | null {
-  return DOWNGRADE_PATHS[model] ?? null;
+  const normalized = normalizeModelName(model);
+  return DOWNGRADE_PATHS[normalized] ?? null;
 }
