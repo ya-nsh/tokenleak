@@ -1,5 +1,6 @@
 import type { RenderOptions, TokenleakOutput } from '@tokenleak/core';
 import { colorize } from './ansi';
+import { bold, colorize256, dim, SEMANTIC } from './colors';
 import type {
   DashboardModel,
   MetricEntry,
@@ -16,15 +17,15 @@ import { padVisible, renderColumns, truncateVisible, visibleLength } from './lay
 
 const BOX_H = '\u2500';
 const BOX_V = '\u2502';
-const BOX_TL = '\u250C';
-const BOX_TR = '\u2510';
-const BOX_BL = '\u2514';
-const BOX_BR = '\u2518';
+const BOX_TL = '\u256D';
+const BOX_TR = '\u256E';
+const BOX_BL = '\u2570';
+const BOX_BR = '\u256F';
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
 
-function divider(width: number): string {
-  return BOX_H.repeat(width);
+function divider(width: number, noColor: boolean): string {
+  return dim(BOX_H.repeat(width), noColor);
 }
 
 function boxedHeader(title: string, width: number, noColor: boolean): string {
@@ -33,7 +34,7 @@ function boxedHeader(title: string, width: number, noColor: boolean): string {
   const remaining = Math.max(0, inner - padded.length);
   const left = Math.floor(remaining / 2);
   const right = remaining - left;
-  const titleLine = `${BOX_V}${' '.repeat(left)}${colorize(padded, 'bold', noColor)}${' '.repeat(right)}${BOX_V}`;
+  const titleLine = `${BOX_V}${' '.repeat(left)}${bold(padded, noColor)}${' '.repeat(right)}${BOX_V}`;
 
   return [
     `${BOX_TL}${BOX_H.repeat(inner)}${BOX_TR}`,
@@ -43,27 +44,27 @@ function boxedHeader(title: string, width: number, noColor: boolean): string {
 }
 
 function renderSectionTitle(title: string, noColor: boolean): string {
-  return colorize(`  ${title}`, 'bold', noColor);
+  return `  ${colorize256('▸', SEMANTIC.ACCENT, noColor)} ${bold(title, noColor)}`;
 }
 
 function renderSummary(parts: string[], width: number, noColor: boolean): string[] {
   if (parts.length === 0) return [];
 
-  const colored = parts.map((part, index) => colorize(part, index % 2 === 0 ? 'cyan' : 'green', noColor));
-  const line = colored.join(colorize('  |  ', 'dim', noColor));
+  const colored = parts.map((part, index) => colorize256(part, index % 2 === 0 ? SEMANTIC.INPUT : SEMANTIC.OUTPUT, noColor));
+  const line = colored.join(dim('  ·  ', noColor));
   return [truncateVisible(`  ${line}`, width)];
 }
 
 function renderTrend(trend: string, width: number, noColor: boolean): string[] {
   if (!trend) return [];
   return [
-    truncateVisible(`  ${colorize('Recent Trend', 'bold', noColor)}  ${colorize(trend, 'green', noColor)}`, width),
+    truncateVisible(`  ${bold('Recent Trend', noColor)}  ${colorize256(trend, SEMANTIC.OUTPUT, noColor)}`, width),
   ];
 }
 
 function renderMetricLine(entry: MetricEntry, width: number, noColor: boolean): string {
   const label = entry.label;
-  const value = colorize(entry.value, 'cyan', noColor);
+  const value = colorize256(entry.value, SEMANTIC.INPUT, noColor);
   const gutter = 2;
   const safeWidth = Math.max(12, width);
   const valueWidth = Math.min(Math.max(6, visibleLength(entry.value)), Math.max(6, Math.floor(safeWidth * 0.45)));
@@ -101,9 +102,9 @@ function renderPatternList(
 
   for (const entry of entries) {
     const fillLength = Math.max(1, Math.round(entry.share * barWidth));
-    const fill = colorize(BAR_CHAR.repeat(fillLength), 'green', noColor);
+    const fill = colorize256(BAR_CHAR.repeat(fillLength), SEMANTIC.OUTPUT, noColor);
     const track = TRACK_CHAR.repeat(Math.max(0, barWidth - fillLength));
-    const line = `  ${colorize(truncateVisible(entry.label, nameWidth).padEnd(nameWidth), 'yellow', noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
+    const line = `  ${colorize256(truncateVisible(entry.label, nameWidth).padEnd(nameWidth), SEMANTIC.ACCENT, noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
     lines.push(truncateVisible(line, width));
   }
 
@@ -125,7 +126,7 @@ function renderInsights(insights: string[], width: number, noColor: boolean): st
   if (insights.length === 0) return [];
   return [
     renderSectionTitle('Insights', noColor),
-    ...insights.map((insight) => truncateVisible(`  ${colorize('*', 'green', noColor)} ${insight}`, width)),
+    ...insights.map((insight) => truncateVisible(`  ${colorize256('▸', SEMANTIC.OUTPUT, noColor)} ${insight}`, width)),
   ];
 }
 
@@ -197,7 +198,7 @@ export function renderDashboardModel(model: DashboardModel, options: RenderOptio
 
   for (const provider of model.activeProviders) {
     const providerSection = renderProviderSection(provider, width, noColor, options.showInsights);
-    sections.push('', divider(width), '', providerSection);
+    sections.push('', divider(width, noColor), '', providerSection);
   }
 
   if (model.inactiveProviders.length > 0) {

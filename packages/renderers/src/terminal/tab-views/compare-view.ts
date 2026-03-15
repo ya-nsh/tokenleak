@@ -17,9 +17,9 @@ function formatPercent(rate: number): string {
 }
 
 function colorDelta(text: string, value: number, noColor: boolean): string {
-  if (value > 0) return colorize256(text, SEMANTIC.OUTPUT, noColor);
-  if (value < 0) return colorize256(text, SEMANTIC.NEGATIVE, noColor);
-  return dim(text, noColor);
+  if (value > 0) return colorize256(`↑ ${text}`, SEMANTIC.OUTPUT, noColor);
+  if (value < 0) return colorize256(`↓ ${text}`, SEMANTIC.NEGATIVE, noColor);
+  return dim(`· ${text}`, noColor);
 }
 
 function formatSignedNumber(value: number, formatter: (value: number) => string): string {
@@ -44,7 +44,7 @@ function renderDeltaRow(
   const labelWidth = 18;
   const currentWidth = 11;
   const previousWidth = 11;
-  const deltaWidth = 11;
+  const deltaWidth = 13;
 
   return truncateVisible(
     `  ${dim(label.padEnd(labelWidth), noColor)} ${bold(current.padStart(currentWidth), noColor)} ${bold(previous.padStart(previousWidth), noColor)} ${colorDelta(delta.padStart(deltaWidth), deltaValue, noColor)}`,

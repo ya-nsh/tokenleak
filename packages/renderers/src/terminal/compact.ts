@@ -1,14 +1,15 @@
 import type { RenderOptions } from '@tokenleak/core';
 import { colorize } from './ansi';
+import { bold, colorize256, SEMANTIC } from './colors';
 import type { DashboardModel } from './dashboard-model';
 import { renderColumns, truncateVisible } from './layout';
 
 const BOX_H = '\u2500';
 const BOX_V = '\u2502';
-const BOX_TL = '\u250C';
-const BOX_TR = '\u2510';
-const BOX_BL = '\u2514';
-const BOX_BR = '\u2518';
+const BOX_TL = '\u256D';
+const BOX_TR = '\u256E';
+const BOX_BL = '\u2570';
+const BOX_BR = '\u256F';
 
 function boxedHeader(title: string, width: number, noColor: boolean): string {
   const inner = Math.max(1, width - 2);
@@ -16,7 +17,7 @@ function boxedHeader(title: string, width: number, noColor: boolean): string {
   const remaining = Math.max(0, inner - padded.length);
   const left = Math.floor(remaining / 2);
   const right = remaining - left;
-  const titleLine = `${BOX_V}${' '.repeat(left)}${colorize(padded, 'bold', noColor)}${' '.repeat(right)}${BOX_V}`;
+  const titleLine = `${BOX_V}${' '.repeat(left)}${bold(padded, noColor)}${' '.repeat(right)}${BOX_V}`;
 
   return [
     `${BOX_TL}${BOX_H.repeat(inner)}${BOX_TR}`,
@@ -26,8 +27,8 @@ function boxedHeader(title: string, width: number, noColor: boolean): string {
 }
 
 function renderSummaryParts(parts: string[], width: number, noColor: boolean): string {
-  const left = parts.filter((_, index) => index % 2 === 0).map((part) => colorize(part, 'cyan', noColor));
-  const right = parts.filter((_, index) => index % 2 === 1).map((part) => colorize(part, 'green', noColor));
+  const left = parts.filter((_, index) => index % 2 === 0).map((part) => colorize256(part, SEMANTIC.INPUT, noColor));
+  const right = parts.filter((_, index) => index % 2 === 1).map((part) => colorize256(part, SEMANTIC.OUTPUT, noColor));
   return renderColumns(left, right, Math.max(24, width - 2), 0.5, 2)
     .map((line) => `  ${line}`)
     .join('\n');
@@ -57,7 +58,7 @@ export function renderCompactDashboard(model: DashboardModel, options: RenderOpt
   }
 
   if (model.activeProviders.length > 0) {
-    lines.push(colorize('  Providers', 'bold', noColor));
+    lines.push(`  ${bold('Providers', noColor)}`);
     for (const provider of model.activeProviders.slice(0, 4)) {
       const tokensMetric = provider.metrics.find((entry) => entry.label === 'Total Tokens');
       const summary = `${provider.provider.displayName} ${tokensMetric?.value ?? ''} ${provider.lastActiveDate ? `| ${provider.lastActiveDate}` : ''}`.trim();
