@@ -643,7 +643,7 @@ describe('CLI invocation', () => {
     const exitCode = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('1.0.2');
+    expect(stdout).toContain('1.2.0');
     expect(stdout).toContain('schema');
   });
 
