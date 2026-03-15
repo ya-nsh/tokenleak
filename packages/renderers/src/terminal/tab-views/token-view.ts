@@ -1,5 +1,5 @@
 import type { TokenleakOutput } from '@tokenleak/core';
-import { bold, bold256, dim, colorize256 } from '../colors';
+import { bold, bold256, dim, colorize256, SEMANTIC } from '../colors';
 import { renderTerminalHeatmap } from '../heatmap';
 import { truncateVisible } from '../layout';
 
@@ -21,9 +21,9 @@ export function renderTokenView(output: TokenleakOutput, width: number, noColor:
 
   // Summary
   const parts = [
-    bold256(formatTokens(stats.totalTokens), 33, noColor) + ' total',
-    bold256(formatCost(stats.totalCost), 40, noColor) + ' cost',
-    bold256(`${stats.activeDays}`, 208, noColor) + ' active days',
+    bold256(formatTokens(stats.totalTokens), SEMANTIC.INPUT, noColor) + ' total',
+    bold256(formatCost(stats.totalCost), SEMANTIC.OUTPUT, noColor) + ' cost',
+    bold256(`${stats.activeDays}`, SEMANTIC.ACCENT, noColor) + ' active days',
   ];
   lines.push(truncateVisible(`  ${parts.join(dim('  ·  ', noColor))}`, width));
   lines.push('');
@@ -43,8 +43,8 @@ export function renderTokenView(output: TokenleakOutput, width: number, noColor:
     const inputLen = Math.round(inputShare * barWidth);
     const outputLen = barWidth - inputLen;
     const bar =
-      colorize256(BAR_CHAR.repeat(inputLen), 33, noColor) +
-      colorize256(BAR_CHAR.repeat(outputLen), 40, noColor);
+      colorize256(BAR_CHAR.repeat(inputLen), SEMANTIC.INPUT, noColor) +
+      colorize256(BAR_CHAR.repeat(outputLen), SEMANTIC.OUTPUT, noColor);
     lines.push(truncateVisible(
       `  ${bar}  ${dim(`in ${(inputShare * 100).toFixed(0)}%`, noColor)} ${dim(`out ${(io.outputShare * 100).toFixed(0)}%`, noColor)}`,
       width,

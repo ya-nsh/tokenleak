@@ -1,5 +1,5 @@
 import type { CompareDeltas, TokenleakOutput } from '@tokenleak/core';
-import { bold, colorize256, dim } from '../colors';
+import { bold, colorize256, dim, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 function formatTokens(n: number): string {
@@ -17,8 +17,8 @@ function formatPercent(rate: number): string {
 }
 
 function colorDelta(text: string, value: number, noColor: boolean): string {
-  if (value > 0) return colorize256(text, 40, noColor);
-  if (value < 0) return colorize256(text, 196, noColor);
+  if (value > 0) return colorize256(text, SEMANTIC.OUTPUT, noColor);
+  if (value < 0) return colorize256(text, SEMANTIC.NEGATIVE, noColor);
   return dim(text, noColor);
 }
 
@@ -63,7 +63,7 @@ function renderModelShift(
   const delta = formatSignedPercentPoints(deltaShare);
   const shareSummary = `now ${(currentShare * 100).toFixed(0)}% prev ${(previousShare * 100).toFixed(0)}%`;
   return truncateVisible(
-    `  ${colorize256(label, 33, noColor)}  ${colorDelta(delta, deltaShare, noColor)}  ${dim(shareSummary, noColor)}`,
+    `  ${colorize256(label, SEMANTIC.INPUT, noColor)}  ${colorDelta(delta, deltaShare, noColor)}  ${dim(shareSummary, noColor)}`,
     width,
   );
 }
