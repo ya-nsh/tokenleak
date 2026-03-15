@@ -260,7 +260,7 @@ function buildHourOfDay(events: UsageEvent[]): MoreStats['hourOfDay'] {
     if (Number.isNaN(date.getTime())) {
       continue;
     }
-    const bucket = buckets[date.getUTCHours()];
+    const bucket = buckets[date.getHours()];
     if (!bucket) {
       continue;
     }

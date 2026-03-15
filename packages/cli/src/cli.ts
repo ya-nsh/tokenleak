@@ -28,7 +28,7 @@ import {
   MODEL_PRICING,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -174,6 +174,7 @@ function buildHelpText(): string {
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
     '  -L, --live-server       Start the interactive local dashboard',
+    '      --wrapped-live      Start the AI Wrapped presentation in a browser',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
     '      --help              Show this help',
@@ -190,6 +191,7 @@ function buildHelpText(): string {
     '  tokenleak --list-providers',
     '  tokenleak --compare auto --format terminal',
     '  tokenleak --live-server --theme light',
+    '  tokenleak --wrapped-live --days 365',
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
@@ -245,6 +247,7 @@ function normalizeCliArg(arg: string): string {
     '--list-providers': '--listProviders',
     '--open-code': '--openCode',
     '--live-server': '--liveServer',
+    '--wrapped-live': '--wrappedLive',
     '--no-color': '--noColor',
     '--no-insights': '--noInsights',
   };
@@ -277,6 +280,10 @@ export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: bo
 
   if (cliArgs['liveServer']) {
     return 'Live dashboard stopped.';
+  }
+
+  if (cliArgs['wrappedLive']) {
+    return 'Wrapped live presentation stopped.';
   }
 
   if (cliArgs['compare']) {
@@ -529,6 +536,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   open: boolean;
   upload?: string;
   liveServer: boolean;
+  wrappedLive: boolean;
   advisor: boolean;
 } {
   const fileConfig = loadConfig();
@@ -556,6 +564,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: boolean;
     open: boolean;
     liveServer: boolean;
+    wrappedLive: boolean;
     advisor: boolean;
   } = {
     format: 'terminal',
@@ -575,6 +584,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: false,
     open: false,
     liveServer: false,
+    wrappedLive: false,
     advisor: false,
   };
 
@@ -674,6 +684,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['liveServer'] !== undefined) {
     result.liveServer = cliArgs['liveServer'] as boolean;
+  }
+  if (cliArgs['wrappedLive'] !== undefined) {
+    result.wrappedLive = cliArgs['wrappedLive'] as boolean;
   }
   if (cliArgs['advisor'] !== undefined) {
     result.advisor = cliArgs['advisor'] as boolean;
@@ -1077,10 +1090,16 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     days: config.days,
   });
 
+  if (config.wrappedLive) {
+    process.stderr.write('Detecting available providers...\n');
+  }
   const available = await selectAvailableProviders(config);
 
   if (available.length === 0) {
     throw new TokenleakError('No provider data found');
+  }
+  if (config.wrappedLive) {
+    process.stderr.write(`Found ${available.length} provider${available.length > 1 ? 's' : ''}: ${available.map(p => p.name).join(', ')}\n`);
   }
 
   // Handle --compare mode.
@@ -1145,14 +1164,28 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  if (config.wrappedLive) {
+    process.stderr.write(`Loading usage data (${dateRange.since} to ${dateRange.until})...\n`);
+  }
   const { providerDataList } = await loadProviderDataForRange(config, dateRange, available);
+
+  if (config.wrappedLive) {
+    const totalEvents = providerDataList.reduce((s, p) => s + (p.events?.length ?? 0), 0);
+    const totalDays = providerDataList.reduce((s, p) => s + p.daily.length, 0);
+    process.stderr.write(`Loaded ${totalDays} day-records, ${totalEvents} events\n`);
+    process.stderr.write('Aggregating stats...\n');
+  }
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);
   const stats = aggregate(mergedDaily, dateRange.until);
 
   // Force --more when --advisor is used (needs event data)
-  const needsMore = config.more || config.format === 'wrapped' || config.advisor;
+  const needsMore = config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
+
+  if (config.wrappedLive && needsMore) {
+    process.stderr.write('Computing extended analytics (hourOfDay, sessions, cache, projections)...\n');
+  }
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -1256,6 +1289,37 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
         resolve();
       });
     });
+    return;
+  }
+
+  // Wrapped live server mode
+  if (config.wrappedLive) {
+    const ignoredWrappedFlags: string[] = [];
+    if (config.output) ignoredWrappedFlags.push('--output');
+    if (config.clipboard) ignoredWrappedFlags.push('--clipboard');
+    if (config.open) ignoredWrappedFlags.push('--open');
+    if (config.upload) ignoredWrappedFlags.push('--upload');
+    if (ignoredWrappedFlags.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignoredWrappedFlags.join(', ')} ignored in --wrapped-live mode.\n`,
+      );
+    }
+
+    process.stderr.write('Generating wrapped presentation...\n');
+    const { stop } = await startWrappedLiveServer(output);
+    process.stderr.write('Press Ctrl+C to stop the server.\n');
+    await new Promise<void>((resolve) => {
+      process.on('SIGINT', () => {
+        process.stderr.write('\nShutting down wrapped live server...\n');
+        stop();
+        resolve();
+      });
+      process.on('SIGTERM', () => {
+        stop();
+        resolve();
+      });
+    });
+    process.exit(0);
     return;
   }
 
@@ -1593,6 +1657,11 @@ const main = defineCommand({
       description: 'Start a local server with an interactive dashboard',
       default: false,
     },
+    wrappedLive: {
+      type: 'boolean',
+      description: 'Start the AI Wrapped presentation in a browser',
+      default: false,
+    },
     advisor: {
       type: 'boolean',
       description: 'Analyze usage and suggest cost-saving model switches',
@@ -1625,6 +1694,7 @@ const main = defineCommand({
       if (args.open) cliArgs['open'] = true;
       if (args.upload !== undefined) cliArgs['upload'] = args.upload;
       if (args.liveServer) cliArgs['liveServer'] = true;
+      if (args.wrappedLive) cliArgs['wrappedLive'] = true;
       if (args.advisor) cliArgs['advisor'] = true;
 
       await run(cliArgs);

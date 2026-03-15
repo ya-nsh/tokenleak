@@ -28,6 +28,7 @@ export const INTERACTIVE_FLAG_LINES = [
   '    --open              open generated file',
   '    --upload <target>   gist',
   '-L, --live-server       local interactive dashboard',
+  '    --wrapped-live      AI Wrapped presentation in browser',
   '    --no-color          disable ANSI colors',
   '    --no-insights       hide terminal insights',
   '    --help              print help',
@@ -181,6 +182,15 @@ function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | '
       title: 'Live Dashboard',
       loadingTitle: 'Starting live dashboard',
       loadingDetail: 'Launching the local server. Press Ctrl-C in the live view to stop it, then you will return here.',
+      executionMode: 'inherit',
+    };
+  }
+
+  if (args['wrappedLive']) {
+    return {
+      title: 'Wrapped Live',
+      loadingTitle: 'Starting wrapped live presentation',
+      loadingDetail: 'Loading usage data and launching the local server. Press Ctrl-C to stop it, then you will return here.',
       executionMode: 'inherit',
     };
   }
@@ -1196,6 +1206,18 @@ async function buildLivePreset(): Promise<InteractiveCommand> {
   return createRunCommand(args);
 }
 
+async function buildWrappedLivePreset(): Promise<InteractiveCommand> {
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection('Provider Filter');
+
+  const args: CliArgs = {
+    wrappedLive: true,
+    ...rangeArgs,
+  };
+  applySelectedProviders(args, providers);
+  return createRunCommand(args);
+}
+
 async function buildExportPreset(): Promise<InteractiveCommand> {
   const format = await promptSingleChoice(
     'Export Format',
@@ -1315,41 +1337,48 @@ export function createMenuOptions(): MenuOption[] {
     },
     {
       shortcut: '4',
+      title: '\u{2728} Wrapped Live',
+      description: 'interactive AI Wrapped in a browser',
+      preview: 'tokenleak --wrapped-live --days 365',
+      select: buildWrappedLivePreset,
+    },
+    {
+      shortcut: '5',
       title: 'Compare Periods',
       description: 'diff current vs previous usage',
       preview: 'tokenleak --compare auto --format json',
       select: buildComparePreset,
     },
     {
-      shortcut: '5',
+      shortcut: '6',
       title: '\u{1F4A1} Advisor',
       description: 'model efficiency recommendations',
       preview: 'tokenleak --advisor',
       select: buildAdvisorPreset,
     },
     {
-      shortcut: '6',
+      shortcut: '7',
       title: 'Start Live Server',
       description: 'browser dashboard on localhost',
       preview: 'tokenleak --live-server --theme dark',
       select: buildLivePreset,
     },
     {
-      shortcut: '7',
+      shortcut: '8',
       title: 'Explain Day',
       description: 'diagnose one day of usage',
       preview: 'tokenleak explain 2026-03-10',
       select: buildExplainPreset,
     },
     {
-      shortcut: '8',
+      shortcut: '9',
       title: 'Focus Sessions',
       description: 'rank deep-work sessions',
       preview: 'tokenleak focus --days 30',
       select: buildFocusPreset,
     },
     {
-      shortcut: '9',
+      shortcut: '0',
       title: 'Build Custom Command',
       description: 'configure flags interactively',
       preview: 'tokenleak --format terminal --days 90',
