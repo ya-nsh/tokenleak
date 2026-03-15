@@ -2,7 +2,6 @@ import type { TokenleakOutput } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from './utils';
 import { getTheme } from './theme';
 import type { SvgTheme } from './theme';
-import { userInfo } from 'node:os';
 
 // ── Constants ────────────────────────────────────────────────────────
 const WIDTH = 1200;
@@ -457,14 +456,7 @@ function renderTitleSlide(
     weight: 500,
   }));
 
-  // Username
-  let username = 'developer';
-  try {
-    username = userInfo().username || 'developer';
-  } catch {
-    // fallback
-  }
-  parts.push(svgText(INNER_PAD, 290, `@${username}`, {
+  parts.push(svgText(INNER_PAD, 290, 'tokenleak', {
     fill: theme.heroAccent,
     size: 16,
     weight: 600,
