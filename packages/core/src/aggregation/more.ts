@@ -8,6 +8,15 @@ import type {
   ModelMixShiftEntry,
   SessionSummary,
 } from '../types';
+import { normalizeScores } from './analytics';
+
+const MIN_MODEL_EFFICIENCY_EVENTS = 2;
+const MIN_MODEL_EFFICIENCY_TOTAL_TOKENS = 1_000;
+
+const MODEL_EFFICIENCY_METHOD =
+  `Eligible models need at least ${MIN_MODEL_EFFICIENCY_EVENTS} events, ` +
+  `${MIN_MODEL_EFFICIENCY_TOTAL_TOKENS} total tokens, non-zero input/output tokens, and positive cost. ` +
+  'Score is the mean of normalized output per dollar, output/input ratio, and cache coverage.';
 
 function daysInMonth(dateString: string): number {
   const [year, month] = dateString.split('-').map(Number);
@@ -244,6 +253,155 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
   };
 }
 
+function buildModelEfficiency(events: UsageEvent[]): NonNullable<MoreStats['modelEfficiency']> {
+  const byModel = new Map<string, {
+    model: string;
+    eventCount: number;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    cost: number;
+  }>();
+
+  for (const event of events) {
+    let model = byModel.get(event.model);
+    if (!model) {
+      model = {
+        model: event.model,
+        eventCount: 0,
+        totalTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cost: 0,
+      };
+      byModel.set(event.model, model);
+    }
+
+    model.eventCount += 1;
+    model.totalTokens += event.totalTokens;
+    model.inputTokens += event.inputTokens;
+    model.outputTokens += event.outputTokens;
+    model.cacheReadTokens += event.cacheReadTokens;
+    model.cacheWriteTokens += event.cacheWriteTokens;
+    model.cost += event.cost;
+  }
+
+  const eligible = [...byModel.values()];
+  const rankingsBase: Array<{
+    model: string;
+    eventCount: number;
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    cost: number;
+    outputInputRatio: number;
+    outputPerDollar: number;
+    cacheCoverage: number;
+    costPer1MTotal: number;
+  }> = [];
+  const ineligibleModels: NonNullable<MoreStats['modelEfficiency']>['ineligibleModels'] = [];
+
+  for (const model of eligible) {
+    const reasons: string[] = [];
+
+    if (model.eventCount < MIN_MODEL_EFFICIENCY_EVENTS) {
+      reasons.push(`needs at least ${MIN_MODEL_EFFICIENCY_EVENTS} events`);
+    }
+    if (model.totalTokens < MIN_MODEL_EFFICIENCY_TOTAL_TOKENS) {
+      reasons.push(`needs at least ${MIN_MODEL_EFFICIENCY_TOTAL_TOKENS} total tokens`);
+    }
+    if (model.inputTokens <= 0) {
+      reasons.push('needs input tokens');
+    }
+    if (model.outputTokens <= 0) {
+      reasons.push('needs output tokens');
+    }
+    if (model.cost <= 0) {
+      reasons.push('needs positive cost');
+    }
+
+    if (reasons.length > 0) {
+      ineligibleModels.push({
+        model: model.model,
+        eventCount: model.eventCount,
+        totalTokens: model.totalTokens,
+        reason: reasons.join('; '),
+      });
+      continue;
+    }
+
+    rankingsBase.push({
+      model: model.model,
+      eventCount: model.eventCount,
+      totalTokens: model.totalTokens,
+      inputTokens: model.inputTokens,
+      outputTokens: model.outputTokens,
+      cacheReadTokens: model.cacheReadTokens,
+      cacheWriteTokens: model.cacheWriteTokens,
+      cost: model.cost,
+      outputInputRatio: model.outputTokens / model.inputTokens,
+      outputPerDollar: model.outputTokens / model.cost,
+      cacheCoverage:
+        model.inputTokens + model.cacheReadTokens > 0
+          ? model.cacheReadTokens / (model.inputTokens + model.cacheReadTokens)
+          : 0,
+      costPer1MTotal: model.totalTokens > 0 ? (model.cost / model.totalTokens) * 1_000_000 : 0,
+    });
+  }
+
+  const outputPerDollarScores = normalizeScores(rankingsBase.map((entry) => entry.outputPerDollar));
+  const outputInputScores = normalizeScores(rankingsBase.map((entry) => entry.outputInputRatio));
+  const cacheCoverageScores = normalizeScores(rankingsBase.map((entry) => entry.cacheCoverage));
+
+  const rankings = rankingsBase
+    .map((entry, index) => {
+      const scoreBreakdown = {
+        outputPerDollar: outputPerDollarScores[index] ?? 0,
+        outputInputRatio: outputInputScores[index] ?? 0,
+        cacheCoverage: cacheCoverageScores[index] ?? 0,
+      };
+      const score =
+        (scoreBreakdown.outputPerDollar +
+          scoreBreakdown.outputInputRatio +
+          scoreBreakdown.cacheCoverage) /
+        3;
+
+      return {
+        ...entry,
+        score,
+        scoreBreakdown,
+      };
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      if (b.outputPerDollar !== a.outputPerDollar) {
+        return b.outputPerDollar - a.outputPerDollar;
+      }
+      return b.totalTokens - a.totalTokens;
+    });
+
+  ineligibleModels.sort((a, b) => {
+    if (b.totalTokens !== a.totalTokens) {
+      return b.totalTokens - a.totalTokens;
+    }
+    return b.eventCount - a.eventCount;
+  });
+
+  return {
+    method: MODEL_EFFICIENCY_METHOD,
+    rankings,
+    ineligibleModels,
+  };
+}
+
 export function computeModelMixShift(
   currentProviders: ProviderData[],
   previousProviders: ProviderData[],
@@ -316,6 +474,7 @@ export function buildMoreStats(
     cacheEconomics: buildCacheEconomics(providers),
     hourOfDay: buildHourOfDay(events),
     sessionMetrics: buildSessionMetrics(events),
+    modelEfficiency: buildModelEfficiency(events),
     compare: compare
       ? {
           previousRange: compare.previousRange,

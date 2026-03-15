@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from '@tokenleak/core';
 import { JsonRenderer } from './json-renderer';
 import {
   createOutput,
+  createMoreStats,
   createRenderOptions,
   createZeroedStats,
 } from '../__test-fixtures__';
@@ -115,5 +116,17 @@ describe('JsonRenderer', () => {
     expect(parsed.aggregated.totalCost).toBe(2.5);
     expect(parsed.aggregated.cacheHitRate).toBe(0.42);
     expect(parsed.aggregated.peakDay).toEqual({ date: '2026-03-01', tokens: 8000 });
+  });
+
+  it('serializes model efficiency details inside more stats', async () => {
+    const output = createMinimalTokenleakOutput({
+      more: createMoreStats(),
+    });
+    const result = await renderer.render(output, options);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.more.modelEfficiency.method).toContain('Eligible models');
+    expect(parsed.more.modelEfficiency.rankings[0].model).toBe('claude-3-sonnet');
+    expect(parsed.more.modelEfficiency.ineligibleModels[0].model).toBe('claude-3-opus');
   });
 });
