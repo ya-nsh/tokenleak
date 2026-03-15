@@ -4,7 +4,7 @@ import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
-import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions } from './interactive';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions, createMenuOptions } from './interactive';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -140,6 +140,45 @@ describe('interactive launcher', () => {
       false,
       null,
     )).toThrow('Invalid --since date');
+  });
+});
+
+describe('consolidated menu', () => {
+  test('has 9 items with unique shortcuts 1-9', () => {
+    const options = createMenuOptions();
+    expect(options).toHaveLength(9);
+    const shortcuts = options.map(o => o.shortcut);
+    expect(new Set(shortcuts).size).toBe(9);
+    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+  });
+
+  test('has Export as item 2', () => {
+    const options = createMenuOptions();
+    const exportItem = options.find(o => o.shortcut === '2');
+    expect(exportItem).toBeDefined();
+    expect(exportItem!.title).toBe('Export');
+  });
+
+  test('has Build Custom Command as item 9', () => {
+    const options = createMenuOptions();
+    const item9 = options.find(o => o.shortcut === '9');
+    expect(item9).toBeDefined();
+    expect(item9!.title).toBe('Build Custom Command');
+  });
+
+  test('does not have separate Export JSON, Export SVG, or Export PNG items', () => {
+    const options = createMenuOptions();
+    const titles = options.map(o => o.title);
+    expect(titles).not.toContain('Export JSON');
+    expect(titles).not.toContain('Export SVG');
+    expect(titles).not.toContain('Export PNG');
+  });
+
+  test('every option has a select function', () => {
+    const options = createMenuOptions();
+    for (const option of options) {
+      expect(typeof option.select).toBe('function');
+    }
   });
 });
 

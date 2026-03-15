@@ -1185,6 +1185,28 @@ async function buildLivePreset(): Promise<InteractiveCommand> {
   return createRunCommand(args);
 }
 
+async function buildExportPreset(): Promise<InteractiveCommand> {
+  const format = await promptSingleChoice(
+    'Export Format',
+    'Choose the export format.',
+    [
+      { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
+      { value: 'svg', label: 'SVG', description: 'Shareable vector card' },
+      { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
+    ],
+  );
+
+  if (format === 'json') {
+    return buildJsonPreset();
+  }
+
+  return buildImagePreset(format as 'svg' | 'png');
+}
+
+async function buildListProvidersPreset(): Promise<InteractiveCommand> {
+  return createRunCommand({ listProviders: true });
+}
+
 async function askFormatChoice(): Promise<string> {
   return promptSingleChoice(
     'Output Format',
@@ -1257,7 +1279,7 @@ async function buildCustomCommand(): Promise<InteractiveCommand> {
   return createRunCommand(args);
 }
 
-function createMenuOptions(): MenuOption[] {
+export function createMenuOptions(): MenuOption[] {
   return [
     {
       shortcut: '1',
@@ -1268,62 +1290,55 @@ function createMenuOptions(): MenuOption[] {
     },
     {
       shortcut: '2',
-      title: 'Export JSON',
-      description: 'structured output for scripts',
-      preview: 'tokenleak --format json',
-      select: buildJsonPreset,
+      title: 'Export',
+      description: 'JSON, SVG, or PNG (PNG default)',
+      preview: 'tokenleak --format png --output tokenleak.png',
+      select: buildExportPreset,
     },
     {
       shortcut: '3',
-      title: 'Export PNG',
-      description: 'social-ready raster image',
-      preview: 'tokenleak --format png --output tokenleak.png --more',
-      select: async () => buildImagePreset('png'),
-    },
-    {
-      shortcut: '4',
       title: '\u{1F389} AI Wrapped',
       description: 'your personal AI coding story card',
       preview: 'tokenleak --format wrapped --output tokenleak-wrapped.png --open',
       select: buildWrappedPreset,
     },
     {
-      shortcut: '5',
+      shortcut: '4',
       title: 'Compare Periods',
       description: 'diff current vs previous usage',
       preview: 'tokenleak --compare auto --format json',
       select: buildComparePreset,
     },
     {
-      shortcut: '6',
+      shortcut: '5',
       title: '\u{1F4A1} Advisor',
       description: 'model efficiency recommendations',
       preview: 'tokenleak --advisor',
       select: buildAdvisorPreset,
     },
     {
-      shortcut: '7',
+      shortcut: '6',
       title: 'Start Live Server',
       description: 'browser dashboard on localhost',
       preview: 'tokenleak --live-server --theme dark',
       select: buildLivePreset,
     },
     {
-      shortcut: '8',
+      shortcut: '7',
       title: 'Explain Day',
       description: 'diagnose one day of usage',
       preview: 'tokenleak explain 2026-03-10',
       select: buildExplainPreset,
     },
     {
-      shortcut: '9',
+      shortcut: '8',
       title: 'Focus Sessions',
       description: 'rank deep-work sessions',
       preview: 'tokenleak focus --days 30',
       select: buildFocusPreset,
     },
     {
-      shortcut: '0',
+      shortcut: '9',
       title: 'Build Custom Command',
       description: 'configure flags interactively',
       preview: 'tokenleak --format terminal --days 90',
