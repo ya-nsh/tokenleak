@@ -6,6 +6,7 @@ import {
   DEFAULT_DAYS,
   SCHEMA_VERSION,
   aggregate,
+  analyzeEfficiency,
   buildExplainReport,
   buildFocusReport,
   mergeProviderData,
@@ -24,9 +25,10 @@ import {
   CodexProvider,
   OpenCodeProvider,
   PiProvider,
+  MODEL_PRICING,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, startLiveServer } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -166,6 +168,7 @@ function buildHelpText(): string {
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --compare <range>   Compare against YYYY-MM-DD..YYYY-MM-DD or auto',
     '      --more             Add expanded PNG/SVG stats and unlock compare cards',
+    '      --advisor           Analyze usage and suggest cost-saving model switches',
     '      --clipboard         Copy rendered output to the clipboard',
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
@@ -517,6 +520,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   open: boolean;
   upload?: string;
   liveServer: boolean;
+  advisor: boolean;
 } {
   const fileConfig = loadConfig();
   const envConfig = loadEnvOverrides();
@@ -543,6 +547,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: boolean;
     open: boolean;
     liveServer: boolean;
+    advisor: boolean;
   } = {
     format: 'terminal',
     theme: 'dark',
@@ -561,6 +566,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: false,
     open: false,
     liveServer: false,
+    advisor: false,
   };
 
   // Layer: defaults < file config < env vars < CLI flags
@@ -659,6 +665,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['liveServer'] !== undefined) {
     result.liveServer = cliArgs['liveServer'] as boolean;
+  }
+  if (cliArgs['advisor'] !== undefined) {
+    result.advisor = cliArgs['advisor'] as boolean;
   }
 
   return result;
@@ -983,14 +992,43 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const mergedDaily = mergeProviderData(providerDataList);
   const stats = aggregate(mergedDaily, dateRange.until);
 
+  // Force --more when --advisor is used (needs event data)
+  const needsMore = config.more || config.format === 'wrapped' || config.advisor;
+
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
     dateRange,
     providers: providerDataList,
     aggregated: stats,
-    more: (config.more || config.format === 'wrapped') ? buildMoreStats(providerDataList, dateRange) : null,
+    more: needsMore ? buildMoreStats(providerDataList, dateRange) : null,
   };
+
+  // Advisor mode — analyze efficiency and render report
+  if (config.advisor) {
+    const advisorReport = analyzeEfficiency(output, MODEL_PRICING);
+
+    if (config.format === 'json') {
+      const rendered = JSON.stringify(advisorReport, null, 2);
+      if (config.output) {
+        writeFileSync(config.output, rendered);
+      } else {
+        process.stdout.write(rendered + '\n');
+      }
+      return;
+    }
+
+    const rendered = renderAdvisorView(advisorReport, {
+      width: config.width,
+      noColor: config.noColor,
+    });
+    if (config.output) {
+      writeFileSync(config.output, rendered);
+    } else {
+      process.stdout.write(rendered + '\n');
+    }
+    return;
+  }
 
   // Wrapped format — special rendering path
   if (config.format === 'wrapped') {
@@ -1391,6 +1429,11 @@ const main = defineCommand({
       description: 'Start a local server with an interactive dashboard',
       default: false,
     },
+    advisor: {
+      type: 'boolean',
+      description: 'Analyze usage and suggest cost-saving model switches',
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -1418,6 +1461,7 @@ const main = defineCommand({
       if (args.open) cliArgs['open'] = true;
       if (args.upload !== undefined) cliArgs['upload'] = args.upload;
       if (args.liveServer) cliArgs['liveServer'] = true;
+      if (args.advisor) cliArgs['advisor'] = true;
 
       await run(cliArgs);
     } catch (error: unknown) {
