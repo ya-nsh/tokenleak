@@ -20,7 +20,7 @@ export function createTokenleakServer(registry?: ProviderRegistry): McpServer {
 
   const server = new McpServer({
     name: 'tokenleak',
-    version: '1.0.0',
+    version: '1.2.0',
   });
 
   registerTools(server, reg);
