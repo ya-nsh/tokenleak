@@ -70,6 +70,8 @@ export interface UsageEvent {
   cost: number;
   sessionId?: string;
   projectId?: string;
+  repoRoot?: string;
+  directory?: string;
   durationMs?: number;
 }
 
@@ -128,6 +130,60 @@ export interface ProjectSummary {
   tokens: number;
 }
 
+export interface ModelEfficiencyEntry {
+  model: string;
+  eventCount: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cost: number;
+  outputInputRatio: number;
+  outputPerDollar: number;
+  cacheCoverage: number;
+  costPer1MTotal: number;
+  score: number;
+  scoreBreakdown: {
+    outputPerDollar: number;
+    outputInputRatio: number;
+    cacheCoverage: number;
+  };
+}
+
+export interface ModelEfficiencyMetrics {
+  method: string;
+  rankings: ModelEfficiencyEntry[];
+  ineligibleModels: Array<{
+    model: string;
+    eventCount: number;
+    totalTokens: number;
+    reason: string;
+  }>;
+}
+
+export interface CacheRoiSummary {
+  readTokens: number;
+  writeTokens: number;
+  readSavings: number;
+  writeCost: number;
+  netSavings: number;
+  reuseRatio: number | null;
+  paybackRatio: number | null;
+}
+
+export interface CacheRoiBreakdown extends CacheRoiSummary {
+  label: string;
+}
+
+export interface CacheRoiMetrics {
+  method: string;
+  summary: CacheRoiSummary;
+  byProvider: CacheRoiBreakdown[];
+  byModel: CacheRoiBreakdown[];
+  byProject: CacheRoiBreakdown[];
+}
+
 export interface SessionMetrics {
   totalSessions: number;
   averageTokens: number;
@@ -138,6 +194,118 @@ export interface SessionMetrics {
   projectCount: number;
   topProject: ProjectSummary | null;
   projectBreakdown: ProjectSummary[];
+}
+
+export interface SessionDrilldownEntry {
+  sessionId: string;
+  label: string;
+  provider: string;
+  projectId: string | null;
+  repoRoot: string | null;
+  directory: string | null;
+  start: string;
+  end: string;
+  durationMs: number | null;
+  eventCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cost: number;
+  topModels: TopModelEntry[];
+}
+
+export interface ProjectDrilldownEntry {
+  projectId: string;
+  repoRoot: string | null;
+  directory: string | null;
+  sessionCount: number;
+  activeDays: number;
+  streak: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cost: number;
+  topModels: TopModelEntry[];
+  topSessions: SessionSummary[];
+}
+
+export interface AttributionWindow {
+  start: string;
+  end: string;
+  sessionCount: number;
+}
+
+export interface AttributionCluster {
+  clusterId: string;
+  label: string;
+  repoRoot: string | null;
+  directory: string | null;
+  sessionCount: number;
+  activeDays: number;
+  tokens: number;
+  cost: number;
+  providers: string[];
+  models: string[];
+  timeWindows: AttributionWindow[];
+}
+
+export interface ExplainEvidenceRow {
+  label: string;
+  tokens: number;
+  cost: number;
+  share: number;
+}
+
+export interface ExplainAnomaly {
+  type: 'provider-spike' | 'model-spike' | 'cache-drop' | 'long-session' | 'dense-session';
+  title: string;
+  detail: string;
+}
+
+export interface ExplainReport {
+  date: string;
+  totalTokens: number;
+  totalCost: number;
+  comparedTo7dAverage: number;
+  comparedTo30dAverage: number;
+  headline: string;
+  summary: string[];
+  topProviders: ExplainEvidenceRow[];
+  topSessions: ExplainEvidenceRow[];
+  topProjects: ExplainEvidenceRow[];
+  topModels: ExplainEvidenceRow[];
+  anomalies: ExplainAnomaly[];
+}
+
+export interface FocusEntry {
+  sessionId: string;
+  label: string;
+  provider: string;
+  projectId: string | null;
+  repoRoot: string | null;
+  start: string;
+  end: string;
+  durationMs: number | null;
+  tokensPerHour: number;
+  totalTokens: number;
+  cost: number;
+  streak: number;
+  score: number;
+  scoreBreakdown: {
+    duration: number;
+    density: number;
+    streak: number;
+  };
+  rationale: string[];
+}
+
+export interface FocusReport {
+  method: string;
+  entries: FocusEntry[];
 }
 
 export interface ModelMixShiftEntry {
@@ -162,6 +330,11 @@ export interface MoreStats {
   cacheEconomics: CacheEconomics;
   hourOfDay: HourOfDayEntry[];
   sessionMetrics: SessionMetrics;
+  modelEfficiency?: ModelEfficiencyMetrics | null;
+  cacheRoi?: CacheRoiMetrics | null;
+  sessionDrilldown?: SessionDrilldownEntry[] | null;
+  projectDrilldown?: ProjectDrilldownEntry[] | null;
+  attribution?: AttributionCluster[] | null;
   compare: CompareMore | null;
 }
 

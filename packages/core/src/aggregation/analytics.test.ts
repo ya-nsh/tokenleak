@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'bun:test';
+import {
+  buildProjectRollups,
+  buildSessionRollups,
+  inferDirectoryLabel,
+  inferRepoRoot,
+  normalizeScores,
+} from './analytics';
+import type { UsageEvent } from '../types';
+
+const EVENTS: UsageEvent[] = [
+  {
+    provider: 'claude-code',
+    timestamp: '2026-03-01T09:00:00.000Z',
+    date: '2026-03-01',
+    model: 'claude-sonnet-4',
+    inputTokens: 1000,
+    outputTokens: 200,
+    cacheReadTokens: 300,
+    cacheWriteTokens: 50,
+    totalTokens: 1550,
+    cost: 0.75,
+    sessionId: 'session-a',
+    projectId: '/Users/test/work/tokenleak/packages/core',
+  },
+  {
+    provider: 'claude-code',
+    timestamp: '2026-03-01T09:10:00.000Z',
+    date: '2026-03-01',
+    model: 'claude-opus-4',
+    inputTokens: 200,
+    outputTokens: 400,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 600,
+    cost: 0.95,
+    sessionId: 'session-a',
+    projectId: '/Users/test/work/tokenleak/packages/core',
+  },
+  {
+    provider: 'codex',
+    timestamp: '2026-03-02T12:00:00.000Z',
+    date: '2026-03-02',
+    model: 'gpt-5',
+    inputTokens: 500,
+    outputTokens: 300,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 800,
+    cost: 0.55,
+    sessionId: 'session-b',
+    projectId: '/Users/test/work/tokenleak/apps/web',
+  },
+];
+
+describe('analytics helpers', () => {
+  it('infers repo roots and directory labels from project paths', () => {
+    const repoRoot = inferRepoRoot('/Users/test/work/tokenleak/packages/core');
+    expect(repoRoot).toBe('/Users/test/work');
+    expect(inferDirectoryLabel('/Users/test/work/tokenleak/packages/core', repoRoot)).toBe('tokenleak');
+    expect(inferDirectoryLabel('project-alpha', null)).toBe('project-alpha');
+  });
+
+  it('builds session rollups with derived duration and top models', () => {
+    const sessions = buildSessionRollups(EVENTS);
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]?.sessionId).toBe('session-a');
+    expect(sessions[0]?.totalTokens).toBe(2150);
+    expect(sessions[0]?.durationMs).toBe(600000);
+    expect(sessions[0]?.topModels[0]?.model).toBe('claude-sonnet-4');
+  });
+
+  it('builds project rollups with session counts and streaks', () => {
+    const projects = buildProjectRollups(EVENTS);
+    expect(projects).toHaveLength(2);
+    expect(projects[0]?.projectId).toBe('/Users/test/work/tokenleak/packages/core');
+    expect(projects[0]?.sessionCount).toBe(1);
+    expect(projects[0]?.activeDays).toBe(1);
+    expect(projects[0]?.topSessions[0]?.label).toBe('/Users/test/work/tokenleak/packages/core');
+  });
+
+  it('normalizes arbitrary value sets into 0..1 scores', () => {
+    expect(normalizeScores([5, 10, 15])).toEqual([0, 0.5, 1]);
+    expect(normalizeScores([2, 2])).toEqual([1, 1]);
+    expect(normalizeScores([])).toEqual([]);
+  });
+});

@@ -12,10 +12,24 @@ export type {
   InputOutputMetrics,
   MonthlyBurnMetrics,
   CacheEconomics,
+  ModelEfficiencyEntry,
+  ModelEfficiencyMetrics,
+  CacheRoiSummary,
+  CacheRoiBreakdown,
+  CacheRoiMetrics,
   HourOfDayEntry,
   SessionSummary,
   ProjectSummary,
   SessionMetrics,
+  SessionDrilldownEntry,
+  ProjectDrilldownEntry,
+  AttributionWindow,
+  AttributionCluster,
+  ExplainEvidenceRow,
+  ExplainAnomaly,
+  ExplainReport,
+  FocusEntry,
+  FocusReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -52,6 +66,14 @@ export {
   buildMoreStats,
   computeModelMixShift,
 } from './aggregation';
+
+export {
+  buildSessionRollups,
+  buildProjectRollups,
+  inferRepoRoot,
+  inferDirectoryLabel,
+  normalizeScores,
+} from './aggregation/analytics';
 
 export {
   ONE_DAY_MS,
