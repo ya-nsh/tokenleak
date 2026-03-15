@@ -38,21 +38,6 @@ function diffDays(since: string, until: string): number {
   return Math.round((u.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 }
 
-const ICON_EMOJI: Record<string, string> = {
-  fire: '\u{1F525}',
-  moon: '\u{1F989}',
-  sun: '\u{1F305}',
-  diamond: '\u{1F4B8}',
-  target: '\u26A1',
-  circle: '\u{1F3B2}',
-  calendar: '\u{1F4C5}',
-  bolt: '\u26A1',
-  mountain: '\u{1F3D4}',
-  palette: '\u{1F500}',
-  star: '\u2B50',
-  rocket: '\u{1F680}',
-  trophy: '\u{1F3C6}',
-};
 
 function guessProvider(model: string): string {
   const lower = model.toLowerCase();
@@ -91,6 +76,14 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   const { since, until } = output.dateRange;
   const achievements = computeAchievements(output);
   const totalDaysInRange = diffDays(since, until);
+
+  // Collect active dates for deterministic streak dots
+  const activeDates = new Set<string>();
+  for (const p of providers) {
+    for (const d of p.daily) {
+      if (d.totalTokens > 0) activeDates.add(d.date);
+    }
+  }
   const year = until.slice(0, 4);
 
   // ── Stamp (reused on every slide) ──
@@ -307,16 +300,15 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   </div>
   <div class="rule"></div>
   <div class="lb" style="margin-bottom:6px">ACTIVITY MAP</div>
-  <div class="sdots" id="streakDots" data-current-streak="${stats.currentStreak}"></div>
+  <div class="sdots" id="streakDots" data-current-streak="${stats.currentStreak}" data-history='${JSON.stringify((() => { const end = new Date(until + 'T00:00:00Z'); const arr: boolean[] = []; for (let i = 59; i >= 0; i--) { const d = new Date(end.getTime() - i * 86400000); const ds = d.toISOString().slice(0, 10); arr.push(activeDates.has(ds)); } return arr; })())}'></div>
   <div class="info">${stats.activeDays} active days out of ${totalDaysInRange} &mdash; that&rsquo;s a <span class="hi">${Math.round((stats.activeDays / Math.max(totalDaysInRange, 1)) * 100)}%</span> hit rate.</div>
   <div style="margin-top:auto;padding-top:34px">${stamp}</div>
 </div>`;
 
   // ── Slide 04 — Top Models ──
   const modelBars = topModels
-    .map((m, i) => {
+    .map((m) => {
       const prov = guessProvider(m.model);
-      const rank = i === 0 ? '01' : i === 1 ? '02' : '03';
       return `<div class="bar">
   <div class="bar-top"><div><div class="bar-name">${esc(m.model)}</div><div class="bar-sub">${esc(prov)}</div></div><div class="bar-pct">${m.percentage.toFixed(1)}%</div></div>
   <div class="bar-track"><div class="bar-fill" style="width:${m.percentage}%"></div></div>
@@ -710,11 +702,13 @@ h2.title { font-family:'Bricolage Grotesque',sans-serif; font-size:clamp(36px,7.
   // Streak dots
   var sc = document.getElementById('streakDots');
   var currentStreak = parseInt(sc ? sc.dataset.currentStreak || '0' : '0', 10);
+  var history = [];
+  try { history = JSON.parse(sc ? sc.dataset.history || '[]' : '[]'); } catch(e) {}
   if (sc) {
     for (var i = 0; i < 60; i++) {
       var d = document.createElement('div');
       if (i >= 60 - currentStreak) d.className = 'sd now';
-      else if (i >= 14 && Math.random() > 0.28) d.className = 'sd hit';
+      else if (history[i]) d.className = 'sd hit';
       else d.className = 'sd';
       sc.appendChild(d);
     }

@@ -28,7 +28,7 @@ export const INTERACTIVE_FLAG_LINES = [
   '    --open              open generated file',
   '    --upload <target>   gist',
   '-L, --live-server       local interactive dashboard',
-  '    --wrapped-live       AI Wrapped presentation in browser',
+  '    --wrapped-live      AI Wrapped presentation in browser',
   '    --no-color          disable ANSI colors',
   '    --no-insights       hide terminal insights',
   '    --help              print help',

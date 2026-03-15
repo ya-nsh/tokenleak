@@ -1294,8 +1294,19 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Wrapped live server mode
   if (config.wrappedLive) {
+    const ignoredWrappedFlags: string[] = [];
+    if (config.output) ignoredWrappedFlags.push('--output');
+    if (config.clipboard) ignoredWrappedFlags.push('--clipboard');
+    if (config.open) ignoredWrappedFlags.push('--open');
+    if (config.upload) ignoredWrappedFlags.push('--upload');
+    if (ignoredWrappedFlags.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignoredWrappedFlags.join(', ')} ignored in --wrapped-live mode.\n`,
+      );
+    }
+
     process.stderr.write('Generating wrapped presentation...\n');
-    const { port, stop } = await startWrappedLiveServer(output);
+    const { stop } = await startWrappedLiveServer(output);
     process.stderr.write('Press Ctrl+C to stop the server.\n');
     await new Promise<void>((resolve) => {
       process.on('SIGINT', () => {
