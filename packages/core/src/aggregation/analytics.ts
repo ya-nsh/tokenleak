@@ -1,5 +1,8 @@
 import { dirname, basename, relative } from 'node:path';
 import type {
+  AttributionCluster,
+  AttributionTaskStyle,
+  AttributionWindow,
   DailyUsage,
   ProjectDrilldownEntry,
   SessionDrilldownEntry,
@@ -28,6 +31,29 @@ interface SessionAccumulator {
   modelTokens: Map<string, { tokens: number; cost: number }>;
   activeDates: Set<string>;
 }
+
+interface AttributionClusterAccumulator {
+  clusterId: string;
+  label: string;
+  taskStyle: AttributionTaskStyle;
+  repoRoot: string | null;
+  directory: string | null;
+  tokens: number;
+  cost: number;
+  sessions: SessionDrilldownEntry[];
+  activeDates: Set<string>;
+  providerTokens: Map<string, number>;
+  modelTokens: Map<string, number>;
+}
+
+interface AttributionScope {
+  key: string;
+  labelBase: string;
+  repoRoot: string | null;
+  directory: string | null;
+}
+
+const ATTRIBUTION_WINDOW_GAP_MS = 6 * 60 * 60 * 1000;
 
 function isAbsoluteProjectPath(value: string): boolean {
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
@@ -103,6 +129,138 @@ function topModelEntries(
     }))
     .sort((a, b) => b.tokens - a.tokens)
     .slice(0, limit);
+}
+
+function topNames(tokensByName: Map<string, number>, limit: number): string[] {
+  return [...tokensByName.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([name]) => name);
+}
+
+function humanizeTaskStyle(taskStyle: AttributionTaskStyle): string {
+  return taskStyle.replace(/-/g, ' ');
+}
+
+function parseIsoTime(value: string): number | null {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function inferAttributionTaskStyle(session: SessionDrilldownEntry): AttributionTaskStyle {
+  const durationMs = session.durationMs ?? 0;
+
+  if (
+    durationMs > 0 &&
+    durationMs <= 10 * 60 * 1000 &&
+    session.eventCount <= 2 &&
+    session.totalTokens < 6_000
+  ) {
+    return 'quick-hit';
+  }
+
+  if (
+    durationMs >= 45 * 60 * 1000 ||
+    session.eventCount >= 5 ||
+    session.totalTokens >= 20_000
+  ) {
+    return 'deep-work';
+  }
+
+  if (
+    durationMs >= 15 * 60 * 1000 ||
+    session.eventCount >= 3 ||
+    session.totalTokens >= 6_000
+  ) {
+    return 'iterative';
+  }
+
+  return 'mixed';
+}
+
+function resolveAttributionScope(session: SessionDrilldownEntry): AttributionScope {
+  const hasStablePath =
+    (session.projectId ? isAbsoluteProjectPath(normalizePathLike(session.projectId)) : false) ||
+    (session.repoRoot ? isAbsoluteProjectPath(normalizePathLike(session.repoRoot)) : false);
+
+  if (hasStablePath && session.repoRoot && session.directory) {
+    const labelBase = session.directory === '.' ? basename(session.repoRoot) : session.directory;
+    return {
+      key: `repo:${session.repoRoot}::dir:${session.directory}`,
+      labelBase,
+      repoRoot: session.repoRoot,
+      directory: session.directory,
+    };
+  }
+
+  if (session.projectId) {
+    return {
+      key: `project:${session.provider}:${session.projectId}`,
+      labelBase: session.directory ?? session.projectId,
+      repoRoot: hasStablePath ? session.repoRoot : null,
+      directory: hasStablePath ? session.directory : null,
+    };
+  }
+
+  return {
+    key: `session:${session.provider}:${session.sessionId}`,
+    labelBase: session.directory ?? session.label,
+    repoRoot: session.repoRoot,
+    directory: session.directory,
+  };
+}
+
+function buildAttributionWindows(sessions: SessionDrilldownEntry[]): AttributionWindow[] {
+  if (sessions.length === 0) {
+    return [];
+  }
+
+  const ordered = sessions
+    .slice()
+    .sort((a, b) => {
+      const aTime = parseIsoTime(a.start);
+      const bTime = parseIsoTime(b.start);
+      if (aTime === null && bTime === null) {
+        return a.start.localeCompare(b.start);
+      }
+      if (aTime === null) {
+        return 1;
+      }
+      if (bTime === null) {
+        return -1;
+      }
+      return aTime - bTime;
+    });
+
+  const windows: AttributionWindow[] = [];
+
+  for (const session of ordered) {
+    const startMs = parseIsoTime(session.start);
+    const endMs = parseIsoTime(session.end) ?? startMs;
+    const lastWindow = windows.at(-1);
+
+    if (
+      lastWindow &&
+      startMs !== null &&
+      endMs !== null &&
+      parseIsoTime(lastWindow.end) !== null &&
+      startMs <= (parseIsoTime(lastWindow.end) ?? startMs) + ATTRIBUTION_WINDOW_GAP_MS
+    ) {
+      if ((parseIsoTime(lastWindow.end) ?? endMs) < endMs) {
+        lastWindow.end = session.end;
+      }
+      lastWindow.sessionCount += 1;
+      continue;
+    }
+
+    windows.push({
+      start: session.start,
+      end: session.end,
+      sessionCount: 1,
+    });
+  }
+
+  return windows;
 }
 
 export function buildSessionRollups(events: UsageEvent[], topModelLimit: number = 3): SessionDrilldownEntry[] {
@@ -315,6 +473,85 @@ export function buildProjectRollups(
       };
     })
     .sort((a, b) => b.totalTokens - a.totalTokens);
+}
+
+export function buildAttributionClusters(
+  events: UsageEvent[],
+  modelLimit: number = 5,
+  providerLimit: number = 4,
+): AttributionCluster[] {
+  const sessions = buildSessionRollups(events, modelLimit);
+  const clusters = new Map<string, AttributionClusterAccumulator>();
+  const clusterBySessionId = new Map<string, string>();
+
+  for (const session of sessions) {
+    const taskStyle = inferAttributionTaskStyle(session);
+    const scope = resolveAttributionScope(session);
+    const clusterId = `${scope.key}::style:${taskStyle}`;
+    clusterBySessionId.set(session.sessionId, clusterId);
+
+    let cluster = clusters.get(clusterId);
+    if (!cluster) {
+      cluster = {
+        clusterId,
+        label: `${scope.labelBase} · ${humanizeTaskStyle(taskStyle)}`,
+        taskStyle,
+        repoRoot: scope.repoRoot,
+        directory: scope.directory,
+        tokens: 0,
+        cost: 0,
+        sessions: [],
+        activeDates: new Set(),
+        providerTokens: new Map(),
+        modelTokens: new Map(),
+      };
+      clusters.set(clusterId, cluster);
+    }
+
+    cluster.sessions.push(session);
+  }
+
+  for (const event of events) {
+    const sessionId = event.sessionId?.trim() || `${event.provider}:${event.timestamp}`;
+    const clusterId = clusterBySessionId.get(sessionId);
+    if (!clusterId) {
+      continue;
+    }
+
+    const cluster = clusters.get(clusterId);
+    if (!cluster) {
+      continue;
+    }
+
+    cluster.tokens += event.totalTokens;
+    cluster.cost += event.cost;
+    cluster.activeDates.add(event.date);
+    cluster.providerTokens.set(
+      event.provider,
+      (cluster.providerTokens.get(event.provider) ?? 0) + event.totalTokens,
+    );
+    cluster.modelTokens.set(
+      event.model,
+      (cluster.modelTokens.get(event.model) ?? 0) + event.totalTokens,
+    );
+  }
+
+  return [...clusters.values()]
+    .map((cluster) => ({
+      clusterId: cluster.clusterId,
+      label: cluster.label,
+      taskStyle: cluster.taskStyle,
+      repoRoot: cluster.repoRoot,
+      directory: cluster.directory,
+      sessionCount: cluster.sessions.length,
+      activeDays: cluster.activeDates.size,
+      tokens: cluster.tokens,
+      cost: cluster.cost,
+      providers: topNames(cluster.providerTokens, providerLimit),
+      models: topNames(cluster.modelTokens, modelLimit),
+      timeWindows: buildAttributionWindows(cluster.sessions),
+    }))
+    .sort((a, b) => b.tokens - a.tokens || b.sessionCount - a.sessionCount);
 }
 
 export function normalizeScores(values: number[]): number[] {

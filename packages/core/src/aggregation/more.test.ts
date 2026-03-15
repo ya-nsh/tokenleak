@@ -142,6 +142,12 @@ describe('buildMoreStats', () => {
     expect(more.sessionMetrics.projectBreakdown[0]!.tokens).toBeGreaterThan(
       more.sessionMetrics.projectBreakdown[1]!.tokens,
     );
+    expect(more.sessionDrilldown).toHaveLength(2);
+    expect(more.projectDrilldown).toHaveLength(2);
+    expect(more.attribution).toHaveLength(2);
+    expect(more.attribution?.[0]?.taskStyle).toBe('quick-hit');
+    expect(more.attribution?.[0]?.models[0]).toBe('claude-3-sonnet');
+    expect(more.attribution?.[0]?.timeWindows[0]?.sessionCount).toBe(1);
     expect(more.monthlyBurn.calendarDays).toBe(31);
     expect(more.compare).toBeNull();
   });

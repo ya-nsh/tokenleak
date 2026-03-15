@@ -239,6 +239,41 @@ describe('renderTokenView', () => {
 });
 
 describe('renderCwdView', () => {
+  it('renders attribution clusters when available', () => {
+    const output = createOutput({
+      more: createMoreStats({
+        attribution: [
+          {
+            clusterId: 'repo:/Users/test/work::dir:tokenleak::style:quick-hit',
+            label: 'tokenleak · quick hit',
+            taskStyle: 'quick-hit',
+            repoRoot: '/Users/test/work',
+            directory: 'tokenleak',
+            sessionCount: 2,
+            activeDays: 1,
+            tokens: 33000,
+            cost: 1.2,
+            providers: ['claude-code'],
+            models: ['claude-3-opus'],
+            timeWindows: [
+              {
+                start: '2026-03-01T09:15:00.000Z',
+                end: '2026-03-01T10:45:00.000Z',
+                sessionCount: 2,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const result = renderCwdView(output, 100, true);
+
+    expect(result).toContain('Attribution');
+    expect(result).toContain('tokenleak');
+    expect(result).toContain('quick hit');
+    expect(result).toContain('claude-3-opus');
+  });
+
   it('renders project bars', () => {
     const output = createOutput({ more: createMoreStats() });
     const result = renderCwdView(output, 80, false);

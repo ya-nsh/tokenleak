@@ -8,6 +8,11 @@ import type {
   ModelMixShiftEntry,
   SessionSummary,
 } from '../types';
+import {
+  buildAttributionClusters,
+  buildProjectRollups,
+  buildSessionRollups,
+} from './analytics';
 
 function daysInMonth(dateString: string): number {
   const [year, month] = dateString.split('-').map(Number);
@@ -309,6 +314,9 @@ export function buildMoreStats(
   } | null = null,
 ): MoreStats {
   const events = collectEvents(providers);
+  const sessionDrilldown = buildSessionRollups(events);
+  const projectDrilldown = buildProjectRollups(events);
+  const attribution = buildAttributionClusters(events);
 
   return {
     inputOutput: buildInputOutput(providers),
@@ -316,6 +324,9 @@ export function buildMoreStats(
     cacheEconomics: buildCacheEconomics(providers),
     hourOfDay: buildHourOfDay(events),
     sessionMetrics: buildSessionMetrics(events),
+    sessionDrilldown,
+    projectDrilldown,
+    attribution,
     compare: compare
       ? {
           previousRange: compare.previousRange,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  buildAttributionClusters,
   buildProjectRollups,
   buildSessionRollups,
   inferDirectoryLabel,
@@ -77,6 +78,65 @@ describe('analytics helpers', () => {
     expect(projects[0]?.sessionCount).toBe(1);
     expect(projects[0]?.activeDays).toBe(1);
     expect(projects[0]?.topSessions[0]?.label).toBe('/Users/test/work/tokenleak/packages/core');
+  });
+
+  it('builds conservative attribution clusters from stable repo and project signals', () => {
+    const clusters = buildAttributionClusters([
+      {
+        provider: 'pi',
+        timestamp: '2026-03-03T09:00:00.000Z',
+        date: '2026-03-03',
+        model: 'gpt-5',
+        inputTokens: 400,
+        outputTokens: 120,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 520,
+        cost: 0.2,
+        sessionId: 'session-c',
+        projectId: '/Users/test/work/tokenleak/packages/core',
+        durationMs: 120000,
+      },
+      {
+        provider: 'claude-code',
+        timestamp: '2026-03-03T17:30:00.000Z',
+        date: '2026-03-03',
+        model: 'claude-sonnet-4',
+        inputTokens: 300,
+        outputTokens: 100,
+        cacheReadTokens: 50,
+        cacheWriteTokens: 0,
+        totalTokens: 450,
+        cost: 0.18,
+        sessionId: 'session-d',
+        projectId: '/Users/test/work/tokenleak/apps/web',
+        durationMs: 180000,
+      },
+      {
+        provider: 'claude-code',
+        timestamp: '2026-03-04T09:00:00.000Z',
+        date: '2026-03-04',
+        model: 'claude-sonnet-4',
+        inputTokens: 200,
+        outputTokens: 80,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 280,
+        cost: 0.12,
+        sessionId: 'session-e',
+        projectId: 'project-alpha',
+      },
+    ]);
+
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]?.repoRoot).toBe('/Users/test/work');
+    expect(clusters[0]?.directory).toBe('tokenleak');
+    expect(clusters[0]?.taskStyle).toBe('quick-hit');
+    expect(clusters[0]?.sessionCount).toBe(2);
+    expect(clusters[0]?.providers).toEqual(['pi', 'claude-code']);
+    expect(clusters[0]?.timeWindows).toHaveLength(2);
+    expect(clusters[1]?.taskStyle).toBe('mixed');
+    expect(clusters[1]?.repoRoot).toBeNull();
   });
 
   it('normalizes arbitrary value sets into 0..1 scores', () => {
