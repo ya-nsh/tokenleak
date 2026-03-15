@@ -253,9 +253,9 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
 
   if (more?.hourOfDay) {
     const totalTokens = more.hourOfDay.reduce((s, e) => s + e.tokens, 0);
-    const nightTokens = more.hourOfDay.filter((e) => e.hour >= 18).reduce((s, e) => s + e.tokens, 0);
+    const nightTokens = more.hourOfDay.filter((e) => e.hour >= 22 || e.hour < 6).reduce((s, e) => s + e.tokens, 0);
     if (totalTokens > 0 && nightTokens / totalTokens > 0.4) {
-      all.push({ icon: 'moon', title: 'Night Owl', subtitle: `${((nightTokens / totalTokens) * 100).toFixed(0)}% after 6pm`, color: '#818cf8' });
+      all.push({ icon: 'moon', title: 'Night Owl', subtitle: `${((nightTokens / totalTokens) * 100).toFixed(0)}% between 10pm-6am`, color: '#818cf8' });
     }
   }
 
@@ -901,7 +901,7 @@ function renderTimeOfDaySlide(
   const morning = hourOfDay.filter((e) => e.hour >= 6 && e.hour < 12).reduce((s, e) => s + e.tokens, 0);
   const afternoon = hourOfDay.filter((e) => e.hour >= 12 && e.hour < 18).reduce((s, e) => s + e.tokens, 0);
   const evening = hourOfDay.filter((e) => e.hour >= 18 && e.hour < 22).reduce((s, e) => s + e.tokens, 0);
-  const night = totalTokens - morning - afternoon - evening;
+  const night = hourOfDay.filter((e) => e.hour >= 22 || e.hour < 6).reduce((s, e) => s + e.tokens, 0);
 
   const periods = [
     { label: 'Morning', icon: 'sun' as IconName, tokens: morning, color: theme.warmAccent },
@@ -915,7 +915,7 @@ function renderTimeOfDaySlide(
 
   let narrativeText = '';
   if (dominant.label === 'Night') {
-    narrativeText = `You're a night owl -- ${dominantPct}% of tokens after 10pm`;
+    narrativeText = `You're a night owl -- ${dominantPct}% of tokens between 10pm-6am`;
   } else if (dominant.label === 'Evening') {
     narrativeText = `You're an evening coder -- ${dominantPct}% between 6-10pm`;
   } else if (dominant.label === 'Morning') {

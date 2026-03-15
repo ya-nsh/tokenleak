@@ -1000,18 +1000,17 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     process.stderr.write(`Wrapped PNG written to ${outputPath}\n`);
 
     if (config.clipboard) {
-      await copyToClipboard(wrappedBuffer.toString('utf-8'));
-      process.stderr.write('Copied output to clipboard.\n');
+      process.stderr.write('Clipboard is not supported for binary PNG output. Use --output to save the file.\n');
     }
     if (config.open) {
       await openFile(outputPath);
       process.stderr.write(`Opened ${outputPath} in default application.\n`);
     }
     if (config.upload === 'gist') {
-      const text = wrappedBuffer.toString('utf-8');
-      const filename = 'tokenleak-wrapped.png';
-      const description = `Tokenleak Wrapped (${dateRange.since} to ${dateRange.until})`;
-      const url = await uploadToGist(text, filename, description);
+      const base64Content = wrappedBuffer.toString('base64');
+      const filename = 'tokenleak-wrapped.base64.txt';
+      const description = `Tokenleak Wrapped (${dateRange.since} to ${dateRange.until}) — base64-encoded PNG, decode with: base64 -d tokenleak-wrapped.base64.txt > wrapped.png`;
+      const url = await uploadToGist(base64Content, filename, description);
       process.stderr.write(`Uploaded to gist: ${url}\n`);
     } else if (config.upload !== undefined) {
       throw new TokenleakError(
