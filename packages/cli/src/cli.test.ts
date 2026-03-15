@@ -4,7 +4,7 @@ import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
-import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions, createMenuOptions } from './interactive';
+import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions, createMenuOptions, renderProgressBar } from './interactive';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -985,5 +985,48 @@ describe('renderFocusReport', () => {
     const midSeparators = lines.filter(l => l.startsWith('\u251C') && l.endsWith('\u2524'));
     // header separator + (entries - 1) between-entry separators = 1 + 1 = 2
     expect(midSeparators.length).toBe(2);
+  });
+});
+
+// --- tqdm-style progress bar ---
+
+describe('tqdm-style progress bar', () => {
+  test('contains braille spinner character', () => {
+    const bar = renderProgressBar(0, 60, 5);
+    expect(bar).toContain('⠋');
+  });
+
+  test('contains block characters', () => {
+    const bar = renderProgressBar(5, 60, 10);
+    // At frame 5, should have some filled blocks
+    expect(bar).toContain('█');
+    expect(bar).toContain('░');
+  });
+
+  test('contains elapsed time', () => {
+    const bar = renderProgressBar(0, 60, 42);
+    expect(bar).toContain('42s');
+  });
+
+  test('spinner cycles through braille chars', () => {
+    const plain0 = stripAnsi(renderProgressBar(0, 60, 0));
+    const plain1 = stripAnsi(renderProgressBar(1, 60, 0));
+    // Different spinner chars
+    expect(plain0[0]).not.toBe(plain1[0]);
+  });
+
+  test('adapts to narrow width', () => {
+    const bar = renderProgressBar(3, 30, 5);
+    const plain = stripAnsi(bar);
+    // Should not crash, and should have some visible content
+    expect(plain.length).toBeGreaterThan(10);
+  });
+
+  test('fill amount changes with frame', () => {
+    const bar0 = stripAnsi(renderProgressBar(0, 60, 0));
+    const bar10 = stripAnsi(renderProgressBar(10, 60, 0));
+    const fill0 = (bar0.match(/█/g) || []).length;
+    const fill10 = (bar10.match(/█/g) || []).length;
+    expect(fill10).toBeGreaterThan(fill0);
   });
 });
