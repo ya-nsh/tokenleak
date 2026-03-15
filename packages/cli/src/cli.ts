@@ -26,7 +26,7 @@ import {
   PiProvider,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServer } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, startLiveServer } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -44,7 +44,7 @@ import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export { computeDateRange };
 
-const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal'] as const;
+const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal', 'wrapped'] as const;
 const FOCUS_FORMAT_VALUES = ['json', 'terminal'] as const;
 const THEME_VALUES = ['dark', 'light'] as const;
 const PROVIDER_SHORTCUTS = {
@@ -156,7 +156,7 @@ function buildHelpText(): string {
     '  --list-providers        Show registered providers and aliases',
     '',
     'Flags:',
-    '  -f, --format <format>   Output format: terminal, png, svg, json',
+    '  -f, --format <format>   Output format: terminal, png, svg, json, wrapped',
     '  -t, --theme <theme>     Theme for png/svg/live output: dark, light',
     '  -s, --since <date>      Start date in YYYY-MM-DD format',
     '  -u, --until <date>      End date in YYYY-MM-DD format',
@@ -782,7 +782,7 @@ function getRenderer(format: string): IRenderer {
       return new PngRenderer();
     default:
       throw new TokenleakError(
-        `Format "${format}" is not supported. Available formats: json, svg, png, terminal`,
+        `Format "${format}" is not supported. Available formats: json, svg, png, terminal, wrapped`,
       );
   }
 }
@@ -997,8 +997,36 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     dateRange,
     providers: providerDataList,
     aggregated: stats,
-    more: config.more ? buildMoreStats(providerDataList, dateRange) : null,
+    more: (config.more || config.format === 'wrapped') ? buildMoreStats(providerDataList, dateRange) : null,
   };
+
+  // Wrapped format — special rendering path
+  if (config.format === 'wrapped') {
+    const outputPath = config.output ?? 'tokenleak-wrapped.png';
+    const wrappedBuffer = await renderWrappedPng(output, { theme: config.theme });
+    writeFileSync(outputPath, wrappedBuffer);
+    process.stderr.write(`Wrapped PNG written to ${outputPath}\n`);
+
+    if (config.clipboard) {
+      process.stderr.write('Clipboard is not supported for binary PNG output. Use --output to save the file.\n');
+    }
+    if (config.open) {
+      await openFile(outputPath);
+      process.stderr.write(`Opened ${outputPath} in default application.\n`);
+    }
+    if (config.upload === 'gist') {
+      const base64Content = wrappedBuffer.toString('base64');
+      const filename = 'tokenleak-wrapped.base64.txt';
+      const description = `Tokenleak Wrapped (${dateRange.since} to ${dateRange.until}) — base64-encoded PNG, decode with: base64 -d tokenleak-wrapped.base64.txt > wrapped.png`;
+      const url = await uploadToGist(base64Content, filename, description);
+      process.stderr.write(`Uploaded to gist: ${url}\n`);
+    } else if (config.upload !== undefined) {
+      throw new TokenleakError(
+        `Unknown upload target "${config.upload}". Supported: gist`,
+      );
+    }
+    return;
+  }
 
   // Live server mode
   if (config.liveServer) {
@@ -1264,7 +1292,7 @@ const main = defineCommand({
     format: {
       type: 'string',
       alias: 'f',
-      description: 'Output format: json, svg, png, terminal',
+      description: 'Output format: json, svg, png, terminal, wrapped',
     },
     theme: {
       type: 'string',
