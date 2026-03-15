@@ -247,9 +247,12 @@ export interface AttributionWindow {
   sessionCount: number;
 }
 
+export type AttributionTaskStyle = 'quick-hit' | 'iterative' | 'deep-work' | 'mixed';
+
 export interface AttributionCluster {
   clusterId: string;
   label: string;
+  taskStyle: AttributionTaskStyle;
   repoRoot: string | null;
   directory: string | null;
   sessionCount: number;

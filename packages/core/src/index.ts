@@ -25,6 +25,7 @@ export type {
   SessionDrilldownEntry,
   ProjectDrilldownEntry,
   AttributionWindow,
+  AttributionTaskStyle,
   AttributionCluster,
   ExplainEvidenceRow,
   ExplainAnomaly,
@@ -71,6 +72,7 @@ export {
 export {
   buildSessionRollups,
   buildProjectRollups,
+  buildAttributionClusters,
   inferRepoRoot,
   inferDirectoryLabel,
   normalizeScores,

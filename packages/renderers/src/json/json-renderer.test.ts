@@ -141,4 +141,40 @@ describe('JsonRenderer', () => {
     expect(parsed.more.cacheRoi.byProvider[0].label).toBe('Claude Code');
     expect(parsed.more.cacheRoi.byProject[0].label).toBe('project-alpha');
   });
+
+  it('preserves attribution clusters inside more stats', async () => {
+    const output = createMinimalTokenleakOutput({
+      more: createMoreStats({
+        attribution: [
+          {
+            clusterId: 'repo:/Users/test/work::dir:tokenleak::style:quick-hit',
+            label: 'tokenleak · quick hit',
+            taskStyle: 'quick-hit',
+            repoRoot: '/Users/test/work',
+            directory: 'tokenleak',
+            sessionCount: 2,
+            activeDays: 1,
+            tokens: 48000,
+            cost: 1.2,
+            providers: ['claude-code', 'pi'],
+            models: ['claude-3-opus'],
+            timeWindows: [
+              {
+                start: '2026-03-01T09:00:00.000Z',
+                end: '2026-03-01T10:00:00.000Z',
+                sessionCount: 2,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const result = await renderer.render(output, options);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.more.attribution).toHaveLength(1);
+    expect(parsed.more.attribution[0].taskStyle).toBe('quick-hit');
+    expect(parsed.more.attribution[0].timeWindows[0].sessionCount).toBe(2);
+  });
 });

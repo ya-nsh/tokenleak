@@ -12,6 +12,7 @@ export { buildMoreStats, computeModelMixShift } from './more';
 export {
   buildSessionRollups,
   buildProjectRollups,
+  buildAttributionClusters,
   inferRepoRoot,
   inferDirectoryLabel,
   normalizeScores,

@@ -13,7 +13,12 @@ import type {
   SessionSummary,
   UsageEvent,
 } from '../types';
-import { buildProjectRollups, buildSessionRollups, normalizeScores } from './analytics';
+import {
+  buildAttributionClusters,
+  buildProjectRollups,
+  buildSessionRollups,
+  normalizeScores,
+} from './analytics';
 
 const MIN_MODEL_EFFICIENCY_EVENTS = 2;
 const MIN_MODEL_EFFICIENCY_TOTAL_TOKENS = 1_000;
@@ -542,6 +547,7 @@ export function buildMoreStats(
   const events = collectEvents(providers);
   const sessionDrilldown = buildSessionRollups(events);
   const projectDrilldown = buildProjectRollups(events);
+  const attribution = buildAttributionClusters(events);
 
   return {
     inputOutput: buildInputOutput(providers),
@@ -553,6 +559,7 @@ export function buildMoreStats(
     sessionDrilldown,
     projectDrilldown,
     modelEfficiency: buildModelEfficiency(events),
+    attribution,
     compare: compare
       ? {
           previousRange: compare.previousRange,
