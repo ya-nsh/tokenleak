@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus } from './cli';
+import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
@@ -820,5 +820,131 @@ describe('CLI invocation', () => {
 
     expect(exitCode).toBe(1);
     expect(stderr).toContain('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+  });
+});
+
+describe('renderFocusReport', () => {
+  const mockFocusReport = {
+    method: 'event-based scoring',
+    entries: [
+      {
+        sessionId: 'sess-1',
+        label: 'Build UI components',
+        provider: 'claude-code',
+        projectId: null,
+        repoRoot: null,
+        start: '2026-03-01T08:00:00Z',
+        end: '2026-03-01T10:15:00Z',
+        durationMs: 8_100_000,
+        tokensPerHour: 45230,
+        totalTokens: 102000,
+        cost: 3.50,
+        streak: 3,
+        score: 8.5,
+        scoreBreakdown: { duration: 0.45, density: 0.30, streak: 0.25 },
+        rationale: ['dur 45%', 'den 30%', 'stk 25%'],
+      },
+      {
+        sessionId: 'sess-2',
+        label: 'API work',
+        provider: 'codex',
+        projectId: null,
+        repoRoot: null,
+        start: '2026-03-02T14:00:00Z',
+        end: '2026-03-02T15:30:00Z',
+        durationMs: 5_400_000,
+        tokensPerHour: 32100,
+        totalTokens: 48150,
+        cost: 1.20,
+        streak: 2,
+        score: 7.2,
+        scoreBreakdown: { duration: 0.40, density: 0.35, streak: 0.25 },
+        rationale: ['dur 40%', 'den 35%', 'stk 25%'],
+      },
+    ],
+  };
+
+  test('output contains box drawing characters', () => {
+    const output = renderFocusReport(mockFocusReport, 80, false);
+    expect(output).toContain('\u250C'); // ┌
+    expect(output).toContain('\u2500'); // ─
+    expect(output).toContain('\u2502'); // │
+    expect(output).toContain('\u2514'); // └
+    expect(output).toContain('\u252C'); // ┬
+    expect(output).toContain('\u2534'); // ┴
+    expect(output).toContain('\u253C'); // ┼
+    expect(output).toContain('\u251C'); // ├
+    expect(output).toContain('\u2524'); // ┤
+    expect(output).toContain('\u2510'); // ┐
+    expect(output).toContain('\u2518'); // ┘
+  });
+
+  test('no line exceeds width parameter', () => {
+    const width = 80;
+    const output = renderFocusReport(mockFocusReport, width, false);
+    const lines = output.split('\n');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('no line exceeds width parameter at width 100', () => {
+    const width = 100;
+    const output = renderFocusReport(mockFocusReport, width, false);
+    const lines = output.split('\n');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test('empty report shows no session data message', () => {
+    const emptyReport = { method: 'event-based scoring', entries: [] };
+    const output = renderFocusReport(emptyReport, 80, false);
+    expect(output).toContain('No session data available.');
+    expect(output).toContain('0 sessions ranked by deep-work score.');
+    // Should not contain box drawing for empty report
+    expect(output).not.toContain('\u250C');
+  });
+
+  test('rationale appears on second row of each entry', () => {
+    const output = renderFocusReport(mockFocusReport, 80, false);
+    const lines = output.split('\n');
+    // Find data rows containing scores, then check the next line has rationale
+    for (const entry of mockFocusReport.entries) {
+      const dataLineIdx = lines.findIndex(l => l.includes(entry.score.toFixed(1)) && l.includes(entry.provider));
+      expect(dataLineIdx).toBeGreaterThan(-1);
+      // Rationale row is the next line
+      const rationaleLine = lines[dataLineIdx + 1]!;
+      // Should contain parts of the rationale joined by middle dot
+      expect(rationaleLine).toContain(entry.rationale[0]!);
+    }
+  });
+
+  test('label column adapts when width changes', () => {
+    const narrow = renderFocusReport(mockFocusReport, 72, false);
+    const wide = renderFocusReport(mockFocusReport, 120, false);
+    // The top border line length reflects the total table width
+    const narrowTopLine = narrow.split('\n').find(l => l.startsWith('\u250C'))!;
+    const wideTopLine = wide.split('\n').find(l => l.startsWith('\u250C'))!;
+    expect(wideTopLine.length).toBeGreaterThan(narrowTopLine.length);
+  });
+
+  test('header row contains column names', () => {
+    const output = renderFocusReport(mockFocusReport, 80, false);
+    expect(output).toContain('Score');
+    expect(output).toContain('Dur');
+    expect(output).toContain('Density');
+    expect(output).toContain('Stk');
+    expect(output).toContain('Provider');
+    expect(output).toContain('Label');
+  });
+
+  test('separator rows appear between entries but not after the last', () => {
+    const output = renderFocusReport(mockFocusReport, 80, false);
+    const lines = output.split('\n');
+    // Count mid-separators (├...┤) — should be exactly 2: one after header, one between entries
+    const midSeparators = lines.filter(l => l.startsWith('\u251C') && l.endsWith('\u2524'));
+    // header separator + (entries - 1) between-entry separators = 1 + 1 = 2
+    expect(midSeparators.length).toBe(2);
   });
 });
