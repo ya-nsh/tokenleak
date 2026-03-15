@@ -945,24 +945,26 @@ describe('renderFocusReport', () => {
     expect(output).not.toContain('\u250C');
   });
 
-  test('rationale appears on second row of each entry', () => {
-    const output = renderFocusReport(mockFocusReport, 80, false);
+  test('each entry is exactly one row', () => {
+    const output = renderFocusReport(mockFocusReport, 100, true);
     const lines = output.split('\n');
-    // Find data rows containing scores, then check the next line has rationale
+    // Each entry should appear as a single line containing both score and provider
     for (const entry of mockFocusReport.entries) {
-      const dataLineIdx = lines.findIndex(l => l.includes(entry.score.toFixed(1)) && l.includes(entry.provider));
-      expect(dataLineIdx).toBeGreaterThan(-1);
-      // Rationale row is the next line
-      const rationaleLine = lines[dataLineIdx + 1]!;
-      // Should contain parts of the rationale joined by middle dot
-      expect(rationaleLine).toContain(entry.rationale[0]!);
+      const dataLines = lines.filter(l => l.includes(entry.score.toFixed(1)) && l.includes(entry.provider));
+      expect(dataLines.length).toBe(1);
     }
   });
 
-  test('label column adapts when width changes', () => {
-    const narrow = renderFocusReport(mockFocusReport, 72, true);
-    const wide = renderFocusReport(mockFocusReport, 120, true);
-    // Use noColor for reliable length comparison
+  test('label column shrinks when terminal is narrow', () => {
+    const longLabelReport = {
+      method: 'test',
+      entries: [{
+        ...mockFocusReport.entries[0]!,
+        label: 'A very long label that forces the table to be wider than a narrow terminal allows',
+      }],
+    };
+    const narrow = renderFocusReport(longLabelReport, 60, true);
+    const wide = renderFocusReport(longLabelReport, 120, true);
     const narrowTopLine = narrow.split('\n').find(l => l.startsWith('\u250C'))!;
     const wideTopLine = wide.split('\n').find(l => l.startsWith('\u250C'))!;
     expect(wideTopLine.length).toBeGreaterThan(narrowTopLine.length);
@@ -985,6 +987,33 @@ describe('renderFocusReport', () => {
     const midSeparators = lines.filter(l => l.startsWith('\u251C') && l.endsWith('\u2524'));
     // header separator + (entries - 1) between-entry separators = 1 + 1 = 2
     expect(midSeparators.length).toBe(2);
+  });
+
+  test('all table lines (borders + data) have identical visible width (noColor)', () => {
+    const output = renderFocusReport(mockFocusReport, 90, true);
+    const lines = output.split('\n');
+    const tableLines = lines.filter(l => l.includes('\u2502') || l.includes('\u250C') || l.includes('\u2514') || l.includes('\u251C'));
+    expect(tableLines.length).toBeGreaterThan(0);
+    const firstLen = tableLines[0]!.length;
+    for (const line of tableLines) {
+      expect(line.length).toBe(firstLen);
+    }
+  });
+
+  test('long labels are truncated with ellipsis at narrow width', () => {
+    const longLabelReport = {
+      method: 'test',
+      entries: [{
+        ...mockFocusReport.entries[0]!,
+        label: 'This is a very long label that should definitely be truncated when the terminal is narrow',
+      }],
+    };
+    const output = renderFocusReport(longLabelReport, 70, true);
+    expect(output).toContain('\u2026'); // … ellipsis
+    const lines = output.split('\n');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(70);
+    }
   });
 
   // ─── 256-color tests ────────────────────────────────────────────────

@@ -876,19 +876,14 @@ function colorStreak(streak: number, text: string, noColor: boolean): string {
 
 // ─── Focus report renderer ───────────────────────────────────────────
 
-function renderFocusReport(report: FocusReport, width: number, noColor: boolean): string {
-  const safeWidth = Math.max(72, width || 80);
+function truncateFocus(value: string, maxWidth: number): string {
+  if (value.length <= maxWidth) return value;
+  if (maxWidth <= 1) return value.slice(0, maxWidth);
+  return `${value.slice(0, maxWidth - 1)}\u2026`;
+}
 
-  // Fixed column widths (content width, not including borders)
-  const COL_SCORE = 7;
-  const COL_DUR = 8;
-  const COL_DENSITY = 13;
-  const COL_STK = 5;
-  const COL_PROVIDER = 13;
-  const FIXED_TOTAL = COL_SCORE + COL_DUR + COL_DENSITY + COL_STK + COL_PROVIDER;
-  const SEPARATORS = 7; // 7 vertical bars per row (including outer borders)
-  const COL_LABEL = Math.max(10, safeWidth - FIXED_TOTAL - SEPARATORS);
-  const colWidths = [COL_SCORE, COL_DUR, COL_DENSITY, COL_STK, COL_PROVIDER, COL_LABEL];
+function renderFocusReport(report: FocusReport, width: number, noColor: boolean): string {
+  const termWidth = Math.max(60, width || 80);
 
   const lines: string[] = [
     bold('Tokenleak Focus', noColor),
@@ -902,56 +897,108 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
     return lines.join('\n');
   }
 
-  // Box drawing helpers — dim the borders
+  // --- STEP 1: Build all cell values, measure natural widths ---
+  const headers = ['Score', 'Dur', 'Density', 'Stk', 'Provider', 'Label'];
+  const rows: string[][] = report.entries.map((entry) => [
+    entry.score.toFixed(1),
+    formatFocusDuration(entry.durationMs),
+    formatFocusDensity(entry.tokensPerHour),
+    `${entry.streak}d`,
+    entry.provider,
+    entry.label,
+  ]);
+
+  const colCount = headers.length;
+  const naturalWidths: number[] = headers.map((h) => h.length);
+  for (const row of rows) {
+    for (let c = 0; c < colCount; c++) {
+      naturalWidths[c] = Math.max(naturalWidths[c]!, row[c]!.length);
+    }
+  }
+  // Add 1-char padding on each side
+  const colWidths = naturalWidths.map((w) => w + 2);
+
+  // --- STEP 2: Enforce max total width ---
+  // Total = outer borders (2 chars: │…│) + inner separators (colCount-1) + sum(colWidths)
+  const chrome = 2 + (colCount - 1); // │col│col│col│ → 2 outer + (n-1) inner
+  const maxContentWidth = termWidth - chrome;
+  let totalContent = colWidths.reduce((sum, w) => sum + w, 0);
+
+  if (totalContent > maxContentWidth) {
+    // Shrink last column (Label) first, then work leftward
+    const surplus = totalContent - maxContentWidth;
+    const labelIdx = colCount - 1;
+    const minLabelWidth = headers[labelIdx]!.length + 2;
+    const labelShrink = Math.min(surplus, colWidths[labelIdx]! - minLabelWidth);
+    colWidths[labelIdx]! -= labelShrink;
+    totalContent -= labelShrink;
+
+    // If still over, shrink remaining columns right-to-left
+    if (totalContent > maxContentWidth) {
+      for (let c = colCount - 2; c >= 0 && totalContent > maxContentWidth; c--) {
+        const minW = headers[c]!.length + 2;
+        const shrink = Math.min(totalContent - maxContentWidth, colWidths[c]! - minW);
+        colWidths[c]! -= shrink;
+        totalContent -= shrink;
+      }
+    }
+  }
+
+  // --- STEP 3: Render the table ---
+  const border = (ch: string) => colorize256(ch, 245, noColor);
+
   function hLine(left: string, mid: string, right: string): string {
-    return dim(left + colWidths.map(w => '\u2500'.repeat(w)).join(mid) + right, noColor);
+    return border(left) + colWidths.map((w) => border('\u2500'.repeat(w))).join(border(mid)) + border(right);
   }
 
   function tableRow(cells: string[]): string {
-    return dim('\u2502', noColor) + cells.map((cell, i) => padCell(cell, colWidths[i]!)).join(dim('\u2502', noColor)) + dim('\u2502', noColor);
+    const padded = cells.map((cell, c) => {
+      const w = colWidths[c]!;
+      const inner = w - 2; // 1-char padding each side
+      const truncated = truncateFocus(cell, inner);
+      return ` ${truncated.padEnd(inner)} `;
+    });
+    return border('\u2502') + padded.join(border('\u2502')) + border('\u2502');
+  }
+
+  function coloredDataRow(entry: (typeof report.entries)[number], cells: string[]): string {
+    const padded = cells.map((cell, c) => {
+      const w = colWidths[c]!;
+      const inner = w - 2;
+      const truncated = truncateFocus(cell, inner);
+      const paddedText = truncated.padEnd(inner);
+      // Colorize based on column
+      switch (c) {
+        case 0: return ` ${colorScore(entry.score, paddedText, noColor)} `;
+        case 1: return ` ${colorDuration(entry.durationMs, paddedText, noColor)} `;
+        case 2: return ` ${colorDensity(entry.tokensPerHour, paddedText, noColor)} `;
+        case 3: return ` ${colorStreak(entry.streak, paddedText, noColor)} `;
+        case 4: return ` ${colorProvider(entry.provider, paddedText, noColor)} `;
+        default: return ` ${paddedText} `;
+      }
+    });
+    return border('\u2502') + padded.join(border('\u2502')) + border('\u2502');
   }
 
   lines.push('');
-  // Top border
   lines.push(hLine('\u250C', '\u252C', '\u2510'));
-  // Header — bold column names
-  lines.push(tableRow([
-    bold(' Score ', noColor),
-    bold('  Dur  ', noColor),
-    bold('   Density   ', noColor),
-    bold(' Stk ', noColor),
-    bold('  Provider   ', noColor),
-    bold(` ${padCell('Label', COL_LABEL - 1)}`, noColor),
-  ]));
-  // Header separator
+  // Bold header — pad plain text first, then bold the padded cell
+  const headerCells = headers.map((h, c) => {
+    const inner = colWidths[c]! - 2;
+    const padded = truncateFocus(h, inner).padEnd(inner);
+    return ` ${bold(padded, noColor)} `;
+  });
+  lines.push(border('\u2502') + headerCells.join(border('\u2502')) + border('\u2502'));
   lines.push(hLine('\u251C', '\u253C', '\u2524'));
 
   for (let i = 0; i < report.entries.length; i++) {
     const entry = report.entries[i]!;
-    // Data row — pad first, then colorize
-    const scoreStr = colorScore(entry.score, ` ${padCell(entry.score.toFixed(1), COL_SCORE - 2)} `, noColor);
-    const durStr = colorDuration(entry.durationMs, ` ${padCell(formatFocusDuration(entry.durationMs), COL_DUR - 2)} `, noColor);
-    const densityStr = colorDensity(entry.tokensPerHour, ` ${padCell(formatFocusDensity(entry.tokensPerHour), COL_DENSITY - 2)} `, noColor);
-    const stkStr = colorStreak(entry.streak, ` ${padCell(`${entry.streak}d`, COL_STK - 2)} `, noColor);
-    const provStr = colorProvider(entry.provider, ` ${padCell(truncateCell(entry.provider, COL_PROVIDER - 2), COL_PROVIDER - 2)} `, noColor);
-    const labelStr = ` ${truncateCell(entry.label, COL_LABEL - 2)}`;
-
-    lines.push(tableRow([scoreStr, durStr, densityStr, stkStr, provStr, padCell(labelStr, COL_LABEL)]));
-
-    // Rationale row — dim the text
-    const rationaleText = truncateCell(entry.rationale.join(' \u00B7 '), COL_LABEL - 2);
-    const emptyCell = (w: number) => ' '.repeat(w);
-    lines.push(
-      dim('\u2502', noColor) + emptyCell(COL_SCORE) + dim('\u2502', noColor) + emptyCell(COL_DUR) + dim('\u2502', noColor) + emptyCell(COL_DENSITY) + dim('\u2502', noColor) + emptyCell(COL_STK) + dim('\u2502', noColor) + emptyCell(COL_PROVIDER) + dim('\u2502', noColor) + padCell(` ${dim(rationaleText, noColor)}`, COL_LABEL) + dim('\u2502', noColor),
-    );
-
-    // Separator between entries (not after the last one)
-    if (i < report.entries.length - 1) {
+    if (i > 0) {
       lines.push(hLine('\u251C', '\u253C', '\u2524'));
     }
+    lines.push(coloredDataRow(entry, rows[i]!));
   }
 
-  // Bottom border
   lines.push(hLine('\u2514', '\u2534', '\u2518'));
 
   return lines.join('\n');
@@ -977,11 +1024,21 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
   }
 
   const { providerDataList } = await loadProviderData(config);
-  const report = buildFocusReport(providerDataList.flatMap((provider) => provider.events ?? []));
+  const events = providerDataList.flatMap((provider) => provider.events ?? []);
 
-  if (report.entries.length === 0) {
-    throw new TokenleakError('No event-level data found for focus analysis');
+  if (events.length === 0) {
+    const emptyMsg = config.format === 'json'
+      ? JSON.stringify({ method: 'No event data', entries: [] }, null, 2)
+      : renderFocusReport({ method: 'No event-level data found for focus analysis.', entries: [] }, config.width, config.noColor);
+    if (config.output) {
+      writeFileSync(config.output, emptyMsg);
+    } else {
+      process.stdout.write(`${emptyMsg}\n`);
+    }
+    return;
   }
+
+  const report = buildFocusReport(events);
 
   const rendered = config.format === 'json'
     ? JSON.stringify(report, null, 2)
