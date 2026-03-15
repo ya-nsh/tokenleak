@@ -28,7 +28,7 @@ import {
   MODEL_PRICING,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -45,6 +45,7 @@ import { startTabbedDashboard } from './tabbed-dashboard.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export { computeDateRange };
+export { renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak };
 
 const FORMAT_VALUES = ['json', 'svg', 'png', 'terminal', 'wrapped'] as const;
 const FOCUS_FORMAT_VALUES = ['json', 'terminal'] as const;
@@ -836,7 +837,46 @@ function formatFocusDensity(tokensPerHour: number): string {
   return `${Math.round(tokensPerHour).toLocaleString('en-US')}/h`;
 }
 
-export function renderFocusReport(report: FocusReport, width: number, _noColor: boolean): string {
+// ─── Focus report color helpers ───────────────────────────────────────
+
+const PROVIDER_COLORS: Record<string, number> = {
+  'claude-code': 179, // amber
+  codex: 71,          // green
+  pi: 73,             // cyan/teal
+  'open-code': 68,    // indigo/steel blue
+};
+
+function colorScore(value: number, text: string, noColor: boolean): string {
+  if (value >= 8) return colorize256(text, 71, noColor);   // green
+  if (value >= 5) return colorize256(text, 179, noColor);  // yellow/amber
+  if (value >= 3) return colorize256(text, 73, noColor);   // cyan
+  return dim(text, noColor);
+}
+
+function colorDuration(durationMs: number | null, text: string, noColor: boolean): string {
+  if (durationMs && durationMs > 3_600_000) return bold256(text, 255, noColor); // bold white for >1h
+  return text;
+}
+
+function colorDensity(tokensPerHour: number, text: string, noColor: boolean): string {
+  if (tokensPerHour > 30_000) return colorize256(text, 71, noColor);  // green
+  if (tokensPerHour > 15_000) return colorize256(text, 179, noColor); // yellow
+  return dim(text, noColor);
+}
+
+function colorProvider(provider: string, text: string, noColor: boolean): string {
+  const code = PROVIDER_COLORS[provider] ?? 246; // gray fallback
+  return colorize256(text, code, noColor);
+}
+
+function colorStreak(streak: number, text: string, noColor: boolean): string {
+  if (streak >= 3) return colorize256(text, 208, noColor); // orange/fire
+  return text;
+}
+
+// ─── Focus report renderer ───────────────────────────────────────────
+
+function renderFocusReport(report: FocusReport, width: number, noColor: boolean): string {
   const safeWidth = Math.max(72, width || 80);
 
   // Fixed column widths (content width, not including borders)
@@ -851,7 +891,7 @@ export function renderFocusReport(report: FocusReport, width: number, _noColor: 
   const colWidths = [COL_SCORE, COL_DUR, COL_DENSITY, COL_STK, COL_PROVIDER, COL_LABEL];
 
   const lines: string[] = [
-    'Tokenleak Focus',
+    bold('Tokenleak Focus', noColor),
     report.method,
     '',
     `${report.entries.length} sessions ranked by deep-work score.`,
@@ -862,40 +902,47 @@ export function renderFocusReport(report: FocusReport, width: number, _noColor: 
     return lines.join('\n');
   }
 
-  // Box drawing helpers
+  // Box drawing helpers — dim the borders
   function hLine(left: string, mid: string, right: string): string {
-    return left + colWidths.map(w => '\u2500'.repeat(w)).join(mid) + right;
+    return dim(left + colWidths.map(w => '\u2500'.repeat(w)).join(mid) + right, noColor);
   }
 
   function tableRow(cells: string[]): string {
-    return '\u2502' + cells.map((cell, i) => padCell(cell, colWidths[i]!)).join('\u2502') + '\u2502';
+    return dim('\u2502', noColor) + cells.map((cell, i) => padCell(cell, colWidths[i]!)).join(dim('\u2502', noColor)) + dim('\u2502', noColor);
   }
 
   lines.push('');
   // Top border
   lines.push(hLine('\u250C', '\u252C', '\u2510'));
-  // Header
-  lines.push(tableRow([' Score ', '  Dur  ', '   Density   ', ' Stk ', '  Provider   ', ` ${padCell('Label', COL_LABEL - 1)}`]));
+  // Header — bold column names
+  lines.push(tableRow([
+    bold(' Score ', noColor),
+    bold('  Dur  ', noColor),
+    bold('   Density   ', noColor),
+    bold(' Stk ', noColor),
+    bold('  Provider   ', noColor),
+    bold(` ${padCell('Label', COL_LABEL - 1)}`, noColor),
+  ]));
   // Header separator
   lines.push(hLine('\u251C', '\u253C', '\u2524'));
 
   for (let i = 0; i < report.entries.length; i++) {
     const entry = report.entries[i]!;
-    // Data row
-    const scoreStr = ` ${padCell(entry.score.toFixed(1), COL_SCORE - 2)} `;
-    const durStr = ` ${padCell(formatFocusDuration(entry.durationMs), COL_DUR - 2)} `;
-    const densityStr = ` ${padCell(formatFocusDensity(entry.tokensPerHour), COL_DENSITY - 2)} `;
-    const stkStr = ` ${padCell(`${entry.streak}d`, COL_STK - 2)} `;
-    const provStr = ` ${padCell(truncateCell(entry.provider, COL_PROVIDER - 2), COL_PROVIDER - 2)} `;
+    // Data row — pad first, then colorize
+    const scoreStr = colorScore(entry.score, ` ${padCell(entry.score.toFixed(1), COL_SCORE - 2)} `, noColor);
+    const durStr = colorDuration(entry.durationMs, ` ${padCell(formatFocusDuration(entry.durationMs), COL_DUR - 2)} `, noColor);
+    const densityStr = colorDensity(entry.tokensPerHour, ` ${padCell(formatFocusDensity(entry.tokensPerHour), COL_DENSITY - 2)} `, noColor);
+    const stkStr = colorStreak(entry.streak, ` ${padCell(`${entry.streak}d`, COL_STK - 2)} `, noColor);
+    const provStr = colorProvider(entry.provider, ` ${padCell(truncateCell(entry.provider, COL_PROVIDER - 2), COL_PROVIDER - 2)} `, noColor);
     const labelStr = ` ${truncateCell(entry.label, COL_LABEL - 2)}`;
 
     lines.push(tableRow([scoreStr, durStr, densityStr, stkStr, provStr, padCell(labelStr, COL_LABEL)]));
 
-    // Rationale row (inside same cell block, no horizontal separator)
+    // Rationale row — dim the text
     const rationaleText = truncateCell(entry.rationale.join(' \u00B7 '), COL_LABEL - 2);
     const emptyCell = (w: number) => ' '.repeat(w);
     lines.push(
-      '\u2502' + emptyCell(COL_SCORE) + '\u2502' + emptyCell(COL_DUR) + '\u2502' + emptyCell(COL_DENSITY) + '\u2502' + emptyCell(COL_STK) + '\u2502' + emptyCell(COL_PROVIDER) + '\u2502' + padCell(` ${rationaleText}`, COL_LABEL) + '\u2502',
+      dim('\u2502', noColor) + emptyCell(COL_SCORE) + dim('\u2502', noColor) + emptyCell(COL_DUR) + dim('\u2502', noColor) + emptyCell(COL_DENSITY) + dim('\u2502', noColor) + emptyCell(COL_STK) + dim('\u2502', noColor) + emptyCell(COL_PROVIDER) + dim('\u2502', noColor) + padCell(` ${dim(rationaleText, noColor)}`, COL_LABEL) + dim('\u2502', noColor),
     );
 
     // Separator between entries (not after the last one)

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport } from './cli';
+import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
@@ -918,18 +918,18 @@ describe('renderFocusReport', () => {
     expect(output).toContain('\u2518'); // ┘
   });
 
-  test('no line exceeds width parameter', () => {
+  test('no line exceeds width parameter (noColor)', () => {
     const width = 80;
-    const output = renderFocusReport(mockFocusReport, width, false);
+    const output = renderFocusReport(mockFocusReport, width, true);
     const lines = output.split('\n');
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(width);
     }
   });
 
-  test('no line exceeds width parameter at width 100', () => {
+  test('no line exceeds width parameter at width 100 (noColor)', () => {
     const width = 100;
-    const output = renderFocusReport(mockFocusReport, width, false);
+    const output = renderFocusReport(mockFocusReport, width, true);
     const lines = output.split('\n');
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(width);
@@ -960,9 +960,9 @@ describe('renderFocusReport', () => {
   });
 
   test('label column adapts when width changes', () => {
-    const narrow = renderFocusReport(mockFocusReport, 72, false);
-    const wide = renderFocusReport(mockFocusReport, 120, false);
-    // The top border line length reflects the total table width
+    const narrow = renderFocusReport(mockFocusReport, 72, true);
+    const wide = renderFocusReport(mockFocusReport, 120, true);
+    // Use noColor for reliable length comparison
     const narrowTopLine = narrow.split('\n').find(l => l.startsWith('\u250C'))!;
     const wideTopLine = wide.split('\n').find(l => l.startsWith('\u250C'))!;
     expect(wideTopLine.length).toBeGreaterThan(narrowTopLine.length);
@@ -979,12 +979,96 @@ describe('renderFocusReport', () => {
   });
 
   test('separator rows appear between entries but not after the last', () => {
-    const output = renderFocusReport(mockFocusReport, 80, false);
+    const output = renderFocusReport(mockFocusReport, 80, true);
     const lines = output.split('\n');
-    // Count mid-separators (├...┤) — should be exactly 2: one after header, one between entries
+    // Count mid-separators — use noColor so startsWith/endsWith work
     const midSeparators = lines.filter(l => l.startsWith('\u251C') && l.endsWith('\u2524'));
     // header separator + (entries - 1) between-entry separators = 1 + 1 = 2
     expect(midSeparators.length).toBe(2);
+  });
+
+  // ─── 256-color tests ────────────────────────────────────────────────
+
+  test('contains ANSI escape codes when noColor is false', () => {
+    const output = renderFocusReport(mockFocusReport, 80, false);
+    expect(/\x1b\[/.test(output)).toBe(true);
+  });
+
+  test('contains no ANSI escape codes when noColor is true', () => {
+    const output = renderFocusReport(mockFocusReport, 80, true);
+    expect(/\x1b\[/.test(output)).toBe(false);
+  });
+
+  test('score >= 8 uses green (color code 71)', () => {
+    const text = colorScore(8.5, '8.5   ', false);
+    expect(text).toContain('38;5;71m');
+  });
+
+  test('score >= 5 but < 8 uses amber (color code 179)', () => {
+    const text = colorScore(5.5, '5.5   ', false);
+    expect(text).toContain('38;5;179m');
+  });
+
+  test('score >= 3 but < 5 uses cyan (color code 73)', () => {
+    const text = colorScore(3.5, '3.5   ', false);
+    expect(text).toContain('38;5;73m');
+  });
+
+  test('score < 3 uses dim styling', () => {
+    const text = colorScore(2.0, '2.0   ', false);
+    expect(text).toContain('\x1b[2m');
+  });
+
+  test('duration > 1h uses bold white (code 255)', () => {
+    const text = colorDuration(4_000_000, '1h06m ', false);
+    expect(text).toContain('38;5;255m');
+    expect(text).toContain('\x1b[1;');
+  });
+
+  test('duration <= 1h returns plain text', () => {
+    const text = colorDuration(1_800_000, '30m   ', false);
+    expect(text).toBe('30m   ');
+  });
+
+  test('density > 30k uses green (code 71)', () => {
+    const text = colorDensity(35_000, '35,000/h    ', false);
+    expect(text).toContain('38;5;71m');
+  });
+
+  test('density > 15k uses amber (code 179)', () => {
+    const text = colorDensity(20_000, '20,000/h    ', false);
+    expect(text).toContain('38;5;179m');
+  });
+
+  test('density <= 15k uses dim', () => {
+    const text = colorDensity(10_000, '10,000/h    ', false);
+    expect(text).toContain('\x1b[2m');
+  });
+
+  test('streak >= 3 uses orange (code 208)', () => {
+    const text = colorStreak(5, '5d  ', false);
+    expect(text).toContain('38;5;208m');
+  });
+
+  test('streak < 3 returns plain text', () => {
+    const text = colorStreak(2, '2d  ', false);
+    expect(text).toBe('2d  ');
+  });
+
+  test('known provider uses its color, unknown falls back to gray (246)', () => {
+    const claude = colorProvider('claude-code', 'claude-code', false);
+    expect(claude).toContain('38;5;179m');
+
+    const unknown = colorProvider('unknown-tool', 'unknown-tool', false);
+    expect(unknown).toContain('38;5;246m');
+  });
+
+  test('all color helpers return plain text when noColor is true', () => {
+    expect(colorScore(9, 'hi', true)).toBe('hi');
+    expect(colorDuration(5_000_000, 'hi', true)).toBe('hi');
+    expect(colorDensity(50_000, 'hi', true)).toBe('hi');
+    expect(colorStreak(5, 'hi', true)).toBe('hi');
+    expect(colorProvider('claude-code', 'hi', true)).toBe('hi');
   });
 });
 
