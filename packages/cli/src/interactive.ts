@@ -381,38 +381,49 @@ function renderLauncher(
   return `${HOME_CLEAR}${HIDE_CURSOR}${body.join('\n')}`;
 }
 
-function renderProgressBar(frame: number, width: number): string {
-  const innerWidth = Math.max(12, width - 2);
-  const headSize = Math.max(4, Math.floor(innerWidth / 5));
-  const travel = Math.max(1, innerWidth - headSize);
-  const cycle = travel * 2;
-  const offset = frame % cycle;
-  const start = offset <= travel ? offset : cycle - offset;
-  const cells = Array.from({ length: innerWidth }, (_, index) => {
-    if (index >= start && index < start + headSize) {
-      return '=';
-    }
-    return '-';
-  }).join('');
+const BRAILLE_SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 
-  return color(`[${cells}]`, CYAN);
+export function renderProgressBar(frame: number, width: number, elapsedSeconds: number): string {
+  // Spinner
+  const spinner = BRAILLE_SPINNER[frame % BRAILLE_SPINNER.length]!;
+
+  // Elapsed time string
+  const timeStr = `${elapsedSeconds}s`;
+
+  // Chrome: "⠋ Working... [" + "] 12s"
+  const prefix = `${spinner} Working... [`;
+  const suffix = `] ${timeStr}`;
+  const chromeWidth = prefix.length + suffix.length;
+
+  // Bar width
+  const barWidth = Math.max(8, width - chromeWidth);
+
+  // Sliding fill animation: grows from left, then pulses
+  const cycle = barWidth * 2;
+  const position = frame % cycle;
+  const fillCount = position <= barWidth ? position : cycle - position;
+
+  const filled = '\u2588'.repeat(fillCount);
+  const empty = '\u2591'.repeat(barWidth - fillCount);
+
+  // Color: green for filled, dim for empty
+  const coloredFilled = color(filled, GREEN);
+  const coloredEmpty = color(empty, DIM);
+
+  return `${color(spinner, GREEN)} Working... [${coloredFilled}${coloredEmpty}] ${color(timeStr, DIM)}`;
 }
 
 function renderLoading(request: InteractiveRunRequest, frame = 0, startedAt = Date.now()): string {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  const progressBar = renderProgressBar(frame, 34);
+  const termWidth = Math.max(40, (process.stdout.columns ?? 80) - 2);
+  const progressBar = renderProgressBar(frame, termWidth, elapsedSeconds);
   const lines = [
     color(request.loadingTitle, WHITE + BOLD),
     color(request.preview, CYAN),
     '',
     color(request.loadingDetail, DIM),
     '',
-    color('Status', WHITE + BOLD),
-    color('Working... stay in tokenleak while this finishes.', YELLOW),
-    '',
-    color('Progress', WHITE + BOLD),
     progressBar,
-    color(`Elapsed ${elapsedSeconds}s`, DIM),
     '',
     renderRule(44),
   ];
