@@ -1,4 +1,4 @@
-import { bold, bold256, dim, inverse256 } from '../colors';
+import { bold, bold256, dim, inverse256, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 export type TimeRange = '7d' | '30d' | '90d' | '365d';
@@ -19,8 +19,8 @@ const TAB_LABELS: Record<MetricTab, string> = {
   tod: 'tod',
 };
 
-const ACTIVE_COLOR = 33;  // blue
-const HINT_COLOR = 220;   // gold
+const ACTIVE_COLOR = SEMANTIC.ACTIVE;
+const HINT_COLOR = SEMANTIC.HINT;
 
 export function renderTabBar(
   activeRange: TimeRange,

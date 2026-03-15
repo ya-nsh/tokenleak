@@ -1,5 +1,5 @@
 import type { TokenleakOutput } from '@tokenleak/core';
-import { bold, bold256, dim, colorize256 } from '../colors';
+import { bold, bold256, dim, colorize256, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 function formatTokens(n: number): string {
@@ -28,9 +28,9 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
 
   // Summary line
   const parts: string[] = [
-    bold256(`${metrics.totalSessions}`, 33, noColor) + ' sessions',
-    bold256(formatCost(metrics.averageCost), 40, noColor) + ' avg/session',
-    bold256(formatTokens(metrics.averageTokens), 208, noColor) + ' avg tokens/session',
+    bold256(`${metrics.totalSessions}`, SEMANTIC.INPUT, noColor) + ' sessions',
+    bold256(formatCost(metrics.averageCost), SEMANTIC.OUTPUT, noColor) + ' avg/session',
+    bold256(formatTokens(metrics.averageTokens), SEMANTIC.ACCENT, noColor) + ' avg tokens/session',
   ];
   lines.push(truncateVisible(`  ${parts.join(dim('  ·  ', noColor))}`, width));
   lines.push('');
@@ -67,7 +67,7 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
   if (metrics.topProject) {
     lines.push('');
     lines.push(truncateVisible(
-      `  ${dim('Top project:', noColor)} ${bold256(metrics.topProject.name, 40, noColor)} (${formatTokens(metrics.topProject.tokens)})`,
+      `  ${dim('Top project:', noColor)} ${bold256(metrics.topProject.name, SEMANTIC.OUTPUT, noColor)} (${formatTokens(metrics.topProject.tokens)})`,
       width,
     ));
   }

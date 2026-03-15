@@ -1,5 +1,5 @@
 import type { TokenleakOutput } from '@tokenleak/core';
-import { colorize256, bold, dim, MODEL_COLORS } from '../colors';
+import { colorize256, bold, dim, MODEL_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 const BAR_CHAR = '\u2588';
@@ -60,8 +60,8 @@ export function renderModelView(output: TokenleakOutput, width: number, noColor:
     const inputLen = Math.round(inputShare * ioBarWidth);
     const outputLen = ioBarWidth - inputLen;
     const ioBar =
-      colorize256(BAR_CHAR.repeat(inputLen), 33, noColor) +
-      colorize256(BAR_CHAR.repeat(outputLen), 40, noColor);
+      colorize256(BAR_CHAR.repeat(inputLen), SEMANTIC.INPUT, noColor) +
+      colorize256(BAR_CHAR.repeat(outputLen), SEMANTIC.OUTPUT, noColor);
     lines.push(truncateVisible(
       `  ${ioBar}  ${dim(`input ${(inputShare * 100).toFixed(0)}%`, noColor)} ${dim(`output ${(io.outputShare * 100).toFixed(0)}%`, noColor)}`,
       width,

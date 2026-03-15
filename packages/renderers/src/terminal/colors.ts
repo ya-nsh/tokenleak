@@ -51,50 +51,60 @@ export function bold(text: string, noColor: boolean): string {
   return `${ESC}1m${text}${RESET}`;
 }
 
+/** Semantic color constants for dashboard UI elements. */
+export const SEMANTIC = {
+  INPUT: 68,     // steel blue
+  OUTPUT: 71,    // sage green
+  ACCENT: 173,   // terracotta
+  NEGATIVE: 167, // brick red
+  ACTIVE: 68,    // steel blue (active tab)
+  HINT: 179,     // warm amber (keyboard hints)
+} as const;
+
 /** Day-of-week colors (7 distinct 256-color codes). */
 export const DOW_COLORS: Record<string, number> = {
-  Sun: 213, // pink
-  Mon: 33,  // blue
-  Tue: 40,  // green
-  Wed: 208, // orange
-  Thu: 141, // purple
-  Fri: 220, // gold
-  Sat: 209, // coral
+  Sun: 174, // soft coral
+  Mon: 68,  // steel blue
+  Tue: 71,  // sage green
+  Wed: 179, // warm amber
+  Thu: 140, // soft lavender
+  Fri: 115, // mint/seafoam
+  Sat: 173, // terracotta
 };
 
 /** Time-of-day bucket colors (5 distinct 256-color codes). */
 export const TOD_COLORS: Record<string, number> = {
-  'After midnight': 213, // pink
-  Morning: 208,          // orange
-  Afternoon: 40,         // green
-  Evening: 33,           // blue
-  Night: 141,            // purple
+  'After midnight': 140, // soft lavender
+  Morning: 179,          // warm amber
+  Afternoon: 71,         // sage green
+  Evening: 68,           // steel blue
+  Night: 96,             // dusty purple
 };
 
 /** Distinct colors for up to 10 models. */
 export const MODEL_COLORS: number[] = [
-  33,  // blue
-  40,  // green
-  208, // orange
-  141, // purple
-  220, // gold
-  209, // coral
-  213, // pink
-  51,  // cyan
-  196, // red
-  118, // lime
+  68,  // steel blue
+  71,  // sage green
+  173, // terracotta
+  140, // soft lavender
+  179, // warm amber
+  174, // soft coral
+  139, // mauve pink
+  73,  // muted teal
+  167, // brick red
+  115, // mint/seafoam
 ];
 
 /** Distinct colors for up to 10 projects. */
 export const PROJECT_COLORS: number[] = [
-  40,  // green
-  33,  // blue
-  208, // orange
-  213, // pink
-  220, // gold
-  141, // purple
-  209, // coral
-  51,  // cyan
-  196, // red
-  118, // lime
+  71,  // sage green
+  68,  // steel blue
+  173, // terracotta
+  139, // mauve pink
+  179, // warm amber
+  140, // soft lavender
+  174, // soft coral
+  73,  // muted teal
+  167, // brick red
+  115, // mint/seafoam
 ];
