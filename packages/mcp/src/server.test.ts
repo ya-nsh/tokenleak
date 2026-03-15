@@ -105,17 +105,18 @@ async function createConnectedClient(registry?: ProviderRegistry) {
 // ---------------------------------------------------------------------------
 
 describe('MCP Server', () => {
-  it('lists all 6 tools', async () => {
+  it('lists all 7 tools', async () => {
     const { client } = await createConnectedClient();
 
     const result = await client.listTools();
 
-    expect(result.tools).toHaveLength(6);
+    expect(result.tools).toHaveLength(7);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'compare_periods',
       'get_cost_breakdown',
       'get_daily_usage',
+      'get_efficiency_advice',
       'get_streaks_and_habits',
       'get_usage_summary',
       'list_providers',
