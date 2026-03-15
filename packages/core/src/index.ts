@@ -67,6 +67,7 @@ export {
   computePreviousPeriod,
   buildMoreStats,
   computeModelMixShift,
+  buildExplainReport,
 } from './aggregation';
 
 export {

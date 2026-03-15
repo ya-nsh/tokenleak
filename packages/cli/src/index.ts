@@ -5,3 +5,4 @@ export { loadConfig } from './config.js';
 export type { CliConfig } from './config.js';
 export { loadEnvOverrides } from './env.js';
 export { TokenleakError, handleError } from './errors.js';
+export { renderExplainTerminal, buildExplainHelpText } from './explain.js';

@@ -6,6 +6,7 @@ import {
   DEFAULT_DAYS,
   SCHEMA_VERSION,
   aggregate,
+  buildExplainReport,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
@@ -27,10 +28,11 @@ import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, startLiveServ
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
-import { loadCompareTokenleakData } from './data-loader.js';
+import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
 import { TokenleakError, handleError } from './errors.js';
+import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
@@ -112,6 +114,7 @@ function buildHelpText(): string {
     '',
     'Usage:',
     '  tokenleak [flags]',
+    '  tokenleak explain <date> [flags]',
     '',
     'Provider Shortcuts:',
     '  --claude                Only include Claude Code',
@@ -152,6 +155,8 @@ function buildHelpText(): string {
     '  tokenleak --list-providers',
     '  tokenleak --compare auto --format terminal',
     '  tokenleak --live-server --theme light',
+    '  tokenleak explain 2026-03-10',
+    '  tokenleak explain 2026-03-10 --format json',
     '',
     'Version:',
     `  CLI ${VERSION}`,
@@ -761,6 +766,169 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   }
 }
 
+function isValidDateArgument(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
+
+function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
+  if (argv.length === 0 || argv[0]?.startsWith('-')) {
+    throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+  }
+
+  const date = argv[0]!;
+  if (!isValidDateArgument(date)) {
+    throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+  }
+
+  const cliArgs: Record<string, unknown> = {};
+  let index = 1;
+
+  while (index < argv.length) {
+    const arg = argv[index]!;
+    switch (arg) {
+      case '--help':
+      case '-h':
+        cliArgs['help'] = true;
+        index += 1;
+        break;
+      case '--version':
+      case '-v':
+        cliArgs['version'] = true;
+        index += 1;
+        break;
+      case '--format':
+      case '-f':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['format'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--output':
+      case '-o':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['output'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--width':
+      case '-w':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['width'] = Number(argv[index + 1]!);
+        index += 2;
+        break;
+      case '--provider':
+      case '-p':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['provider'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--claude':
+        cliArgs['claude'] = true;
+        index += 1;
+        break;
+      case '--codex':
+        cliArgs['codex'] = true;
+        index += 1;
+        break;
+      case '--pi':
+        cliArgs['pi'] = true;
+        index += 1;
+        break;
+      case '--openCode':
+      case '--open-code':
+        cliArgs['openCode'] = true;
+        index += 1;
+        break;
+      case '--allProviders':
+      case '--all-providers':
+        cliArgs['allProviders'] = true;
+        index += 1;
+        break;
+      case '--noColor':
+      case '--no-color':
+        cliArgs['noColor'] = true;
+        index += 1;
+        break;
+      default:
+        throw new TokenleakError(`Unknown explain flag "${arg}"`);
+    }
+  }
+
+  return { date, cliArgs };
+}
+
+function resolveExplainFormat(cliArgs: Record<string, unknown>): 'json' | 'terminal' {
+  if (typeof cliArgs['format'] === 'string') {
+    const format = cliArgs['format'];
+    if (format === 'json' || format === 'terminal') {
+      return format;
+    }
+
+    throw new TokenleakError('tokenleak explain only supports --format terminal or --format json');
+  }
+
+  if (typeof cliArgs['output'] === 'string') {
+    const inferred = inferFormatFromPath(cliArgs['output']);
+    if (inferred === 'json') {
+      return 'json';
+    }
+  }
+
+  return 'terminal';
+}
+
+async function runExplain(date: string, cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveExplainFormat(cliArgs);
+
+  if (config.allProviders && (
+    config.provider ||
+    config.claude ||
+    config.codex ||
+    config.pi ||
+    config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  const explainRange = computeDateRange({ until: date, days: 30 });
+  const registry = new ProviderRegistry();
+  registerBuiltInProviders(registry);
+
+  let available = await registry.getAvailable();
+  const requestedProviders = getRequestedProviders(config);
+  if (!config.allProviders && requestedProviders.size > 0) {
+    available = available.filter((provider) => providerMatchesFilter(provider, requestedProviders));
+  }
+
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const explainOutput = await loadTokenleakData(available, explainRange);
+  const report = buildExplainReport(explainOutput.providers, date);
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderExplainTerminal(report, config.width);
+
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else {
+    process.stdout.write(rendered + '\n');
+  }
+}
+
 const main = defineCommand({
   meta: {
     name: 'tokenleak',
@@ -924,6 +1092,27 @@ if (isDirectExecution) {
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   const argv = normalizedArgv;
+
+  if (argv[0] === 'explain') {
+    try {
+      const { date, cliArgs } = parseExplainArgs(argv.slice(1));
+
+      if (cliArgs['help']) {
+        process.stdout.write(buildExplainHelpText());
+        process.exit(0);
+      }
+
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await runExplain(date, cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
 
   if (argv.includes('--help') || argv.includes('-h')) {
     process.stdout.write(buildHelpText());
