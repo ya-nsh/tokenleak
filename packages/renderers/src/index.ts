@@ -21,4 +21,3 @@ export {
   METRIC_TABS,
 } from './terminal/index';
 export type { TimeRange, MetricTab } from './terminal/index';
-export { renderAdvisorView } from './terminal/index';

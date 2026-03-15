@@ -86,6 +86,3 @@ export {
   formatDateStringUtc,
   compareDateStrings,
 } from './date-utils';
-
-export { analyzeEfficiency, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
-export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';

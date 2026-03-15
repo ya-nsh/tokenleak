@@ -30,4 +30,3 @@ export {
   METRIC_TABS,
 } from './tab-views';
 export type { TimeRange, MetricTab } from './tab-views';
-export { renderAdvisorView } from './advisor-view';

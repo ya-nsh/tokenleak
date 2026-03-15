@@ -7,7 +7,6 @@ import { handleGetDailyUsage } from './get-daily-usage.js';
 import { handleGetCostBreakdown } from './get-cost-breakdown.js';
 import { handleGetStreaksAndHabits } from './get-streaks-and-habits.js';
 import { handleComparePeriods } from './compare-periods.js';
-import { handleGetEfficiencyAdvice } from './get-efficiency-advice.js';
 
 export function registerTools(server: McpServer, registry: ProviderRegistry): void {
   server.tool(
@@ -73,17 +72,5 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
       previous_until: z.string().optional().describe('End date of the previous period (auto-computed if omitted)'),
     },
     async (args) => handleComparePeriods(args, registry),
-  );
-
-  server.tool(
-    'get_efficiency_advice',
-    'Analyze token usage patterns and suggest cost-saving model switches and optimizations. Returns actionable recommendations with projected savings.',
-    {
-      days: z.number().optional().describe('Number of days to look back (default: 30)'),
-      since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
-      until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
-      provider: z.string().optional().describe('Filter to a specific provider by name'),
-    },
-    async (args) => handleGetEfficiencyAdvice(args, registry),
   );
 }
