@@ -28,7 +28,7 @@ import {
   MODEL_PRICING,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -174,6 +174,7 @@ function buildHelpText(): string {
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
     '  -L, --live-server       Start the interactive local dashboard',
+    '      --wrapped-live      Start the AI Wrapped presentation in a browser',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
     '      --help              Show this help',
@@ -190,6 +191,7 @@ function buildHelpText(): string {
     '  tokenleak --list-providers',
     '  tokenleak --compare auto --format terminal',
     '  tokenleak --live-server --theme light',
+    '  tokenleak --wrapped-live --days 365',
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
@@ -245,6 +247,7 @@ function normalizeCliArg(arg: string): string {
     '--list-providers': '--listProviders',
     '--open-code': '--openCode',
     '--live-server': '--liveServer',
+    '--wrapped-live': '--wrappedLive',
     '--no-color': '--noColor',
     '--no-insights': '--noInsights',
   };
@@ -277,6 +280,10 @@ export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: bo
 
   if (cliArgs['liveServer']) {
     return 'Live dashboard stopped.';
+  }
+
+  if (cliArgs['wrappedLive']) {
+    return 'Wrapped live presentation stopped.';
   }
 
   if (cliArgs['compare']) {
@@ -529,6 +536,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   open: boolean;
   upload?: string;
   liveServer: boolean;
+  wrappedLive: boolean;
   advisor: boolean;
 } {
   const fileConfig = loadConfig();
@@ -556,6 +564,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: boolean;
     open: boolean;
     liveServer: boolean;
+    wrappedLive: boolean;
     advisor: boolean;
   } = {
     format: 'terminal',
@@ -575,6 +584,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     clipboard: false,
     open: false,
     liveServer: false,
+    wrappedLive: false,
     advisor: false,
   };
 
@@ -674,6 +684,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['liveServer'] !== undefined) {
     result.liveServer = cliArgs['liveServer'] as boolean;
+  }
+  if (cliArgs['wrappedLive'] !== undefined) {
+    result.wrappedLive = cliArgs['wrappedLive'] as boolean;
   }
   if (cliArgs['advisor'] !== undefined) {
     result.advisor = cliArgs['advisor'] as boolean;
@@ -1152,7 +1165,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const stats = aggregate(mergedDaily, dateRange.until);
 
   // Force --more when --advisor is used (needs event data)
-  const needsMore = config.more || config.format === 'wrapped' || config.advisor;
+  const needsMore = config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -1250,6 +1263,21 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     await new Promise<void>((resolve) => {
       process.on('SIGINT', () => {
         process.stderr.write('\nShutting down server...\n');
+        resolve();
+      });
+      process.on('SIGTERM', () => {
+        resolve();
+      });
+    });
+    return;
+  }
+
+  // Wrapped live server mode
+  if (config.wrappedLive) {
+    const { port } = await startWrappedLiveServer(output);
+    await new Promise<void>((resolve) => {
+      process.on('SIGINT', () => {
+        process.stderr.write('\nShutting down wrapped live server...\n');
         resolve();
       });
       process.on('SIGTERM', () => {
@@ -1593,6 +1621,11 @@ const main = defineCommand({
       description: 'Start a local server with an interactive dashboard',
       default: false,
     },
+    wrappedLive: {
+      type: 'boolean',
+      description: 'Start the AI Wrapped presentation in a browser',
+      default: false,
+    },
     advisor: {
       type: 'boolean',
       description: 'Analyze usage and suggest cost-saving model switches',
@@ -1625,6 +1658,7 @@ const main = defineCommand({
       if (args.open) cliArgs['open'] = true;
       if (args.upload !== undefined) cliArgs['upload'] = args.upload;
       if (args.liveServer) cliArgs['liveServer'] = true;
+      if (args.wrappedLive) cliArgs['wrappedLive'] = true;
       if (args.advisor) cliArgs['advisor'] = true;
 
       await run(cliArgs);

@@ -144,12 +144,12 @@ describe('interactive launcher', () => {
 });
 
 describe('consolidated menu', () => {
-  test('has 9 items with unique shortcuts 1-9', () => {
+  test('has 10 items with unique shortcuts 1-0', () => {
     const options = createMenuOptions();
-    expect(options).toHaveLength(9);
+    expect(options).toHaveLength(10);
     const shortcuts = options.map(o => o.shortcut);
-    expect(new Set(shortcuts).size).toBe(9);
-    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    expect(new Set(shortcuts).size).toBe(10);
+    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
   });
 
   test('has Export as item 2', () => {
@@ -159,11 +159,11 @@ describe('consolidated menu', () => {
     expect(exportItem!.title).toBe('Export');
   });
 
-  test('has Build Custom Command as item 9', () => {
+  test('has Build Custom Command as item 0', () => {
     const options = createMenuOptions();
-    const item9 = options.find(o => o.shortcut === '9');
-    expect(item9).toBeDefined();
-    expect(item9!.title).toBe('Build Custom Command');
+    const item0 = options.find(o => o.shortcut === '0');
+    expect(item0).toBeDefined();
+    expect(item0!.title).toBe('Build Custom Command');
   });
 
   test('does not have separate Export JSON, Export SVG, or Export PNG items', () => {
