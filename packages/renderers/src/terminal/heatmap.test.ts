@@ -39,7 +39,6 @@ describe('renderTerminalHeatmap', () => {
       { width: 80, noColor: true },
     );
     const lines = output.split('\n');
-    // Day label lines are the grid rows — check that none start with Sun/Tue/Thu/Sat
     for (const line of lines) {
       const trimmed = line.trimStart();
       expect(trimmed).not.toMatch(/^Sun\s/);
@@ -68,13 +67,21 @@ describe('renderTerminalHeatmap', () => {
     expect(output).not.toContain('Highlights');
   });
 
-  it('uses double-char cells (██) in full mode', () => {
+  it('uses full block character (██) for all cells in full mode', () => {
     const output = renderTerminalHeatmap(
       [createDailyUsage('2026-03-01', 5000)],
       { width: 80, noColor: true },
     );
-    // Full mode cells are two block chars side by side
-    expect(output).toMatch(/[·░▒▓█]{2}/);
+    expect(output).toContain('\u2588\u2588');
+  });
+
+  it('uses 256-color codes for green gradient when color enabled', () => {
+    const output = renderTerminalHeatmap(
+      makeDailyRange('2026-01-01', 30),
+      { width: 80, noColor: false },
+    );
+    // 256-color escape: \x1b[38;5;XXm where XX is one of our green codes
+    expect(output).toMatch(/\x1b\[38;5;(22|28|34|40)m/);
   });
 
   it('compact mode at width < 40 uses single-char cells', () => {
@@ -83,14 +90,12 @@ describe('renderTerminalHeatmap', () => {
       { width: 30, noColor: true },
     );
     const lines = output.split('\n');
-    // In compact mode, grid rows should not have double blocks followed by space
-    const gridLines = lines.filter((l) => l.match(/[·░▒▓█]/));
+    const gridLines = lines.filter((l) =>
+      l.includes('\u2588') && !l.includes('Less'),
+    );
     for (const line of gridLines) {
-      // Should not find "██ " pattern (full mode with gap)
-      if (!line.includes('Less')) {
-        // Compact cells are single char with no gap between them
-        expect(line).not.toMatch(/[·░▒▓█]{2}\s[·░▒▓█]/);
-      }
+      // Compact: single █ per cell, no "██ █" pattern
+      expect(line).not.toMatch(/\u2588{2}\s\u2588/);
     }
   });
 
@@ -125,7 +130,7 @@ describe('renderTerminalHeatmap', () => {
     expect(output).toContain('Feb');
   });
 
-  it('renders heatmap blocks for usage data', () => {
+  it('renders block characters for usage data', () => {
     const output = renderTerminalHeatmap(
       [
         createDailyUsage('2026-03-01', 1000),
@@ -134,8 +139,7 @@ describe('renderTerminalHeatmap', () => {
       ],
       { width: 40, noColor: true },
     );
-    // Should contain actual block characters
-    expect(output).toMatch(/[░▒▓█]/);
+    expect(output).toContain('\u2588');
   });
 
   it('produces no ANSI escape codes in noColor mode', () => {
@@ -160,9 +164,8 @@ describe('renderTerminalHeatmap', () => {
       { width: 80, noColor: true },
     );
     const lines = output.split('\n');
-    // Grid rows contain block characters and are between header and legend
     const gridRows = lines.filter((l) =>
-      l.match(/[·░▒▓█]/) && !l.includes('Less') && !l.includes('More'),
+      l.includes('\u2588') && !l.includes('Less') && !l.includes('More'),
     );
     expect(gridRows.length).toBe(7);
   });

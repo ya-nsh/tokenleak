@@ -1,13 +1,15 @@
 import type { DailyUsage } from '@tokenleak/core';
 import { buildHeatmapModel } from '../shared/heatmap-model';
-import type { AnsiColor } from './ansi';
-import { colorize, HEATMAP_BLOCKS } from './ansi';
+import { colorize256 } from './colors';
 
 const DAY_LABEL_WIDTH = 5;
 const LABELED_DAYS: Record<number, string> = { 1: 'Mon', 3: 'Wed', 5: 'Fri' };
 const FULL_MODE_THRESHOLD = 40;
+const BLOCK = '\u2588'; // █
 
-const LEVEL_COLORS: AnsiColor[] = ['dim', 'dim', 'cyan', 'yellow', 'green'];
+// 256-color green gradient matching GitHub's contribution graph
+// Level 0 = no activity (dark gray), 1–4 = escalating green intensity
+const LEVEL_256: number[] = [237, 22, 28, 34, 40];
 
 type DisplayMode = 'full' | 'compact';
 
@@ -32,21 +34,11 @@ function getWeekColumnWidth(mode: DisplayMode): number {
   return getCellWidth(mode) + getGap(mode).length;
 }
 
-function renderCell(
-  level: number,
-  mode: DisplayMode,
-  noColor: boolean,
-): string {
-  const blocks = [
-    HEATMAP_BLOCKS.EMPTY,
-    HEATMAP_BLOCKS.LIGHT,
-    HEATMAP_BLOCKS.MEDIUM,
-    HEATMAP_BLOCKS.DARK,
-    HEATMAP_BLOCKS.FULL,
-  ];
-  const block = blocks[level] ?? HEATMAP_BLOCKS.EMPTY;
+function renderCell(level: number, mode: DisplayMode, noColor: boolean): string {
   const cellWidth = getCellWidth(mode);
-  return cellWidth === 2 ? block + block : block;
+  const text = cellWidth === 2 ? BLOCK + BLOCK : BLOCK;
+  const code = LEVEL_256[level] ?? LEVEL_256[0]!;
+  return colorize256(text, code, noColor);
 }
 
 function buildMonthHeader(
@@ -98,19 +90,11 @@ function buildMonthHeader(
 }
 
 function buildLegendLine(mode: DisplayMode, noColor: boolean): string {
-  const blocks = [
-    HEATMAP_BLOCKS.EMPTY,
-    HEATMAP_BLOCKS.LIGHT,
-    HEATMAP_BLOCKS.MEDIUM,
-    HEATMAP_BLOCKS.DARK,
-    HEATMAP_BLOCKS.FULL,
-  ];
   const cellWidth = getCellWidth(mode);
   const gap = getGap(mode);
-  const renderedBlocks = blocks.map((block, level) => {
-    const text = cellWidth === 2 ? block + block : block;
-    const color = LEVEL_COLORS[level] ?? 'dim';
-    return colorize(text, color, noColor);
+  const renderedBlocks = LEVEL_256.map((code) => {
+    const text = cellWidth === 2 ? BLOCK + BLOCK : BLOCK;
+    return colorize256(text, code, noColor);
   });
   return `${' '.repeat(DAY_LABEL_WIDTH)}Less ${renderedBlocks.join(gap)} More`;
 }
@@ -146,9 +130,7 @@ export function renderTerminalHeatmap(
 
     for (const week of displayWeeks) {
       const cell = week.days[dayIndex] ?? { level: 0, tokens: 0 };
-      const color = LEVEL_COLORS[cell.level] ?? 'dim';
-      const rendered = renderCell(cell.level, mode, options.noColor);
-      cells.push(colorize(rendered, color, options.noColor));
+      cells.push(renderCell(cell.level, mode, options.noColor));
     }
 
     const row = paddedLabel + cells.join(gap);
