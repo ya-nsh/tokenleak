@@ -9,3 +9,10 @@ export { aggregate } from './aggregate';
 export { mergeProviderData } from './merge';
 export { compareRanges, computeDeltas, buildCompareOutput, parseCompareRange, computePreviousPeriod } from './compare';
 export { buildMoreStats, computeModelMixShift } from './more';
+export {
+  buildSessionRollups,
+  buildProjectRollups,
+  inferRepoRoot,
+  inferDirectoryLabel,
+  normalizeScores,
+} from './analytics';
