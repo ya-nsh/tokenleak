@@ -4,6 +4,22 @@ See where your AI tokens actually go. Tokenleak reads local usage logs from **Cl
 
 ![Tokenleak preview card](./docs/preview.png)
 
+## Overview
+
+Tokenleak auto-detects supported providers from their local logs and storage. This is the quick scan of where it looks before it renders dashboards, reports, and images:
+
+| Client | Local data location | Provider key and aliases | Supported |
+| ------ | ------------------- | ------------------------ | --------- |
+| Claude Code | `~/.claude/projects/**/*.jsonl` | `claude-code`, `anthropic`, `claude`, `claudecode` | Yes |
+| Codex | `~/.codex/sessions/**/*.jsonl` | `codex`, `openai` | Yes |
+| OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
+| Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
+
+- Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
+- Use `CODEX_HOME` to override the Codex base directory.
+- Use `PI_CODING_AGENT_DIR` to override the Pi base directory.
+- See [Provider details](#provider-details) for the parser behavior and per-provider notes.
+
 ## Install
 
 Install Tokenleak with the package manager you already use:
@@ -356,7 +372,7 @@ Subcommands:
 | `--version` |  |  | Print version information |
 | `--help` |  |  | Print usage information |
 
-## Supported providers
+## Provider details
 
 ### Claude Code
 
