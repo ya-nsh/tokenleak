@@ -507,6 +507,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--open-code');
     expect(stdout).toContain('--list-providers');
     expect(stdout).toContain('--more');
+    expect(stdout).toContain('tokenleak explain <date>');
     expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
@@ -621,5 +622,61 @@ describe('CLI invocation', () => {
     } finally {
       cleanup();
     }
+  });
+
+  test('explain renders a terminal report for a target day', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, 'explain', '2026-03-11', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('Explain 2026-03-11');
+      expect(stdout).toContain('Providers');
+      expect(stdout).toContain('Models');
+      expect(stdout).toContain('Anomalies');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('explain renders JSON when requested', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, 'explain', '2026-03-11', '--format', 'json', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"date": "2026-03-11"');
+      expect(stdout).toContain('"headline"');
+      expect(stdout).toContain('"topProviders"');
+      expect(stdout).toContain('"anomalies"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('explain rejects unsupported formats', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'explain', '2026-03-11', '--format', 'svg'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('only supports --format terminal or --format json');
   });
 });
