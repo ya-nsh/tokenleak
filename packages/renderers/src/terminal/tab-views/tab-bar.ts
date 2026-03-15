@@ -2,10 +2,10 @@ import { bold, bold256, dim, inverse256, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 export type TimeRange = '7d' | '30d' | '90d' | '365d';
-export type MetricTab = 'overview' | 'delta' | 'provider' | 'sess' | 'tok' | 'model' | 'cwd' | 'dow' | 'tod';
+export type MetricTab = 'overview' | 'delta' | 'provider' | 'sess' | 'tok' | 'model' | 'cwd' | 'dow' | 'tod' | 'contrib';
 
 export const TIME_RANGES: TimeRange[] = ['7d', '30d', '90d', '365d'];
-export const METRIC_TABS: MetricTab[] = ['overview', 'delta', 'provider', 'sess', 'tok', 'model', 'cwd', 'dow', 'tod'];
+export const METRIC_TABS: MetricTab[] = ['overview', 'delta', 'provider', 'sess', 'tok', 'model', 'cwd', 'dow', 'tod', 'contrib'];
 
 const TAB_LABELS: Record<MetricTab, string> = {
   overview: 'overview',
@@ -17,6 +17,7 @@ const TAB_LABELS: Record<MetricTab, string> = {
   cwd: 'cwd',
   dow: 'dow',
   tod: 'tod',
+  contrib: 'contrib',
 };
 
 const ACTIVE_COLOR = SEMANTIC.ACTIVE;

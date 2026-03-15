@@ -10,6 +10,7 @@ export {
   inverse256,
   dim,
   bold,
+  SEMANTIC,
   DOW_COLORS,
   TOD_COLORS,
   MODEL_COLORS,
@@ -26,6 +27,7 @@ export {
   renderModelView,
   renderTokenView,
   renderCwdView,
+  renderContribGraph,
   TIME_RANGES,
   METRIC_TABS,
 } from './tab-views';

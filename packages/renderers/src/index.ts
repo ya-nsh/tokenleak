@@ -24,4 +24,5 @@ export {
 } from './terminal/index';
 export type { TimeRange, MetricTab } from './terminal/index';
 export { renderAdvisorView } from './terminal/index';
-export { colorize256, bold256, dim, bold } from './terminal/index';
+export { colorize256, bold256, dim, bold, SEMANTIC } from './terminal/index';
+export { renderContribGraph } from './terminal/index';

@@ -1,10 +1,15 @@
 {
-  "name": "@tokenleak/cli",
+  "name": "@tokenleak/tui",
   "version": "1.2.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "tokenleak": "./dist/cli.js"
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
@@ -13,14 +18,16 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@opentui/react": "^0.1.87",
+    "@opentui/core": "^0.1.87",
     "@tokenleak/core": "workspace:*",
     "@tokenleak/registry": "workspace:*",
     "@tokenleak/renderers": "workspace:*",
-    "@tokenleak/tui": "workspace:*",
-    "citty": "^0.2.1"
+    "react": "^19.0.0"
   },
   "devDependencies": {
     "@tokenleak/typescript-config": "workspace:*",
+    "@types/react": "^19.0.0",
     "typescript": "^5.7.0"
   }
 }

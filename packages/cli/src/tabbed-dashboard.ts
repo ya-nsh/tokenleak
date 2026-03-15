@@ -11,6 +11,7 @@ import {
   renderModelView,
   renderTokenView,
   renderCwdView,
+  renderContribGraph,
   TIME_RANGES,
   METRIC_TABS,
 } from '@tokenleak/renderers';
@@ -140,6 +141,7 @@ function renderActiveView(
     case 'cwd': return renderCwdView(output, width, noColor);
     case 'dow': return renderDowView(output, width, noColor);
     case 'tod': return renderTodView(output, width, noColor);
+    case 'contrib': return renderContribGraph(output, width, noColor);
     default: return renderOverviewView(output, options);
   }
 }

@@ -10,3 +10,4 @@ export { renderSessionView } from './session-view';
 export { renderModelView } from './model-view';
 export { renderTokenView } from './token-view';
 export { renderCwdView } from './cwd-view';
+export { renderContribGraph } from './contrib-graph';

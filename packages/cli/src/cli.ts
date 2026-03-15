@@ -43,6 +43,7 @@ import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 import { startTabbedDashboard } from './tabbed-dashboard.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
+import { startTui } from '@tokenleak/tui';
 
 export { computeDateRange };
 export { renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak };
@@ -1871,23 +1872,27 @@ if (isDirectExecution) {
     const registry = createRegistry();
     const available = await registry.getAvailable();
 
-    const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
-      const requested = new Set(opts.providerNames ?? []);
-      const scopedProviders = requested.size > 0
-        ? available.filter((provider) => providerMatchesFilter(provider, requested))
-        : available;
-
-      if (scopedProviders.length === 0) {
-        throw new TokenleakError('No provider data found');
+    const loadData = async (
+      providers: IProvider[],
+      range: DateRange,
+      compare: string | null,
+    ): Promise<TokenleakOutput> => {
+      if (compare) {
+        const result = await loadCompareTokenleakData(providers, range, compare);
+        return result.output;
       }
-
-      await startTabbedDashboard(scopedProviders, opts);
+      return loadTokenleakData(providers, range);
     };
 
-    await startInteractiveCli({
-      version: VERSION,
-      helpText: buildHelpText(),
-    }, executeInteractiveCommand, launchTabbed);
+    await startTui({
+      context: {
+        version: VERSION,
+        helpText: buildHelpText(),
+      },
+      providers: available,
+      execute: executeInteractiveCommand,
+      loadData,
+    });
   } else {
     await runMain(main);
   }
