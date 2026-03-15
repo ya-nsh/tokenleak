@@ -79,6 +79,42 @@ describe('analytics helpers', () => {
     expect(projects[0]?.topSessions[0]?.label).toBe('/Users/test/work/tokenleak/packages/core');
   });
 
+  it('upgrades an existing session when a later event adds project metadata', () => {
+    const sessions = buildSessionRollups([
+      {
+        provider: 'codex',
+        timestamp: '2026-03-03T10:00:00.000Z',
+        date: '2026-03-03',
+        model: 'gpt-5',
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 150,
+        cost: 0.1,
+        sessionId: 'session-upgrade',
+      },
+      {
+        provider: 'codex',
+        timestamp: '2026-03-03T10:05:00.000Z',
+        date: '2026-03-03',
+        model: 'gpt-5',
+        inputTokens: 120,
+        outputTokens: 60,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 180,
+        cost: 0.12,
+        sessionId: 'session-upgrade',
+        projectId: '/Users/test/work/tokenleak/apps/web',
+      },
+    ]);
+
+    expect(sessions[0]?.label).toBe('/Users/test/work/tokenleak/apps/web');
+    expect(sessions[0]?.projectId).toBe('/Users/test/work/tokenleak/apps/web');
+    expect(sessions[0]?.repoRoot).toBe('/Users/test/work');
+  });
+
   it('normalizes arbitrary value sets into 0..1 scores', () => {
     expect(normalizeScores([5, 10, 15])).toEqual([0, 0.5, 1]);
     expect(normalizeScores([2, 2])).toEqual([1, 1]);

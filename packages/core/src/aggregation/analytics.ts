@@ -138,6 +138,17 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
         activeDates: new Set(),
       };
       sessions.set(sessionId, session);
+    } else {
+      if (!session.projectId && projectId) {
+        session.projectId = projectId;
+        session.label = projectId;
+      }
+      if (!session.repoRoot && repoRoot) {
+        session.repoRoot = repoRoot;
+      }
+      if (!session.directory && directory) {
+        session.directory = directory;
+      }
     }
 
     session.start = session.start < event.timestamp ? session.start : event.timestamp;

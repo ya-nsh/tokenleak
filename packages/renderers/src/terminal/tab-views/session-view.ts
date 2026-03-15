@@ -1,5 +1,5 @@
 import type { TokenleakOutput } from '@tokenleak/core';
-import { bold, bold256, dim, colorize256, SEMANTIC } from '../colors';
+import { bold, bold256, colorize256, dim, PROJECT_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
 function formatTokens(n: number): string {
@@ -18,6 +18,10 @@ function formatDuration(ms: number): string {
   return `${(ms / 3_600_000).toFixed(1)}h`;
 }
 
+function clampLabel(value: string, width: number): string {
+  return value.length > width ? `${value.slice(0, Math.max(1, width - 1))}…` : value.padEnd(width);
+}
+
 export function renderSessionView(output: TokenleakOutput, width: number, noColor: boolean): string {
   const metrics = output.more?.sessionMetrics;
   if (!metrics || metrics.totalSessions === 0) {
@@ -26,7 +30,6 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
 
   const lines: string[] = [bold('  Sessions', noColor), ''];
 
-  // Summary line
   const parts: string[] = [
     bold256(`${metrics.totalSessions}`, SEMANTIC.INPUT, noColor) + ' sessions',
     bold256(formatCost(metrics.averageCost), SEMANTIC.OUTPUT, noColor) + ' avg/session',
@@ -35,7 +38,6 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
   lines.push(truncateVisible(`  ${parts.join(dim('  ·  ', noColor))}`, width));
   lines.push('');
 
-  // Metrics table
   const labelWidth = 24;
   const addMetric = (label: string, value: string): void => {
     lines.push(truncateVisible(`  ${dim(label.padEnd(labelWidth), noColor)} ${bold(value, noColor)}`, width));
@@ -52,7 +54,42 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
 
   addMetric('Projects', String(metrics.projectCount));
 
-  if (metrics.longestSession) {
+  const drilldown = output.more?.sessionDrilldown ?? [];
+  if (drilldown.length > 0) {
+    lines.push('');
+    lines.push(`  ${bold('Top Sessions', noColor)}`);
+
+    const sessions = drilldown.slice(0, 5);
+    const sessionLabelWidth = Math.min(28, Math.max(12, width - 46));
+    const providerWidth = Math.min(12, Math.max(8, Math.floor(width * 0.15)));
+    const tokenWidth = 7;
+    const costWidth = 7;
+    const durationWidth = 7;
+    const eventWidth = 5;
+
+    for (let index = 0; index < sessions.length; index += 1) {
+      const session = sessions[index]!;
+      const color = PROJECT_COLORS[index % PROJECT_COLORS.length]!;
+      const duration = session.durationMs === null
+        ? '-'.padStart(durationWidth)
+        : formatDuration(session.durationMs).padStart(durationWidth);
+      const eventLabel = `${session.eventCount} ev`.padStart(eventWidth);
+      const detailParts = [
+        session.provider,
+        session.topModels.length > 0
+          ? `models ${session.topModels.map((model) => model.model).join(', ')}`
+          : null,
+        session.projectId && session.projectId !== session.label ? `project ${session.projectId}` : null,
+        session.directory && session.directory !== session.label ? `dir ${session.directory}` : null,
+      ].filter((value): value is string => Boolean(value));
+
+      lines.push(truncateVisible(
+        `  ${dim(`${index + 1}.`, noColor)} ${colorize256(clampLabel(session.label, sessionLabelWidth), color, noColor)} ${clampLabel(session.provider, providerWidth)} ${formatTokens(session.totalTokens).padStart(tokenWidth)} ${formatCost(session.cost).padStart(costWidth)} ${duration} ${eventLabel}`,
+        width,
+      ));
+      lines.push(truncateVisible(`     ${dim(detailParts.join('  ·  '), noColor)}`, width));
+    }
+  } else if (metrics.longestSession) {
     lines.push('');
     lines.push(`  ${bold('Longest Session', noColor)}`);
     addMetric('  Label', metrics.longestSession.label);

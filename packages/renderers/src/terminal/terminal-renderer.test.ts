@@ -234,6 +234,8 @@ describe('TerminalRenderer', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
         compare: null,
       }),
       compare: {
@@ -283,6 +285,8 @@ describe('TerminalRenderer', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
         compare: null,
       }),
       compare: {
@@ -327,6 +331,8 @@ describe('TerminalRenderer', () => {
           topProject: null,
           projectBreakdown: [],
         },
+        sessionDrilldown: [],
+        projectDrilldown: [],
         compare: null,
       }),
       compare: {

@@ -332,8 +332,8 @@ export interface MoreStats {
   sessionMetrics: SessionMetrics;
   modelEfficiency?: ModelEfficiencyMetrics | null;
   cacheRoi?: CacheRoiMetrics | null;
-  sessionDrilldown?: SessionDrilldownEntry[] | null;
-  projectDrilldown?: ProjectDrilldownEntry[] | null;
+  sessionDrilldown: SessionDrilldownEntry[];
+  projectDrilldown: ProjectDrilldownEntry[];
   attribution?: AttributionCluster[] | null;
   compare: CompareMore | null;
 }

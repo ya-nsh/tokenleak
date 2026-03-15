@@ -3,11 +3,14 @@ import type {
   CompareDeltas,
   DateRange,
   MoreStats,
-  ProviderData,
-  UsageEvent,
   ModelMixShiftEntry,
+  ProjectDrilldownEntry,
+  ProviderData,
+  SessionDrilldownEntry,
   SessionSummary,
+  UsageEvent,
 } from '../types';
+import { buildProjectRollups, buildSessionRollups } from './analytics';
 
 function daysInMonth(dateString: string): number {
   const [year, month] = dateString.split('-').map(Number);
@@ -126,63 +129,11 @@ function buildHourOfDay(events: UsageEvent[]): MoreStats['hourOfDay'] {
   return buckets;
 }
 
-function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] {
-  const sessions = new Map<string, {
-    label: string;
-    tokens: number;
-    cost: number;
-    count: number;
-    projectId?: string;
-    firstTimestamp: number;
-    lastTimestamp: number;
-    explicitDurationMs: number;
-    hasExplicitDuration: boolean;
-  }>();
-  const projects = new Map<string, number>();
-
-  for (const event of events) {
-    const key = event.sessionId?.trim() || `${event.provider}:${event.timestamp}`;
-    const timestamp = Date.parse(event.timestamp);
-    const safeTime = Number.isFinite(timestamp) ? timestamp : 0;
-    const projectId = event.projectId?.trim() || undefined;
-
-    let session = sessions.get(key);
-    if (!session) {
-      session = {
-        label: projectId || event.sessionId?.trim() || key,
-        tokens: 0,
-        cost: 0,
-        count: 0,
-        projectId,
-        firstTimestamp: safeTime,
-        lastTimestamp: safeTime,
-        explicitDurationMs: 0,
-        hasExplicitDuration: false,
-      };
-      sessions.set(key, session);
-    } else if (!session.projectId && projectId) {
-      session.projectId = projectId;
-      session.label = projectId || event.sessionId?.trim() || key;
-    }
-
-    session.tokens += event.totalTokens;
-    session.cost += event.cost;
-    session.count += 1;
-    session.firstTimestamp = Math.min(session.firstTimestamp, safeTime);
-    session.lastTimestamp = Math.max(session.lastTimestamp, safeTime);
-
-    if (typeof event.durationMs === 'number' && Number.isFinite(event.durationMs)) {
-      session.explicitDurationMs += Math.max(0, event.durationMs);
-      session.hasExplicitDuration = true;
-    }
-
-    if (projectId) {
-      projects.set(projectId, (projects.get(projectId) ?? 0) + event.totalTokens);
-    }
-  }
-
-  const sessionEntries = [...sessions.values()];
-  const totalSessions = sessionEntries.length;
+function buildSessionMetrics(
+  sessionDrilldown: SessionDrilldownEntry[],
+  projectDrilldown: ProjectDrilldownEntry[],
+): MoreStats['sessionMetrics'] {
+  const totalSessions = sessionDrilldown.length;
 
   let totalTokens = 0;
   let totalCost = 0;
@@ -192,41 +143,34 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
   let longestSession: SessionSummary | null = null;
   let longestSessionDuration = -1;
 
-  for (const session of sessionEntries) {
-    totalTokens += session.tokens;
+  for (const session of sessionDrilldown) {
+    totalTokens += session.totalTokens;
     totalCost += session.cost;
-    totalMessages += session.count;
+    totalMessages += session.eventCount;
 
-    const derivedDurationMs = session.hasExplicitDuration
-      ? session.explicitDurationMs
-      : session.lastTimestamp > session.firstTimestamp
-        ? session.lastTimestamp - session.firstTimestamp
-        : 0;
-
-    if (derivedDurationMs > 0) {
-      durationTotal += derivedDurationMs;
+    if (typeof session.durationMs === 'number' && session.durationMs > 0) {
+      durationTotal += session.durationMs;
       durationCount += 1;
     }
 
     if (
-      derivedDurationMs > longestSessionDuration ||
-      (derivedDurationMs === longestSessionDuration &&
-        (!longestSession || session.tokens > longestSession.tokens))
+      (session.durationMs ?? 0) > longestSessionDuration ||
+      ((session.durationMs ?? 0) === longestSessionDuration &&
+        (!longestSession || session.totalTokens > longestSession.tokens))
     ) {
-      longestSessionDuration = derivedDurationMs;
+      longestSessionDuration = session.durationMs ?? 0;
       longestSession = {
         label: session.label,
-        tokens: session.tokens,
+        tokens: session.totalTokens,
         cost: session.cost,
-        count: session.count,
-        durationMs: derivedDurationMs > 0 ? derivedDurationMs : null,
+        count: session.eventCount,
+        durationMs: session.durationMs,
       };
     }
   }
 
-  const projectBreakdown = [...projects.entries()]
-    .map(([name, tokens]) => ({ name, tokens }))
-    .sort((a, b) => b.tokens - a.tokens)
+  const projectBreakdown = projectDrilldown
+    .map((project) => ({ name: project.projectId, tokens: project.totalTokens }))
     .slice(0, 10);
 
   const topProject = projectBreakdown[0] ?? null;
@@ -238,7 +182,7 @@ function buildSessionMetrics(events: UsageEvent[]): MoreStats['sessionMetrics'] 
     averageMessages: totalSessions > 0 ? totalMessages / totalSessions : 0,
     averageDurationMs: durationCount > 0 ? durationTotal / durationCount : null,
     longestSession,
-    projectCount: projects.size,
+    projectCount: projectDrilldown.length,
     topProject,
     projectBreakdown,
   };
@@ -309,13 +253,17 @@ export function buildMoreStats(
   } | null = null,
 ): MoreStats {
   const events = collectEvents(providers);
+  const sessionDrilldown = buildSessionRollups(events);
+  const projectDrilldown = buildProjectRollups(events);
 
   return {
     inputOutput: buildInputOutput(providers),
     monthlyBurn: buildMonthlyBurn(providers, range),
     cacheEconomics: buildCacheEconomics(providers),
     hourOfDay: buildHourOfDay(events),
-    sessionMetrics: buildSessionMetrics(events),
+    sessionMetrics: buildSessionMetrics(sessionDrilldown, projectDrilldown),
+    sessionDrilldown,
+    projectDrilldown,
     compare: compare
       ? {
           previousRange: compare.previousRange,
