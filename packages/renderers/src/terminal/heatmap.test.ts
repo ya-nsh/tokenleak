@@ -67,21 +67,56 @@ describe('renderTerminalHeatmap', () => {
     expect(output).not.toContain('Highlights');
   });
 
-  it('uses full block character (██) for all cells in full mode', () => {
+  it('uses double-char cells in full mode', () => {
     const output = renderTerminalHeatmap(
       [createDailyUsage('2026-03-01', 5000)],
       { width: 80, noColor: true },
     );
-    expect(output).toContain('\u2588\u2588');
+    expect(output).toMatch(/[·░▒▓█]{2}/);
   });
 
-  it('uses 256-color codes for green gradient when color enabled', () => {
+  it('uses family-colored background codes when color enabled', () => {
     const output = renderTerminalHeatmap(
-      makeDailyRange('2026-01-01', 30),
+      [createDailyUsage('2026-03-01', 5000)],
       { width: 80, noColor: false },
     );
-    // 256-color escape: \x1b[38;5;XXm where XX is one of our green codes
-    expect(output).toMatch(/\x1b\[38;5;(22|28|34|40)m/);
+    // Claude palette background codes: 223, 215, 208, 166
+    expect(output).toMatch(/\x1b\[48;5;(223|215|208|166)m/);
+  });
+
+  it('uses the dominant model family palette for the intensity legend in color mode', () => {
+    const output = renderTerminalHeatmap(
+      [
+        {
+          ...createDailyUsage('2026-03-01', 1000),
+          models: [{ ...createDailyUsage('2026-03-01', 1000).models[0]!, model: 'claude-3-opus' }],
+        },
+      ],
+      { width: 64, noColor: false },
+    );
+    // Claude palette background codes
+    expect(output).toContain('\x1b[48;5;223m');
+    expect(output).toContain('\x1b[48;5;215m');
+    expect(output).toContain('\x1b[48;5;208m');
+    expect(output).toContain('\x1b[48;5;166m');
+  });
+
+  it('shows multiple model-family labels when visible days use different families', () => {
+    const output = renderTerminalHeatmap(
+      [
+        {
+          ...createDailyUsage('2026-03-01', 1000),
+          models: [{ ...createDailyUsage('2026-03-01', 1000).models[0]!, model: 'claude-3-opus' }],
+        },
+        {
+          ...createDailyUsage('2026-03-02', 2000),
+          models: [{ ...createDailyUsage('2026-03-02', 2000).models[0]!, model: 'gpt-4o' }],
+        },
+      ],
+      { width: 80, noColor: true },
+    );
+    expect(output).toContain('Claude');
+    expect(output).toContain('GPT');
   });
 
   it('compact mode at width < 40 uses single-char cells', () => {
@@ -91,11 +126,10 @@ describe('renderTerminalHeatmap', () => {
     );
     const lines = output.split('\n');
     const gridLines = lines.filter((l) =>
-      l.includes('\u2588') && !l.includes('Less'),
+      l.match(/[·░▒▓█]/) && !l.includes('Less'),
     );
     for (const line of gridLines) {
-      // Compact: single █ per cell, no "██ █" pattern
-      expect(line).not.toMatch(/\u2588{2}\s\u2588/);
+      expect(line).not.toMatch(/[·░▒▓█]{2}\s[·░▒▓█]/);
     }
   });
 
@@ -139,7 +173,7 @@ describe('renderTerminalHeatmap', () => {
       ],
       { width: 40, noColor: true },
     );
-    expect(output).toContain('\u2588');
+    expect(output).toMatch(/[░▒▓█]/);
   });
 
   it('produces no ANSI escape codes in noColor mode', () => {
@@ -165,7 +199,7 @@ describe('renderTerminalHeatmap', () => {
     );
     const lines = output.split('\n');
     const gridRows = lines.filter((l) =>
-      l.includes('\u2588') && !l.includes('Less') && !l.includes('More'),
+      l.match(/[·░▒▓█]/) && !l.includes('Less') && !l.includes('More'),
     );
     expect(gridRows.length).toBe(7);
   });

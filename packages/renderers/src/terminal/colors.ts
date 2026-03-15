@@ -11,6 +11,15 @@ export function colorize256(text: string, code: number, noColor: boolean): strin
 }
 
 /**
+ * Wrap text with a 256-color ANSI background code.
+ * When noColor is true, returns the text unmodified.
+ */
+export function background256(text: string, code: number, noColor: boolean): string {
+  if (noColor) return text;
+  return `${ESC}48;5;${code}m${text}${RESET}`;
+}
+
+/**
  * Wrap text with bold + 256-color ANSI foreground.
  */
 export function bold256(text: string, code: number, noColor: boolean): string {
