@@ -19,7 +19,12 @@ export {
   renderCwdView,
   TIME_RANGES,
   METRIC_TABS,
+  EMPTY_DRILLDOWN_FILTER_STATE,
+  formatDrilldownFilterSummary,
+  getFilteredProjects,
+  getFilteredSessions,
+  hasActiveDrilldownFilters,
 } from './terminal/index';
-export type { TimeRange, MetricTab } from './terminal/index';
+export type { TimeRange, MetricTab, DrilldownFilterState } from './terminal/index';
 export { renderAdvisorView } from './terminal/index';
 export { colorize256, bold256, dim, bold } from './terminal/index';

@@ -2,6 +2,12 @@ import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, PROJECT_COLORS } from '../colors';
 import { truncateVisible } from '../layout';
 import { renderCacheRoiBreakdowns } from './cache-roi';
+import {
+  formatDrilldownFilterSummary,
+  getFilteredProjects,
+  hasActiveDrilldownFilters,
+} from './searchable-drilldown';
+import type { DrilldownFilterState } from './searchable-drilldown';
 
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
@@ -130,7 +136,12 @@ function renderAttributionView(output: TokenleakOutput, width: number, noColor: 
   return lines.join('\n');
 }
 
-function renderProjectBreakdown(output: TokenleakOutput, width: number, noColor: boolean): string {
+function renderProjectBreakdown(
+  output: TokenleakOutput,
+  width: number,
+  noColor: boolean,
+  filterState?: DrilldownFilterState | null,
+): string {
   const projectDrilldown = output.more?.projectDrilldown ?? [];
   const breakdown = output.more?.sessionMetrics?.projectBreakdown;
   if (projectDrilldown.length === 0 && (!breakdown || breakdown.length === 0)) {
@@ -138,8 +149,15 @@ function renderProjectBreakdown(output: TokenleakOutput, width: number, noColor:
   }
 
   const lines: string[] = [bold('  Projects', noColor), ''];
+  const summary = formatDrilldownFilterSummary(filterState);
+  if (summary) {
+    lines.push(truncateVisible(`  ${dim(summary, noColor)}`, width));
+    lines.push('');
+  }
+
+  const filteredProjects = getFilteredProjects(output, filterState);
   const rankedProjects = projectDrilldown.length > 0
-    ? projectDrilldown.slice(0, 5)
+    ? filteredProjects.filtered
     : breakdown!.map((project) => ({
         projectId: project.name,
         sessionCount: 0,
@@ -164,12 +182,17 @@ function renderProjectBreakdown(output: TokenleakOutput, width: number, noColor:
   const barWidth = Math.max(8, width - nameWidth - valueWidth - costWidth - shareWidth - 10);
 
   if (projectDrilldown.length > 0) {
-    const sessionTotal = projectDrilldown.reduce((sum, project) => sum + project.sessionCount, 0);
+    const sessionTotal = rankedProjects.reduce((sum, project) => sum + project.sessionCount, 0);
     lines.push(truncateVisible(
-      `  ${dim(`${projectDrilldown.length} projects  ·  ${sessionTotal} sessions ranked by total tokens`, noColor)}`,
+      `  ${dim(`${rankedProjects.length} of ${filteredProjects.total} projects shown  ·  ${sessionTotal} sessions matched`, noColor)}`,
       width,
     ));
     lines.push('');
+  }
+
+  if (rankedProjects.length === 0) {
+    lines.push(`  ${dim('No projects matched the active filters.', noColor)}`);
+    return lines.join('\n');
   }
 
   for (let index = 0; index < rankedProjects.length; index += 1) {
@@ -206,7 +229,9 @@ function renderProjectBreakdown(output: TokenleakOutput, width: number, noColor:
 
   const roiLines = renderCacheRoiBreakdowns(
     'Cache ROI by Project',
-    output.more?.cacheRoi?.byProject ?? [],
+    (output.more?.cacheRoi?.byProject ?? []).filter((entry) =>
+      rankedProjects.some((project) => project.projectId === entry.label),
+    ),
     width,
     noColor,
   );
@@ -217,10 +242,15 @@ function renderProjectBreakdown(output: TokenleakOutput, width: number, noColor:
   return lines.join('\n');
 }
 
-export function renderCwdView(output: TokenleakOutput, width: number, noColor: boolean): string {
+export function renderCwdView(
+  output: TokenleakOutput,
+  width: number,
+  noColor: boolean,
+  filterState?: DrilldownFilterState | null,
+): string {
   const attribution = getAttribution(output);
-  const projectView = renderProjectBreakdown(output, width, noColor);
-  if (attribution && attribution.length > 0) {
+  const projectView = renderProjectBreakdown(output, width, noColor, filterState);
+  if (attribution && attribution.length > 0 && !hasActiveDrilldownFilters(filterState)) {
     return `${renderAttributionView(output, width, noColor)}\n\n${projectView}`;
   }
 

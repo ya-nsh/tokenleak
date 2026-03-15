@@ -13,8 +13,10 @@ import {
   renderCwdView,
   TIME_RANGES,
   METRIC_TABS,
+  EMPTY_DRILLDOWN_FILTER_STATE,
+  hasActiveDrilldownFilters,
 } from '@tokenleak/renderers';
-import type { TimeRange, MetricTab } from '@tokenleak/renderers';
+import type { TimeRange, MetricTab, DrilldownFilterState } from '@tokenleak/renderers';
 import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { clampScrollOffset } from './interactive.js';
 
@@ -43,7 +45,10 @@ interface TabbedState {
   baseUntil: string;
   initialRange: DateRange | null;
   width: number | null;
+  drilldownFilter: DrilldownFilterState;
 }
+
+type DashboardPromptKind = 'query' | 'filter';
 
 function timeRangeToDays(range: TimeRange): number {
   switch (range) {
@@ -69,6 +74,70 @@ function resolveRange(state: TabbedState, timeRange: TimeRange): DateRange {
   }
 
   return computeRange(timeRange, state.baseUntil);
+}
+
+function isSearchableTab(tab: MetricTab): boolean {
+  return tab === 'sess' || tab === 'cwd';
+}
+
+function normalizeFilterState(filterState: DrilldownFilterState): DrilldownFilterState {
+  const next = {
+    query: filterState.query.trim(),
+    provider: filterState.provider.trim(),
+    project: filterState.project.trim(),
+    model: filterState.model.trim(),
+    sort: filterState.sort.trim().toLowerCase(),
+    active: false,
+  };
+
+  next.active = hasActiveDrilldownFilters(next);
+  return next;
+}
+
+function parseFilterTokens(
+  input: string,
+  current: DrilldownFilterState,
+): DrilldownFilterState {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return current;
+  }
+
+  if (trimmed.toLowerCase() === 'clear') {
+    return { ...EMPTY_DRILLDOWN_FILTER_STATE };
+  }
+
+  const next: DrilldownFilterState = { ...current };
+  for (const token of trimmed.split(/\s+/)) {
+    const separator = token.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+
+    const key = token.slice(0, separator).trim().toLowerCase();
+    const value = token.slice(separator + 1).trim();
+    switch (key) {
+      case 'query':
+        next.query = value;
+        break;
+      case 'provider':
+        next.provider = value;
+        break;
+      case 'project':
+        next.project = value;
+        break;
+      case 'model':
+        next.model = value;
+        break;
+      case 'sort':
+        next.sort = value.toLowerCase();
+        break;
+      default:
+        break;
+    }
+  }
+
+  return normalizeFilterState(next);
 }
 
 async function loadForRange(
@@ -119,6 +188,7 @@ function renderActiveView(
   width: number,
   noColor: boolean,
   noInsights: boolean,
+  drilldownFilter: DrilldownFilterState,
 ): string {
   const options: RenderOptions = {
     format: 'terminal',
@@ -134,14 +204,33 @@ function renderActiveView(
     case 'overview': return renderOverviewView(output, options);
     case 'delta': return renderCompareView(output, width, noColor);
     case 'provider': return renderProviderView(output, width, noColor);
-    case 'sess': return renderSessionView(output, width, noColor);
+    case 'sess': return renderSessionView(output, width, noColor, drilldownFilter);
     case 'tok': return renderTokenView(output, width, noColor);
     case 'model': return renderModelView(output, width, noColor);
-    case 'cwd': return renderCwdView(output, width, noColor);
+    case 'cwd': return renderCwdView(output, width, noColor, drilldownFilter);
     case 'dow': return renderDowView(output, width, noColor);
     case 'tod': return renderTodView(output, width, noColor);
     default: return renderOverviewView(output, options);
   }
+}
+
+function renderFooter(state: TabbedState): string {
+  const parts = [
+    'q quit',
+    'tab switch',
+    '<-/-> range',
+    'scroll arrows',
+    '/ search',
+    'f filters',
+    'c clear',
+  ];
+  const base = `  ${parts.join('  ·  ')}`;
+  if (!isSearchableTab(state.metricTab)) {
+    return state.noColor ? base : `${DIM}${base}${RESET}`;
+  }
+
+  const scoped = `${base}  ·  ${hasActiveDrilldownFilters(state.drilldownFilter) ? 'filter active' : 'searchable tab'}`;
+  return state.noColor ? scoped : `${DIM}${scoped}${RESET}`;
 }
 
 function renderScreen(
@@ -158,10 +247,17 @@ function renderScreen(
     : `  ${DIM}${output.dateRange.since} → ${output.dateRange.until}${RESET}`;
 
   const headerLines = [...tabBarLines, rangeLabel, ''];
-  const footerLines = [''];
+  const footerLines = [renderFooter(state)];
 
   const viewportHeight = getViewportHeight(state, width, rows);
-  const viewContent = renderActiveView(output, state.metricTab, width, state.noColor, state.noInsights);
+  const viewContent = renderActiveView(
+    output,
+    state.metricTab,
+    width,
+    state.noColor,
+    state.noInsights,
+    state.drilldownFilter,
+  );
   const contentLines = viewContent.split('\n');
 
   const effectiveOffset = clampScrollOffset(state.scrollOffset, contentLines.length, viewportHeight);
@@ -230,6 +326,7 @@ export interface TabbedDashboardOptions {
   initialTimeRange?: TimeRange;
   initialRange?: DateRange;
   providerNames?: string[];
+  promptInput?: (kind: DashboardPromptKind, label: string) => Promise<string | null>;
 }
 
 export async function startTabbedDashboard(
@@ -249,6 +346,7 @@ export async function startTabbedDashboard(
     baseUntil: options.until ?? new Date().toISOString().slice(0, 10),
     initialRange: options.initialRange ?? null,
     width: options.width ?? null,
+    drilldownFilter: { ...EMPTY_DRILLDOWN_FILTER_STATE },
   };
 
   enterAltScreen();
@@ -280,6 +378,37 @@ export async function startTabbedDashboard(
     if (currentOutput) {
       paint(renderScreen(currentOutput, state));
     }
+  };
+
+  const promptForInput = async (
+    kind: DashboardPromptKind,
+    label: string,
+  ): Promise<string | null> => {
+    if (options.promptInput) {
+      return options.promptInput(kind, label);
+    }
+
+    return await new Promise<string | null>((resolve) => {
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+      }
+      process.stdin.resume();
+      process.stdout.write(`${HOME_CLEAR}${SHOW_CURSOR}${label}`);
+
+      const onData = (chunk: string | Uint8Array): void => {
+        process.stdin.off('data', onData);
+        if (process.stdin.isTTY) {
+          process.stdin.setRawMode(true);
+        }
+        process.stdin.resume();
+        process.stdout.write(HIDE_CURSOR);
+
+        const text = String(chunk).replace(/\r?\n$/, '');
+        resolve(text);
+      };
+
+      process.stdin.on('data', onData);
+    });
   };
 
   const onResize = (): void => {
@@ -318,6 +447,40 @@ export async function startTabbedDashboard(
         if (key.name === 'q' || key.name === 'escape') {
           cleanup();
           resolve();
+          return;
+        }
+
+        if (key.sequence === '/' && isSearchableTab(state.metricTab)) {
+          runAsyncAction(async () => {
+            const input = await promptForInput('query', 'Search sessions/projects: ');
+            if (input !== null && input.trim()) {
+              state.drilldownFilter = normalizeFilterState({
+                ...state.drilldownFilter,
+                query: input,
+              });
+            }
+            rerender();
+          });
+          return;
+        }
+
+        if (key.name === 'f' && isSearchableTab(state.metricTab)) {
+          runAsyncAction(async () => {
+            const input = await promptForInput(
+              'filter',
+              'Filters (provider=.. project=.. model=.. sort=..): ',
+            );
+            if (input !== null) {
+              state.drilldownFilter = parseFilterTokens(input, state.drilldownFilter);
+            }
+            rerender();
+          });
+          return;
+        }
+
+        if (key.name === 'c') {
+          state.drilldownFilter = { ...EMPTY_DRILLDOWN_FILTER_STATE };
+          rerender();
           return;
         }
 

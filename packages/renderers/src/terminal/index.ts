@@ -28,6 +28,11 @@ export {
   renderCwdView,
   TIME_RANGES,
   METRIC_TABS,
+  EMPTY_DRILLDOWN_FILTER_STATE,
+  formatDrilldownFilterSummary,
+  getFilteredProjects,
+  getFilteredSessions,
+  hasActiveDrilldownFilters,
 } from './tab-views';
-export type { TimeRange, MetricTab } from './tab-views';
+export type { TimeRange, MetricTab, DrilldownFilterState } from './tab-views';
 export { renderAdvisorView } from './advisor-view';
