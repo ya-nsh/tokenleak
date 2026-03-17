@@ -15,10 +15,12 @@ function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => vo
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cli-fixtures-'));
   const claudeConfigDir = join(fixtureRoot, 'claude-config');
   const codexHome = join(fixtureRoot, 'codex-home');
+  const cursorRoot = join(fixtureRoot, 'cursor-root');
   const piAgentDir = join(fixtureRoot, 'pi-agent');
 
   cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), { recursive: true });
   cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), { recursive: true });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'cursor-cache'), join(cursorRoot, 'cursor-cache'), { recursive: true });
   cpSync(join(REGISTRY_FIXTURES_DIR, 'pi', 'agent'), piAgentDir, { recursive: true });
 
   return {
@@ -26,6 +28,7 @@ function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => vo
       ...process.env,
       CLAUDE_CONFIG_DIR: claudeConfigDir,
       CODEX_HOME: codexHome,
+      TOKENLEAK_CURSOR_DIR: cursorRoot,
       PI_CODING_AGENT_DIR: piAgentDir,
     },
     cleanup: () => rmSync(fixtureRoot, { recursive: true, force: true }),
@@ -79,6 +82,7 @@ describe('interactive launcher', () => {
   test('flag panel includes key interactive flags', () => {
     expect(INTERACTIVE_FLAG_LINES).toContain('    explain <date>       explain one day of usage');
     expect(INTERACTIVE_FLAG_LINES).toContain('    focus                rank deep-work sessions');
+    expect(INTERACTIVE_FLAG_LINES).toContain('    --cursor            shortcut for Cursor');
     expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json | wrapped');
     expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
     expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
@@ -187,9 +191,10 @@ describe('flag serialization', () => {
     expect(buildCliArgTokens({
       format: 'png',
       output: 'card.png',
+      cursor: true,
       openCode: true,
       noColor: true,
-    })).toEqual(['--format', 'png', '--output', 'card.png', '--open-code', '--no-color']);
+    })).toEqual(['--format', 'png', '--output', 'card.png', '--cursor', '--open-code', '--no-color']);
   });
 
   test('buildCliPreview includes the tokenleak executable prefix', () => {
@@ -368,6 +373,7 @@ describe('resolveConfig', () => {
     expect(config.output).toBeNull();
     expect(config.claude).toBe(false);
     expect(config.codex).toBe(false);
+    expect(config.cursor).toBe(false);
     expect(config.pi).toBe(false);
     expect(config.openCode).toBe(false);
     expect(config.allProviders).toBe(false);
@@ -416,9 +422,10 @@ describe('resolveConfig', () => {
   });
 
   test('passes provider shortcut flags through', () => {
-    const config = resolveConfig({ claude: true, codex: true, pi: true, openCode: true });
+    const config = resolveConfig({ claude: true, codex: true, cursor: true, pi: true, openCode: true });
     expect(config.claude).toBe(true);
     expect(config.codex).toBe(true);
+    expect(config.cursor).toBe(true);
     expect(config.pi).toBe(true);
     expect(config.openCode).toBe(true);
   });
@@ -670,6 +677,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('Registered providers:');
     expect(stdout).toContain('claude-code');
     expect(stdout).toContain('codex');
+    expect(stdout).toContain('cursor');
     expect(stdout).toContain('pi');
     expect(stdout).toContain('open-code');
   });
@@ -721,6 +729,26 @@ describe('CLI invocation', () => {
       expect(exitCode).toBe(0);
       expect(stdout).toContain('"provider": "pi"');
       expect(stdout).toContain('"displayName": "Pi"');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--provider cursor loads cached cursor data when configured', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'cursor'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"provider": "cursor"');
+      expect(stdout).toContain('"displayName": "Cursor"');
     } finally {
       cleanup();
     }

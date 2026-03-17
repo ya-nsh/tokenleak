@@ -84,6 +84,7 @@ export function buildExplainHelpText(): string {
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --claude            Only include Claude Code',
     '      --codex             Only include Codex',
+    '      --cursor            Only include Cursor',
     '      --pi                Only include Pi',
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',

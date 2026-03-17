@@ -1,0 +1,2 @@
+Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost
+2026-03-10T14:00:00Z,chat,gpt-5,false,9999,9999,9999,9999,39996,$99.00

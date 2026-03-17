@@ -18,6 +18,7 @@ export const INTERACTIVE_FLAG_LINES = [
   '-p, --provider <list>   comma-separated providers',
   '    --claude            shortcut for Claude Code',
   '    --codex             shortcut for Codex',
+  '    --cursor            shortcut for Cursor',
   '    --pi                shortcut for Pi',
   '    --open-code         shortcut for Open Code',
   '    --all-providers     ignore provider filters',
@@ -548,6 +549,7 @@ type Choice<T extends string> = {
 const PROVIDER_CHOICES = [
   { value: 'claude-code', label: 'Claude Code', description: 'Anthropic project logs' },
   { value: 'codex', label: 'Codex', description: 'OpenAI session logs' },
+  { value: 'cursor', label: 'Cursor', description: 'Cursor API cache exports' },
   { value: 'pi', label: 'Pi', description: 'pi-mono local session logs' },
   { value: 'open-code', label: 'Open Code', description: 'Open Code storage and database' },
 ] as const satisfies readonly Choice<string>[];

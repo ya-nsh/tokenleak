@@ -23,6 +23,7 @@ import {
   ProviderRegistry,
   ClaudeCodeProvider,
   CodexProvider,
+  CursorProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -35,6 +36,7 @@ import { loadConfig } from './config.js';
 import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
+import { buildCursorHelpText, hasCursorUsageCache, runCursorCommand, shouldSyncCursorForRun } from './cursor.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildCliArgTokens } from './flags.js';
@@ -53,6 +55,7 @@ const THEME_VALUES = ['dark', 'light'] as const;
 const PROVIDER_SHORTCUTS = {
   claude: 'claude-code',
   codex: 'codex',
+  cursor: 'cursor',
   pi: 'pi',
   openCode: 'open-code',
 } as const;
@@ -62,6 +65,9 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'claude-code': 'claude-code',
   claudecode: 'claude-code',
   codex: 'codex',
+  cursor: 'cursor',
+  'cursor-ide': 'cursor',
+  cursoride: 'cursor',
   openai: 'codex',
   pi: 'pi',
   'pi-mono': 'pi',
@@ -72,6 +78,7 @@ const PROVIDER_ALIASES: Record<string, string> = {
 const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'claude-code': ['anthropic', 'claude', 'claudecode'],
   codex: ['openai'],
+  cursor: ['cursor-ide', 'cursoride'],
   pi: ['pi-mono'],
   'open-code': ['opencode', 'open_code'],
 };
@@ -80,6 +87,7 @@ interface ProviderFilterConfig {
   provider?: string;
   claude: boolean;
   codex: boolean;
+  cursor: boolean;
   pi: boolean;
   openCode: boolean;
 }
@@ -118,6 +126,7 @@ function getRequestedProviders(config: ProviderFilterConfig): Set<string> {
 
   if (config.claude) requested.add(PROVIDER_SHORTCUTS.claude);
   if (config.codex) requested.add(PROVIDER_SHORTCUTS.codex);
+  if (config.cursor) requested.add(PROVIDER_SHORTCUTS.cursor);
   if (config.pi) requested.add(PROVIDER_SHORTCUTS.pi);
   if (config.openCode) requested.add(PROVIDER_SHORTCUTS.openCode);
 
@@ -145,14 +154,17 @@ function buildHelpText(): string {
     '  tokenleak [flags]',
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
+    '  tokenleak cursor <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
+    '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
     '  --claude                Only include Claude Code',
     '  --codex                 Only include Codex',
+    '  --cursor                Only include Cursor',
     '  --pi                    Only include Pi',
     '  --open-code             Only include OpenCode',
     '  --all-providers         Ignore provider filters and use every available provider',
@@ -221,6 +233,7 @@ function buildFocusHelpText(): string {
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --claude            Only include Claude Code',
     '      --codex             Only include Codex',
+    '      --cursor           Only include Cursor',
     '      --pi                Only include Pi',
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',
@@ -272,6 +285,10 @@ export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: bo
 
   if (cliArgs['subcommand'] === 'focus') {
     return 'Focus report generated.';
+  }
+
+  if (cliArgs['subcommand'] === 'cursor') {
+    return 'Cursor command completed.';
   }
 
   if (cliArgs['listProviders']) {
@@ -393,6 +410,7 @@ export function normalizeCliArgv(argv: string[]): string[] {
 function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
+  registry.register(new CursorProvider());
   registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
 }
@@ -424,6 +442,7 @@ function validateProviderSelection(config: Pick<ProviderLoadConfig, 'allProvider
     config.provider ||
     config.claude ||
     config.codex ||
+    config.cursor ||
     config.pi ||
     config.openCode
   )) {
@@ -436,12 +455,28 @@ async function selectAvailableProviders(
 ): Promise<IProvider[]> {
   validateProviderSelection(config);
 
+  const requestedProviders = getRequestedProviders(config);
+  const requestedCursor = requestedProviders.has(PROVIDER_SHORTCUTS.cursor);
+  const cursorSync = await shouldSyncCursorForRun(config);
+  if (cursorSync.attempted && cursorSync.error) {
+    if (requestedCursor && !hasCursorUsageCache()) {
+      throw new TokenleakError(cursorSync.error);
+    }
+
+    if (hasCursorUsageCache()) {
+      process.stderr.write(`Cursor sync failed, using cached data: ${cursorSync.error}\n`);
+    } else if (requestedCursor) {
+      throw new TokenleakError(cursorSync.error);
+    } else {
+      process.stderr.write(`Cursor sync skipped: ${cursorSync.error}\n`);
+    }
+  }
+
   const registry = createRegistry();
   let available = await registry.getAvailable();
 
-  const requestedProviders = getRequestedProviders(config);
   if (!config.allProviders && requestedProviders.size > 0) {
-    if (config.provider && (config.claude || config.codex || config.pi || config.openCode)) {
+    if (config.provider && (config.claude || config.codex || config.cursor || config.pi || config.openCode)) {
       process.stderr.write(
         `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
       );
@@ -528,6 +563,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   provider?: string;
   claude: boolean;
   codex: boolean;
+  cursor: boolean;
   pi: boolean;
   openCode: boolean;
   allProviders: boolean;
@@ -557,6 +593,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     more: boolean;
     claude: boolean;
     codex: boolean;
+    cursor: boolean;
     pi: boolean;
     openCode: boolean;
     allProviders: boolean;
@@ -577,6 +614,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     more: false,
     claude: false,
     codex: false,
+    cursor: false,
     pi: false,
     openCode: false,
     allProviders: false,
@@ -661,6 +699,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   if (cliArgs['codex'] !== undefined) {
     result.codex = cliArgs['codex'] as boolean;
   }
+  if (cliArgs['cursor'] !== undefined) {
+    result.cursor = cliArgs['cursor'] as boolean;
+  }
   if (cliArgs['pi'] !== undefined) {
     result.pi = cliArgs['pi'] as boolean;
   }
@@ -710,6 +751,7 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
     provider: undefined,
     claude: false,
     codex: false,
+    cursor: false,
     pi: false,
     openCode: false,
     allProviders: false,
@@ -775,6 +817,9 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
   }
   if (cliArgs['codex'] !== undefined) {
     result.codex = cliArgs['codex'] as boolean;
+  }
+  if (cliArgs['cursor'] !== undefined) {
+    result.cursor = cliArgs['cursor'] as boolean;
   }
   if (cliArgs['pi'] !== undefined) {
     result.pi = cliArgs['pi'] as boolean;
@@ -855,6 +900,7 @@ function formatFocusDensity(tokensPerHour: number): string {
 const PROVIDER_COLORS: Record<string, number> = {
   'claude-code': 179, // amber
   codex: 71,          // green
+  cursor: 78,         // spring green
   pi: 73,             // cyan/teal
   'open-code': 68,    // indigo/steel blue
 };
@@ -1452,6 +1498,10 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
         cliArgs['codex'] = true;
         index += 1;
         break;
+      case '--cursor':
+        cliArgs['cursor'] = true;
+        index += 1;
+        break;
       case '--pi':
         cliArgs['pi'] = true;
         index += 1;
@@ -1507,6 +1557,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
     config.provider ||
     config.claude ||
     config.codex ||
+    config.cursor ||
     config.pi ||
     config.openCode
   )) {
@@ -1514,14 +1565,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 
   const explainRange = computeDateRange({ until: date, days: 30 });
-  const registry = new ProviderRegistry();
-  registerBuiltInProviders(registry);
-
-  let available = await registry.getAvailable();
-  const requestedProviders = getRequestedProviders(config);
-  if (!config.allProviders && requestedProviders.size > 0) {
-    available = available.filter((provider) => providerMatchesFilter(provider, requestedProviders));
-  }
+  const available = await selectAvailableProviders(config);
 
   if (available.length === 0) {
     throw new TokenleakError('No provider data found');
@@ -1617,6 +1661,11 @@ const main = defineCommand({
       description: 'Shortcut for --provider codex',
       default: false,
     },
+    cursor: {
+      type: 'boolean',
+      description: 'Shortcut for --provider cursor',
+      default: false,
+    },
     pi: {
       type: 'boolean',
       description: 'Shortcut for --provider pi',
@@ -1686,6 +1735,7 @@ const main = defineCommand({
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
       if (args.claude) cliArgs['claude'] = true;
       if (args.codex) cliArgs['codex'] = true;
+      if (args.cursor) cliArgs['cursor'] = true;
       if (args.pi) cliArgs['pi'] = true;
       if (args.openCode) cliArgs['openCode'] = true;
       if (args.allProviders) cliArgs['allProviders'] = true;
@@ -1761,6 +1811,11 @@ const focusMain = defineCommand({
       description: 'Shortcut for --provider codex',
       default: false,
     },
+    cursor: {
+      type: 'boolean',
+      description: 'Shortcut for --provider cursor',
+      default: false,
+    },
     pi: {
       type: 'boolean',
       description: 'Shortcut for --provider pi',
@@ -1795,6 +1850,7 @@ const focusMain = defineCommand({
       if (args.provider !== undefined) cliArgs['provider'] = args.provider;
       if (args.claude) cliArgs['claude'] = true;
       if (args.codex) cliArgs['codex'] = true;
+      if (args.cursor) cliArgs['cursor'] = true;
       if (args.pi) cliArgs['pi'] = true;
       if (args.openCode) cliArgs['openCode'] = true;
       if (args.allProviders) cliArgs['allProviders'] = true;
@@ -1854,6 +1910,24 @@ if (isDirectExecution) {
 
     await runMain(focusMain);
     process.exit(0);
+  }
+  if (argv[0] === 'cursor') {
+    try {
+      if (argv[1] === '--help' || argv[1] === '-h' || argv.length === 1) {
+        process.stdout.write(buildCursorHelpText());
+        process.exit(0);
+      }
+
+      if (argv[1] === '--version' || argv[1] === '-v') {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await runCursorCommand(argv.slice(1));
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
   }
 
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
