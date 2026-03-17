@@ -459,10 +459,6 @@ async function selectAvailableProviders(
   const requestedCursor = requestedProviders.has(PROVIDER_SHORTCUTS.cursor);
   const cursorSync = await shouldSyncCursorForRun(config);
   if (cursorSync.attempted && cursorSync.error) {
-    if (requestedCursor && !hasCursorUsageCache()) {
-      throw new TokenleakError(cursorSync.error);
-    }
-
     if (hasCursorUsageCache()) {
       process.stderr.write(`Cursor sync failed, using cached data: ${cursorSync.error}\n`);
     } else if (requestedCursor) {

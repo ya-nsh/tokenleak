@@ -84,6 +84,61 @@ describe('CursorProvider', () => {
     expect(data.totalTokens).toBe(950);
   });
 
+  it('returns empty data for an empty cursor CSV file', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'cursor-empty-file-'));
+    writeFileSync(join(tempRoot, 'usage.csv'), '');
+
+    try {
+      const provider = new CursorProvider(tempRoot);
+      const data = await provider.load(FULL_RANGE);
+      expect(data.daily).toEqual([]);
+      expect(data.totalTokens).toBe(0);
+      expect(data.totalCost).toBe(0);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty data for a header-only cursor CSV file', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'cursor-header-only-'));
+    writeFileSync(
+      join(tempRoot, 'usage.csv'),
+      'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost\n',
+    );
+
+    try {
+      const provider = new CursorProvider(tempRoot);
+      const data = await provider.load(FULL_RANGE);
+      expect(data.daily).toEqual([]);
+      expect(data.totalTokens).toBe(0);
+      expect(data.totalCost).toBe(0);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('skips malformed cursor rows without throwing', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'cursor-malformed-'));
+    writeFileSync(
+      join(tempRoot, 'usage.csv'),
+      [
+        'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost',
+        '2026-03-10T12:34:56Z,chat,claude-sonnet-4-20250514,false,1200,1000,200,300,1700,$0.0100',
+        '2026-03-11T06:00:00Z,chat,gpt-4o-2025-01-29,false,550,500',
+      ].join('\n'),
+    );
+
+    try {
+      const provider = new CursorProvider(tempRoot);
+      const data = await provider.load(FULL_RANGE);
+      expect(data.daily).toHaveLength(1);
+      expect(data.daily[0]!.date).toBe('2026-03-10');
+      expect(data.totalTokens).toBe(1700);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('ignores archived files and preserves account-specific session ids', async () => {
     const provider = new CursorProvider(FIXTURES_DIR);
     const data = await provider.load(FULL_RANGE);

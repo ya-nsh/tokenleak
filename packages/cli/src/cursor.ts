@@ -1,3 +1,4 @@
+import { VERSION } from '@tokenleak/core';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -83,8 +84,7 @@ function buildCursorHeaders(sessionToken: string): Record<string, string> {
     'Accept-Language': 'en-US,en;q=0.9',
     Cookie: `WorkosCursorSessionToken=${sessionToken}`,
     Referer: 'https://www.cursor.com/settings',
-    'User-Agent':
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'User-Agent': `tokenleak/${VERSION} (+https://github.com/ya-nsh/tokenleak)`,
   };
 }
 
@@ -187,6 +187,7 @@ async function readSecret(prompt: string): Promise<string> {
       if (typeof input.setRawMode === 'function') {
         input.setRawMode(false);
       }
+      input.pause();
       output.write('\n');
     };
 
@@ -544,11 +545,6 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
   const cacheDir = getCursorCacheDir();
   ensureDir(cacheDir, 0o700);
 
-  const activeDupPath = join(cacheDir, `usage.${sanitizeAccountIdForFilename(store.activeAccountId)}.csv`);
-  if (existsSync(activeDupPath)) {
-    unlinkSync(activeDupPath);
-  }
-
   let totalRows = 0;
   let successCount = 0;
   const errors: string[] = [];
@@ -560,6 +556,15 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
         ? join(cacheDir, 'usage.csv')
         : join(cacheDir, `usage.${sanitizeAccountIdForFilename(accountId)}.csv`);
       atomicWriteFile(filePath, csvText, process.platform === 'win32' ? undefined : 0o600);
+      if (accountId === store.activeAccountId) {
+        const activeDupPath = join(
+          cacheDir,
+          `usage.${sanitizeAccountIdForFilename(store.activeAccountId)}.csv`,
+        );
+        if (existsSync(activeDupPath)) {
+          unlinkSync(activeDupPath);
+        }
+      }
       successCount += 1;
       totalRows += countCursorCsvRows(csvText);
     } catch (error: unknown) {
@@ -634,6 +639,7 @@ export function buildCursorHelpText(): string {
     '',
     'Notes:',
     '  Session tokens come from https://www.cursor.com/settings',
+    '  Session tokens are stored in plaintext with local-only file permissions.',
     `  Credentials: ${getCursorCredentialsPath()}`,
     `  Cache: ${getCursorCacheDir()}`,
     '',
@@ -665,6 +671,9 @@ async function runCursorLogin(name?: string): Promise<void> {
     throw new TokenleakError(`Cursor account label already exists: ${name}`);
   }
 
+  process.stdout.write(
+    `Session tokens are stored in plaintext at ${getCursorCredentialsPath()} with local-only file permissions.\n`,
+  );
   const token = await readSecret('Enter Cursor session token: ');
   if (!token) {
     throw new TokenleakError('No token provided');

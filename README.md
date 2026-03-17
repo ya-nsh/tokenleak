@@ -154,6 +154,7 @@ tokenleak cursor logout --all --purge-cache
 
 - Normal dashboard/report runs auto-refresh Cursor cache when you are logged in and Cursor is requested or available.
 - If refresh fails but cached CSVs exist, Tokenleak falls back to the cached data.
+- Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
 
 ### Date filtering
 

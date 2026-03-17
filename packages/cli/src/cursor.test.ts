@@ -97,6 +97,21 @@ describe('cursor auth and sync helpers', () => {
     expect(existsSync(join(getCursorCacheDir(), `usage.${personalId}.csv`))).toBe(false);
   });
 
+  test('does not delete the active-account duplicate cache when sync fails', async () => {
+    const activeId = saveCursorCredentials('user-work::token-work', 'work');
+    const duplicatePath = join(getCursorCacheDir(), `usage.${activeId}.csv`);
+
+    mkdirSync(getCursorCacheDir(), { recursive: true });
+    writeFileSync(duplicatePath, 'old-active-cache\n');
+    globalThis.fetch = (async () => new Response('forbidden', { status: 403 })) as typeof fetch;
+
+    const result = await syncCursorCache();
+
+    expect(result.synced).toBe(false);
+    expect(existsSync(duplicatePath)).toBe(true);
+    expect(readFileSync(duplicatePath, 'utf8')).toBe('old-active-cache\n');
+  });
+
   test('skips sync when Cursor is not part of the requested provider set', async () => {
     saveCursorCredentials('user-work::token-work', 'work');
     let called = false;
