@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak } from './cli';
+import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, resolveTabbedDashboardProviderConfig, resolveTabbedDashboardProviders, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak } from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
@@ -144,6 +144,18 @@ describe('interactive launcher', () => {
       false,
       null,
     )).toThrow('Invalid --since date');
+  });
+
+  test('resolveTabbedDashboardProviderConfig preserves selected providers', () => {
+    expect(resolveTabbedDashboardProviderConfig({ providerNames: ['cursor'] })).toEqual({
+      provider: 'cursor',
+      claude: false,
+      codex: false,
+      cursor: false,
+      pi: false,
+      openCode: false,
+      allProviders: false,
+    });
   });
 });
 
@@ -565,6 +577,19 @@ describe('run', () => {
     expect((thrown as TokenleakError).message).toBe('No provider data found');
   });
 
+  test('throws a login hint when cursor is requested without auth or cache', async () => {
+    let thrown: unknown;
+    try {
+      await run({ format: 'json', provider: 'cursor' });
+    } catch (error: unknown) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(TokenleakError);
+    expect((thrown as TokenleakError).message).toBe(
+      'Cursor is selected but not authenticated. Run `tokenleak cursor login` first.',
+    );
+  });
+
   test('throws TokenleakError for unsupported format', async () => {
     let thrown: unknown;
     try {
@@ -586,6 +611,21 @@ describe('run', () => {
 
     expect(thrown).toBeInstanceOf(TokenleakError);
     expect((thrown as TokenleakError).message).toContain('--all-providers');
+  });
+
+  test('resolveTabbedDashboardProviders loads cursor from selected provider list', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+    const previousEnv = process.env;
+
+    try {
+      process.env = env;
+      const providers = await resolveTabbedDashboardProviders({ providerNames: ['cursor'] });
+      expect(providers).toHaveLength(1);
+      expect(providers[0]?.name).toBe('cursor');
+    } finally {
+      process.env = previousEnv;
+      cleanup();
+    }
   });
 });
 

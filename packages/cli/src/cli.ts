@@ -36,7 +36,7 @@ import { loadConfig } from './config.js';
 import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
-import { buildCursorHelpText, hasCursorUsageCache, runCursorCommand, shouldSyncCursorForRun } from './cursor.js';
+import { buildCursorHelpText, hasCursorUsageCache, isCursorLoggedIn, runCursorCommand, shouldSyncCursorForRun } from './cursor.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildCliArgTokens } from './flags.js';
@@ -457,6 +457,9 @@ async function selectAvailableProviders(
 
   const requestedProviders = getRequestedProviders(config);
   const requestedCursor = requestedProviders.has(PROVIDER_SHORTCUTS.cursor);
+  if (requestedCursor && !isCursorLoggedIn() && !hasCursorUsageCache()) {
+    throw new TokenleakError('Cursor is selected but not authenticated. Run `tokenleak cursor login` first.');
+  }
   const cursorSync = await shouldSyncCursorForRun(config);
   if (cursorSync.attempted && cursorSync.error) {
     if (hasCursorUsageCache()) {
@@ -481,6 +484,28 @@ async function selectAvailableProviders(
   }
 
   return available;
+}
+
+export function resolveTabbedDashboardProviderConfig(
+  opts: Pick<TabbedDashboardOptions, 'providerNames'>,
+): Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig {
+  return {
+    provider: opts.providerNames && opts.providerNames.length > 0
+      ? opts.providerNames.join(',')
+      : undefined,
+    claude: false,
+    codex: false,
+    cursor: false,
+    pi: false,
+    openCode: false,
+    allProviders: false,
+  };
+}
+
+export async function resolveTabbedDashboardProviders(
+  opts: Pick<TabbedDashboardOptions, 'providerNames'>,
+): Promise<IProvider[]> {
+  return selectAvailableProviders(resolveTabbedDashboardProviderConfig(opts));
 }
 
 async function loadProviderData(config: ProviderLoadConfig): Promise<{
@@ -1938,14 +1963,8 @@ if (isDirectExecution) {
   }
 
   if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
-    const registry = createRegistry();
-    const available = await registry.getAvailable();
-
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
-      const requested = new Set(opts.providerNames ?? []);
-      const scopedProviders = requested.size > 0
-        ? available.filter((provider) => providerMatchesFilter(provider, requested))
-        : available;
+      const scopedProviders = await resolveTabbedDashboardProviders(opts);
 
       if (scopedProviders.length === 0) {
         throw new TokenleakError('No provider data found');
