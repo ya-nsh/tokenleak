@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads local usage logs from **Claude Code**, **Codex**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
+See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
 ![Tokenleak preview card](./docs/preview.png)
 
@@ -12,11 +12,13 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 | ------ | ------------------- | ------------------------ | --------- |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `claude-code`, `anthropic`, `claude`, `claudecode` | Yes |
 | Codex | `~/.codex/sessions/**/*.jsonl` | `codex`, `openai` | Yes |
+| Cursor | `~/.config/tokenleak/cursor-cache/usage*.csv` after `tokenleak cursor login` | `cursor`, `cursor-ide`, `cursoride` | Yes |
 | OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
 | Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
 
 - Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
 - Use `CODEX_HOME` to override the Codex base directory.
+- Use `TOKENLEAK_CURSOR_DIR` to override the Cursor credentials/cache directory.
 - Use `PI_CODING_AGENT_DIR` to override the Pi base directory.
 - See [Provider details](#provider-details) for the parser behavior and per-provider notes.
 
@@ -109,6 +111,9 @@ tokenleak explain 2026-03-10 --format json
 tokenleak focus
 tokenleak focus --provider codex --days 30
 
+# Authenticate Cursor and sync its local cache
+tokenleak cursor login --name work
+
 # Show registered providers, availability, and aliases
 tokenleak --list-providers
 ```
@@ -133,6 +138,23 @@ tokenleak focus --format json --provider pi --output focus.json
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
+
+### Cursor commands
+
+Use these commands to manage Cursor authentication and the local cache that Tokenleak reads:
+
+```bash
+tokenleak cursor login --name work
+tokenleak cursor status
+tokenleak cursor accounts --json
+tokenleak cursor switch work
+tokenleak cursor logout --name work
+tokenleak cursor logout --all --purge-cache
+```
+
+- Normal dashboard/report runs auto-refresh Cursor cache when you are logged in and Cursor is requested or available.
+- If refresh fails but cached CSVs exist, Tokenleak falls back to the cached data.
+- Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
 
 ### Date filtering
 
@@ -162,18 +184,22 @@ tokenleak --provider claude-code
 # Only Codex
 tokenleak --provider codex
 
+# Only Cursor
+tokenleak --provider cursor
+
 # Only Pi
 tokenleak --provider pi
 
 # Multiple providers (comma-separated)
-tokenleak --provider claude-code,codex,pi
+tokenleak --provider claude-code,codex,cursor,pi
 
 # Provider aliases are supported too
-tokenleak --provider anthropic,openai,pi-mono
+tokenleak --provider anthropic,openai,cursor-ide,pi-mono
 
 # Shortcut flags
 tokenleak --claude
 tokenleak --codex
+tokenleak --cursor
 tokenleak --pi
 tokenleak --open-code
 
@@ -341,6 +367,7 @@ Subcommands:
 
 - `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
 - `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
+- `tokenleak cursor --help` prints the Cursor auth/cache command help text.
 - `tokenleak explain --help` and `tokenleak focus --help` print the subcommand-specific help text.
 
 | Flag | Alias | Default | Description |
@@ -355,6 +382,7 @@ Subcommands:
 | `--provider` | `-p` | auto | Filter to specific provider(s), comma-separated |
 | `--claude` |  | `false` | Shortcut for `--provider claude-code` |
 | `--codex` |  | `false` | Shortcut for `--provider codex` |
+| `--cursor` |  | `false` | Shortcut for `--provider cursor` |
 | `--pi` |  | `false` | Shortcut for `--provider pi` |
 | `--open-code` |  | `false` | Shortcut for `--provider open-code` |
 | `--all-providers` |  | `false` | Ignore provider filters and use every available provider |
@@ -395,6 +423,17 @@ Reads JSONL session logs from the Codex sessions directory. Parses `response` ev
 | **Override**      | Set `CODEX_HOME` environment variable |
 | **Provider name** | `codex`                               |
 | **Aliases**       | `openai`                              |
+
+### Cursor
+
+Reads Cursor usage CSV exports from the local Tokenleak cache. The cache is populated by authenticating with `tokenleak cursor login`, after which normal runs auto-refresh the CSVs when possible.
+
+|                   |                                                       |
+| ----------------- | ----------------------------------------------------- |
+| **Data location** | `~/.config/tokenleak/cursor-cache/usage*.csv`         |
+| **Override**      | Set `TOKENLEAK_CURSOR_DIR` environment variable       |
+| **Provider name** | `cursor`                                              |
+| **Aliases**       | `cursor-ide`, `cursoride`                             |
 
 ### OpenCode
 
@@ -566,11 +605,12 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
 | `CODEX_HOME` | `~/.codex` | Codex home directory |
+| `TOKENLEAK_CURSOR_DIR` | `~/.config/tokenleak` | Cursor credentials/cache root (`cursor-credentials.json`, `cursor-cache/`) |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | Pi coding agent directory (sessions live under `sessions/`) |
 
 ## What Tokenleak tracks
 
-Tokenleak reads your **local** logs only. It does not send usage data anywhere unless you explicitly use a sharing feature such as `--upload gist`.
+Tokenleak reads your **local** logs and caches. For Cursor, Tokenleak can also fetch fresh usage CSVs from Cursor's API after you authenticate with `tokenleak cursor login`; that network step only happens for Cursor and only to refresh the local cache.
 
 For each day of usage, it tracks:
 

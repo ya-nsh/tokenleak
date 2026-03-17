@@ -3,6 +3,7 @@ import {
   ProviderRegistry,
   ClaudeCodeProvider,
   CodexProvider,
+  CursorProvider,
   PiProvider,
   OpenCodeProvider,
 } from '@tokenleak/registry';
@@ -13,7 +14,7 @@ import { registerResources } from './resources/index.js';
  * Create a Tokenleak MCP server with all tools and resources registered.
  *
  * @param registry - Optional provider registry. If omitted, a default registry
- *   with all built-in providers (Claude Code, Codex, Pi, OpenCode) is created.
+ *   with all built-in providers (Claude Code, Codex, Cursor, Pi, OpenCode) is created.
  */
 export function createTokenleakServer(registry?: ProviderRegistry): McpServer {
   const reg = registry ?? createDefaultRegistry();
@@ -33,6 +34,7 @@ function createDefaultRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
+  registry.register(new CursorProvider());
   registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
   return registry;

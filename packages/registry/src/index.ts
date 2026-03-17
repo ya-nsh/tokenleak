@@ -14,4 +14,4 @@ export type { ModelPricing, CostBreakdown } from './models';
 export type { IProvider } from './provider';
 export { ProviderRegistry } from './registry';
 export { splitJsonlRecords } from './parsers/index';
-export { ClaudeCodeProvider, CodexProvider, OpenCodeProvider, PiProvider } from './providers/index';
+export { ClaudeCodeProvider, CodexProvider, CursorProvider, OpenCodeProvider, PiProvider } from './providers/index';
