@@ -292,7 +292,6 @@ export function renderWrappedSinglePageSvg(
       pct: totalProviderTokens > 0 ? (p.totalTokens / totalProviderTokens) * 100 : 0,
       color: getProviderColor(p.provider, options.theme),
     }))
-    .filter((p) => p.pct >= 1)
     .sort((a, b) => b.pct - a.pct);
 
   const modelSectionH = 28 + 22 + topModels.length * 42;
