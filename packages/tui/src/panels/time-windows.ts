@@ -38,8 +38,15 @@ function dataRow(
 }
 
 function findMaxIndex(values: number[]): boolean[] {
-  const max = Math.max(...values);
-  return values.map((v) => v === max && v > 0);
+  let maxVal = -Infinity;
+  let maxIdx = -1;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i]! > maxVal) {
+      maxVal = values[i]!;
+      maxIdx = i;
+    }
+  }
+  return values.map((_, i) => i === maxIdx && maxVal > 0);
 }
 
 export function createTimeWindowsPanel(props: TimeWindowsProps) {

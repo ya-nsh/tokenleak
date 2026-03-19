@@ -1,6 +1,5 @@
 import { Box, Text } from '@opentui/core';
 import type { AppState } from '../lib/state.js';
-import { getDailyForWindow } from '../lib/data.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatTokens, formatCost, padRight, padLeft, asciiBar, truncate, formatPercent } from '../lib/format.js';
 import { getProviderColor } from '../lib/theme.js';
@@ -59,14 +58,9 @@ function createOverviewPanel(state: AppState) {
 
 /** Providers quadrant: uses window-filtered daily data to compute per-provider totals */
 function createProvidersPanel(state: AppState) {
-  const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
   const stats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
   const providers = state.data?.providers ?? [];
-
-  // Build per-provider token/cost totals from window-filtered daily data
-  // Daily data is merged across providers — fall back to provider-level data for names
   const totalTokens = stats?.totalTokens ?? 0;
-  const totalCost = stats?.totalCost ?? 0;
 
   const children: ReturnType<typeof Box | typeof Text>[] = [];
 

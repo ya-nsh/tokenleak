@@ -1,15 +1,9 @@
 import { Box, Text } from '@opentui/core';
 import type { CompareOutput } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, padRight, padLeft } from '../lib/format.js';
+import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
-}
 
 function deltaStr(value: number, isPercent: boolean): string {
   const sign = value >= 0 ? '+' : '';
@@ -31,8 +25,10 @@ interface MetricRow {
 }
 
 function buildMetricRows(output: CompareOutput): MetricRow[] {
-  const a = output.periodA.stats;
-  const b = output.periodB.stats;
+  // periodA = previous range, periodB = current range (from ensureCompareOutput)
+  // deltas = periodA - periodB, so negate for "current vs previous" display
+  const a = output.periodB.stats; // current
+  const b = output.periodA.stats; // previous
   const d = output.deltas;
 
   return [
@@ -122,8 +118,8 @@ export function createComparePanel(state: AppState, output: CompareOutput | null
     );
   }
 
-  const periodALabel = `${formatShortDate(output.periodA.range.since)} \u2013 ${formatShortDate(output.periodA.range.until)}`;
-  const periodBLabel = `${formatShortDate(output.periodB.range.since)} \u2013 ${formatShortDate(output.periodB.range.until)}`;
+  const currentLabel = `${formatShortDate(output.periodB.range.since)} \u2013 ${formatShortDate(output.periodB.range.until)}`;
+  const previousLabel = `${formatShortDate(output.periodA.range.since)} \u2013 ${formatShortDate(output.periodA.range.until)}`;
 
   const metricRows = buildMetricRows(output);
   const offset = state.compareScrollOffset;
@@ -153,9 +149,9 @@ export function createComparePanel(state: AppState, output: CompareOutput | null
     Text({ content: ` Compare: ${windowLabel} `, fg: COLORS.amber, attributes: BOLD }),
     Box(
       { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-      Text({ content: `Period A (${periodALabel})`, fg: COLORS.cyan }),
+      Text({ content: `Current (${currentLabel})`, fg: COLORS.cyan }),
       Text({ content: '  vs  ', fg: COLORS.dimWhite }),
-      Text({ content: `Period B (${periodBLabel})`, fg: COLORS.dimWhite }),
+      Text({ content: `Previous (${previousLabel})`, fg: COLORS.dimWhite }),
     ),
     Text({ content: '', fg: COLORS.dimWhite }),
     headerRow,

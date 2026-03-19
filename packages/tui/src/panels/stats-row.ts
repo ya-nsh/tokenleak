@@ -12,9 +12,11 @@ function statCard(label: string, value: string, valueColor: string) {
   );
 }
 
-export function createStatsRow(state: AppState, stats: AggregatedStats | null) {
-  const sep = Text({ content: ' \u2502 ', fg: COLORS.dimWhite });
+function sep() {
+  return Text({ content: ' \u2502 ', fg: COLORS.dimWhite });
+}
 
+export function createStatsRow(state: AppState, stats: AggregatedStats | null) {
   if (state.isLoading || !stats) {
     return Box(
       {
@@ -27,13 +29,13 @@ export function createStatsRow(state: AppState, stats: AggregatedStats | null) {
         gap: 0,
       },
       statCard('Tokens', '---', COLORS.dimWhite),
-      sep,
+      sep(),
       statCard('Cost', '---', COLORS.dimWhite),
-      sep,
+      sep(),
       statCard('Active', '---', COLORS.dimWhite),
-      sep,
+      sep(),
       statCard('Streak', '---', COLORS.dimWhite),
-      sep,
+      sep(),
       statCard('Cache', '---', COLORS.dimWhite),
     );
   }
@@ -49,13 +51,13 @@ export function createStatsRow(state: AppState, stats: AggregatedStats | null) {
       gap: 0,
     },
     statCard('Tokens', formatTokens(stats.totalTokens), COLORS.green),
-    sep,
+    sep(),
     statCard('Cost', formatCost(stats.totalCost), COLORS.amber),
-    sep,
+    sep(),
     statCard('Active', `${stats.activeDays}/${stats.totalDays}d`, COLORS.cyan),
-    sep,
+    sep(),
     statCard('Streak', `${stats.currentStreak}d`, COLORS.green),
-    sep,
+    sep(),
     statCard('Cache', formatPercent(stats.cacheHitRate), COLORS.cyan),
   );
 }

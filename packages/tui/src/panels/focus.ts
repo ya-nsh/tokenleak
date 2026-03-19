@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { FocusEntry, FocusReport } from '@tokenleak/core';
-import { formatCost, formatTokens, asciiBar, padRight, padLeft, truncate } from '../lib/format.js';
+import { formatCost, formatTokens, formatShortDate, asciiBar, padRight, padLeft, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
@@ -14,12 +14,6 @@ function formatHours(ms: number | null): string {
 
 function formatTokPerHour(tokPerHour: number): string {
   return `${formatTokens(tokPerHour)}/hr`;
-}
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
 function renderEntry(entry: FocusEntry, rank: number) {

@@ -1,6 +1,6 @@
 import type { DailyUsage } from '@tokenleak/core';
 import { Box, Text } from '@opentui/core';
-import { formatTokens, truncate } from './format.js';
+import { formatTokens, formatShortDate, truncate } from './format.js';
 import { COLORS, BOLD, MODEL_COLORS } from './theme.js';
 
 interface ChartModel {
@@ -33,7 +33,6 @@ export function buildChart(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  const topModelNames = new Set(sortedModels.map(([name]) => name));
   const chartModels: ChartModel[] = sortedModels.map(([name], i) => ({
     model: name,
     color: MODEL_COLORS[i % MODEL_COLORS.length]!,
@@ -76,9 +75,6 @@ export function buildChart(
     let barStr = '';
     for (const day of sampledDays) {
       if (day.totalTokens > threshold) {
-        // Find which model segment this row falls in
-        const color = getSegmentColor(day, threshold, maxTokens, chartHeight, row, topModelNames, chartModels);
-        // We can't color individual chars in a single Text, so use block char
         barStr += '\u2588 ';
       } else {
         barStr += '  ';
@@ -139,19 +135,6 @@ export function buildChart(
   );
 }
 
-function getSegmentColor(
-  _day: DailyUsage,
-  _threshold: number,
-  _maxTokens: number,
-  _chartHeight: number,
-  _row: number,
-  _topModelNames: Set<string>,
-  chartModels: ChartModel[],
-): string {
-  // Simplified: use the top model's color for the bar
-  return chartModels[0]?.color ?? COLORS.green;
-}
-
 function buildXLabels(days: DailyUsage[], width: number): string {
   if (days.length === 0) return '';
 
@@ -175,15 +158,6 @@ function buildXLabels(days: DailyUsage[], width: number): string {
   }
 
   return result.slice(0, width);
-}
-
-/** Format a date string as "Mon DD" (e.g., "Mar 15") */
-export function formatShortDate(dateStr: string): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const parts = dateStr.split('-');
-  const month = months[parseInt(parts[1]!, 10) - 1] ?? 'Jan';
-  const day = parseInt(parts[2]!, 10);
-  return `${month} ${day}`;
 }
 
 function buildCompactList(

@@ -102,7 +102,7 @@ export async function loadAllData(): Promise<TuiData> {
   ];
 
   const windows: TimeWindowData[] = windowConfigs.map(({ label, days }) => {
-    const since = daysAgoStr(days);
+    const since = daysAgoStr(days - 1); // trailing N days including today
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
     const stats = aggregate(filtered, today);
     return { label, days, stats };
@@ -130,7 +130,7 @@ export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsag
     return data.mergedDaily;
   }
 
-  const since = daysAgoStr(days);
+  const since = daysAgoStr(days - 1); // trailing N days including today
   return data.mergedDaily.filter((d) => d.date >= since && d.date <= today);
 }
 
@@ -142,11 +142,27 @@ export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
   const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
   if (!windowStats) return null;
 
+  // Scope the dateRange and providers to the selected window
+  const windowDays = [7, 30, 90, 0];
+  const days = windowDays[state.selectedWindowIndex];
+  const today = todayStr();
+  const windowRange: DateRange = days && days > 0
+    ? { since: daysAgoStr(days - 1), until: today }
+    : state.data.dateRange;
+
+  // Filter provider events to the window
+  const scopedProviders: ProviderData[] = state.data.providers.map((p) => {
+    if (!days || days === 0 || !p.events) return p;
+    const filteredEvents = p.events.filter((e) => e.date >= windowRange.since && e.date <= windowRange.until);
+    const filteredDaily = p.daily?.filter((d) => d.date >= windowRange.since && d.date <= windowRange.until);
+    return { ...p, events: filteredEvents, daily: filteredDaily };
+  });
+
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
-    dateRange: state.data.dateRange,
-    providers: state.data.providers,
+    dateRange: windowRange,
+    providers: scopedProviders,
     aggregated: windowStats,
   };
 
@@ -167,7 +183,7 @@ export function ensureFocusReport(state: AppState): FocusReport | null {
   const days = windowDays[state.selectedWindowIndex];
   let filtered = allEvents;
   if (days && days > 0) {
-    const since = daysAgoStr(days);
+    const since = daysAgoStr(days - 1);
     const today = todayStr();
     filtered = allEvents.filter((e) => e.date >= since && e.date <= today);
   }
@@ -203,8 +219,10 @@ export function ensureCompareOutput(state: AppState): CompareOutput | null {
   const windowDays = [7, 30, 90, 0];
   const days = windowDays[state.selectedWindowIndex] || 365;
   const today = todayStr();
-  const rangeB: DateRange = { since: daysAgoStr(days), until: today };
-  const rangeA: DateRange = { since: daysAgoStr(days * 2), until: daysAgoStr(days + 1) };
+  // rangeB = current period (trailing N days including today)
+  // rangeA = previous period of equal length (N days ending the day before rangeB starts)
+  const rangeB: DateRange = { since: daysAgoStr(days - 1), until: today };
+  const rangeA: DateRange = { since: daysAgoStr(days * 2 - 1), until: daysAgoStr(days) };
   const output = compareRanges(state.data.mergedDaily, rangeA, rangeB);
   state.cachedCompareOutput = output;
   return output;

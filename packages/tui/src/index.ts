@@ -67,10 +67,19 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
   if (!windowStats) return null;
 
+  // Scope dateRange to the selected window
+  const windowDays = [7, 30, 90, 0] as const;
+  const days = windowDays[state.selectedWindowIndex];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const dateRange = days && days > 0
+    ? { since: (() => { const d = new Date(); d.setDate(d.getDate() - (days - 1)); return d.toISOString().slice(0, 10); })(), until: today }
+    : state.data.dateRange;
+
   return {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
-    dateRange: state.data.dateRange,
+    dateRange,
     providers: state.data.providers,
     aggregated: windowStats,
   };
@@ -130,8 +139,8 @@ function invalidateAllCaches(state: AppState): void {
 /** Navigate explain date forward or backward by one day */
 function shiftExplainDate(state: AppState, direction: number): void {
   if (!state.explainDate) return;
-  const d = new Date(state.explainDate + 'T00:00:00');
-  d.setDate(d.getDate() + direction);
+  const d = new Date(state.explainDate + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + direction);
   state.explainDate = d.toISOString().slice(0, 10);
   state.cachedExplainReport = null;
 }
@@ -387,8 +396,9 @@ async function main(): Promise<void> {
             state.explainDate = null;
             render(state, renderer);
           })
-          .catch(() => {
+          .catch((err: unknown) => {
             state.isLoading = false;
+            state.exportStatus = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
             render(state, renderer);
           });
         return true;

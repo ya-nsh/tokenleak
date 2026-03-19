@@ -22,7 +22,7 @@ function typeLabel(type: AdvisorRecommendation['type']): string {
   return 'Usage Pattern';
 }
 
-function renderRecommendation(rec: AdvisorRecommendation, index: number) {
+function renderRecommendation(rec: AdvisorRecommendation) {
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Box(
@@ -66,8 +66,8 @@ export function createAdvisorPanel(state: AppState, report: AdvisorReport | null
   }
 
   const recs = report.recommendations;
-  const offset = state.advisorScrollOffset;
   const maxOffset = Math.max(0, recs.length - VISIBLE_ROWS);
+  const offset = Math.min(state.advisorScrollOffset, maxOffset);
   const visibleRecs = recs.slice(offset, offset + VISIBLE_ROWS);
 
   const summaryRow = Box(
@@ -91,7 +91,7 @@ export function createAdvisorPanel(state: AppState, report: AdvisorReport | null
 
   const recNodes = recs.length === 0
     ? [Text({ content: '  No optimization opportunities detected', fg: COLORS.dimWhite })]
-    : visibleRecs.map((r, i) => renderRecommendation(r, offset + i));
+    : visibleRecs.map((r) => renderRecommendation(r));
 
   const scrollIndicators: ReturnType<typeof Text>[] = [];
   if (offset > 0) {

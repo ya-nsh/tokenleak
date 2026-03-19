@@ -1,13 +1,7 @@
 import { Box, Text } from '@opentui/core';
 import type { ExplainReport, ExplainEvidenceRow, ExplainAnomaly } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, padRight, padLeft } from '../lib/format.js';
+import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
-}
 
 function renderEvidenceTable(title: string, rows: ExplainEvidenceRow[]) {
   if (rows.length === 0) return Box({ flexDirection: 'column', width: '100%' });
@@ -46,7 +40,7 @@ function renderAnomalies(anomalies: ExplainAnomaly[]) {
     Text({ content: 'Anomalies:', fg: COLORS.amber, attributes: BOLD }),
     ...anomalies.map((a) =>
       Text({
-        content: `\u26A0 ${a.type}: ${a.detail}`,
+        content: `\u26A0 ${a.title}: ${a.detail}`,
         fg: COLORS.red,
       }),
     ),

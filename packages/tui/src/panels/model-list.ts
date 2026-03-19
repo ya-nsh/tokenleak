@@ -1,19 +1,8 @@
 import { Box, Text } from '@opentui/core';
-import type { AggregatedStats, TopModelEntry } from '@tokenleak/core';
+import type { AggregatedStats } from '@tokenleak/core';
 import { formatTokens, formatCost, truncate, padRight, padLeft } from '../lib/format.js';
 import { COLORS, BOLD, MODEL_COLORS } from '../lib/theme.js';
-import type { AppState, SortMode } from '../lib/state.js';
-
-interface ModelDetail {
-  model: string;
-  tokens: number;
-  cost: number;
-  percentage: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-}
+import type { AppState } from '../lib/state.js';
 
 export function createModelList(state: AppState, stats: AggregatedStats | null) {
   if (state.isLoading || !stats) {

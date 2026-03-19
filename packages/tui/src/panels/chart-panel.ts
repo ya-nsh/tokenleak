@@ -1,7 +1,7 @@
 import { Box, Text } from '@opentui/core';
 import type { DailyUsage } from '@tokenleak/core';
 import { buildChart } from '../lib/chart.js';
-import { COLORS, BOLD } from '../lib/theme.js';
+import { COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
 export function createChartPanel(state: AppState, daily: DailyUsage[]) {
