@@ -12,8 +12,28 @@ const DISPLAY = "'Bricolage Grotesque', 'SF Pro Display', 'Helvetica Neue', sans
 const MONO = "'Space Mono', 'SF Mono', 'Menlo', monospace";
 const BODY = "'Space Grotesk', 'SF Pro Text', 'Helvetica Neue', sans-serif";
 
-// Wrapped-live color palette
-const C = {
+// ── Theme palettes ───────────────────────────────────────────────────
+interface Palette {
+  bg: string;
+  surface: string;
+  surface2: string;
+  border: string;
+  borderHi: string;
+  gold: string;
+  goldDim: string;
+  ivory: string;
+  ivoryDim: string;
+  text: string;
+  muted: string;
+  muted2: string;
+  providerDefault: string;
+  trackStroke: string;   // donut/ring track
+  barTrack: string;      // hairline bar track
+  dotInactive: string;   // streak dot background
+  dotInactiveBorder: string;
+}
+
+const DARK: Palette = {
   bg: '#09090b',
   surface: '#111114',
   surface2: '#16161a',
@@ -27,16 +47,40 @@ const C = {
   muted: 'rgba(232,226,204,0.38)',
   muted2: 'rgba(232,226,204,0.18)',
   providerDefault: '#555555',
+  trackStroke: 'rgba(255,255,255,0.05)',
+  barTrack: 'rgba(255,255,255,0.09)',
+  dotInactive: '#16161a',
+  dotInactiveBorder: 'rgba(255,255,255,0.07)',
 };
 
-const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#d4af5f',
-  'claude-code': '#d4af5f',
-  openai: '#3a5070',
-  codex: '#3a5070',
-  google: '#6a2535',
-  cursor: '#7c5cbf',
-  pi: '#5a4a70',
+const LIGHT: Palette = {
+  bg: '#fafaf9',
+  surface: '#f0efed',
+  surface2: '#e8e6e3',
+  border: 'rgba(0,0,0,0.08)',
+  borderHi: 'rgba(160,128,64,0.3)',
+  gold: '#9a7b3a',
+  goldDim: '#b8985a',
+  ivory: '#1a1a18',
+  ivoryDim: 'rgba(26,26,24,0.6)',
+  text: '#2c2c28',
+  muted: 'rgba(44,44,40,0.42)',
+  muted2: 'rgba(44,44,40,0.22)',
+  providerDefault: '#888888',
+  trackStroke: 'rgba(0,0,0,0.06)',
+  barTrack: 'rgba(0,0,0,0.08)',
+  dotInactive: '#e8e6e3',
+  dotInactiveBorder: 'rgba(0,0,0,0.08)',
+};
+
+const PROVIDER_COLORS: Record<string, { dark: string; light: string }> = {
+  anthropic:     { dark: '#d4af5f', light: '#9a7b3a' },
+  'claude-code': { dark: '#d4af5f', light: '#9a7b3a' },
+  openai:        { dark: '#3a5070', light: '#4a6a90' },
+  codex:         { dark: '#3a5070', light: '#4a6a90' },
+  google:        { dark: '#6a2535', light: '#8a3548' },
+  cursor:        { dark: '#7c5cbf', light: '#6a4aaa' },
+  pi:            { dark: '#5a4a70', light: '#706088' },
 };
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -58,7 +102,7 @@ function txt(
 ): string {
   const attrs = [
     `x="${x}"`, `y="${y}"`,
-    `fill="${escapeXml(opts.fill ?? C.text)}"`,
+    `fill="${escapeXml(opts.fill ?? '#e8e2cc')}"`,
     `font-size="${opts.size ?? 14}"`,
     `font-family="${escapeXml(opts.family ?? BODY)}"`,
     `font-weight="${opts.weight ?? 400}"`,
@@ -95,8 +139,10 @@ function formatDateLong(dateStr: string): string {
   return `${MONTH_NAMES[d.getUTCMonth()] ?? ''} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
-function getProviderColor(provider: string): string {
-  return PROVIDER_COLORS[provider.toLowerCase()] ?? C.providerDefault;
+function getProviderColor(provider: string, mode: 'dark' | 'light'): string {
+  const entry = PROVIDER_COLORS[provider.toLowerCase()];
+  if (entry) return entry[mode];
+  return mode === 'dark' ? '#555555' : '#888888';
 }
 
 function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
@@ -107,13 +153,14 @@ function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} 0 ${end.x} ${end.y}`;
 }
 
-function sectionTag(x: number, y: number, label: string): string {
+function sectionTag(x: number, y: number, label: string, C: Palette): string {
   return txt(x, y, label, {
     fill: C.muted, size: 10, weight: 400, family: MONO, spacing: 2.5,
   });
 }
 
-function noiseDef(): string {
+function noiseDef(isDark: boolean): string {
+  const opacity = isDark ? 0.03 : 0.02;
   return [
     '<defs>',
     '<filter id="grain" x="0" y="0" width="100%" height="100%">',
@@ -122,17 +169,23 @@ function noiseDef(): string {
     '<feBlend in="SourceGraphic" in2="mono" mode="multiply"/>',
     '</filter>',
     '</defs>',
+    `<!-- noise opacity: ${opacity} -->`,
   ].join('\n');
 }
 
 // ── Main Renderer ────────────────────────────────────────────────────
 
-export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
+export function renderWrappedSinglePageSvg(
+  output: TokenleakOutput,
+  options: { theme: 'dark' | 'light' } = { theme: 'dark' },
+): string {
   const stats = output.aggregated;
   const more = output.more;
   const providers = output.providers;
   const { since, until } = output.dateRange;
   const achievements = computeAchievements(output);
+  const isDark = options.theme === 'dark';
+  const C: Palette = isDark ? DARK : LIGHT;
 
   const parts: string[] = [];
   let y = 0;
@@ -142,23 +195,18 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ══════════════════════════════════════════════════════════════════
   const headerH = 200;
   parts.push(box(0, y, WIDTH, headerH, C.bg));
-  parts.push(`<defs><radialGradient id="amb1" cx="10%" cy="10%" r="60%"><stop offset="0%" stop-color="rgba(44,70,120,0.07)"/><stop offset="100%" stop-color="transparent"/></radialGradient></defs>`);
-  parts.push(`<rect x="0" y="${y}" width="${WIDTH}" height="${headerH}" fill="url(#amb1)"/>`);
+  if (isDark) {
+    parts.push(`<defs><radialGradient id="amb1" cx="10%" cy="10%" r="60%"><stop offset="0%" stop-color="rgba(44,70,120,0.07)"/><stop offset="100%" stop-color="transparent"/></radialGradient></defs>`);
+    parts.push(`<rect x="0" y="${y}" width="${WIDTH}" height="${headerH}" fill="url(#amb1)"/>`);
+  }
   // Gold hairline at very top
   parts.push(line(0, y, WIDTH, y, C.gold, 1, 0.5));
 
-  // FIX #1: Year inline with title using a single tspan-style approach
-  // Render "AI Wrapped '26" as two adjacent texts with measured offset
+  // "AI Wrapped '26" hero text
   const year = until.slice(0, 4);
-  const titleText = 'AI Wrapped';
-  // Approximate character width at 72px Bricolage Grotesque weight 800 ≈ 40px/char with -3 spacing
-  // More reliable: just put them close together
-  parts.push(txt(PAD, y + 68, titleText, {
+  parts.push(txt(PAD, y + 68, 'AI Wrapped', {
     fill: C.ivory, size: 68, weight: 800, family: DISPLAY, spacing: -3,
   }));
-  // Place year right after, using a reasonable offset based on character count
-  // At ~38px per char (68px font, bold condensed, -3 spacing), "AI Wrapped" ≈ 10 chars
-  // We use a tighter estimate and let the text anchor help
   parts.push(txt(PAD + 460, y + 68, `'${year.slice(2)}`, {
     fill: C.gold, size: 68, weight: 800, family: DISPLAY, spacing: -3,
   }));
@@ -173,15 +221,20 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     fill: C.ivoryDim, size: 15, weight: 400, family: BODY,
   }));
 
-  // Stamp — right side
-  const stampX = WIDTH - PAD - 240;
-  parts.push(box(stampX, y + 78, 240, 36, 'transparent', 2, { stroke: C.borderHi, strokeWidth: 1 }));
-  parts.push(txt(stampX + 16, y + 101, 'TokenLeak', {
+  // FIX #1: Stamp — wider box, shorter label text, better spacing
+  const stampW = 260;
+  const stampX = WIDTH - PAD - stampW;
+  parts.push(box(stampX, y + 78, stampW, 36, 'transparent', 2, { stroke: C.borderHi, strokeWidth: 1 }));
+  parts.push(txt(stampX + 18, y + 101, 'TokenLeak', {
     fill: C.gold, size: 15, weight: 800, family: DISPLAY, spacing: -0.5,
   }));
-  parts.push(line(stampX + 112, y + 86, stampX + 112, y + 107, C.borderHi, 1));
-  parts.push(txt(stampX + 126, y + 101, 'BUILT WITH TOKENLEAK', {
-    fill: C.muted, size: 8, weight: 400, family: MONO, spacing: 1.5,
+  const sepX = stampX + 118;
+  parts.push(line(sepX, y + 86, sepX, y + 107, C.borderHi, 1));
+  parts.push(txt(sepX + 14, y + 100, 'BUILT WITH', {
+    fill: C.muted, size: 8, weight: 400, family: MONO, spacing: 1.2,
+  }));
+  parts.push(txt(sepX + 14, y + 111, 'TOKENLEAK', {
+    fill: C.muted, size: 8, weight: 400, family: MONO, spacing: 1.2,
   }));
 
   // Days of data indicator
@@ -203,7 +256,7 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ══════════════════════════════════════════════════════════════════
   const bigNumH = 140;
   parts.push(box(0, y, WIDTH, bigNumH, C.surface));
-  parts.push(sectionTag(PAD, y + 24, 'THE BIG NUMBERS'));
+  parts.push(sectionTag(PAD, y + 24, 'THE BIG NUMBERS', C));
 
   const cardW = (INNER - 30) / 4;
   const cardH = 82;
@@ -234,24 +287,18 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
 
   // ══════════════════════════════════════════════════════════════════
   // MIDDLE SECTION — Two columns
-  // Left: Top Models + Provider Mix
-  // Right: Day of Week + Time of Day
   // ══════════════════════════════════════════════════════════════════
-
-  // FIX #2: Compute middle section height dynamically to eliminate excess whitespace
   const colW = (INNER - 24) / 2;
   const leftX = PAD;
   const rightX = PAD + colW + 24;
 
-  // Pre-calculate left column height
   const topModels = stats.topModels.slice(0, 3);
   const totalProviderTokens = providers.reduce((s, p) => s + p.totalTokens, 0);
-  // FIX #6: Filter out providers with < 1% share
   const providerMix = providers
     .map((p) => ({
       name: p.displayName,
       pct: totalProviderTokens > 0 ? (p.totalTokens / totalProviderTokens) * 100 : 0,
-      color: getProviderColor(p.provider),
+      color: getProviderColor(p.provider, options.theme),
     }))
     .filter((p) => p.pct >= 1)
     .sort((a, b) => b.pct - a.pct);
@@ -260,7 +307,6 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   const providerSectionH = 18 + 22 + Math.max(150, providerMix.length * 30 + 50);
   const leftColH = modelSectionH + providerSectionH;
 
-  // Pre-calculate right column height
   const dow = stats.dayOfWeek;
   const dowH = dow.length > 0 ? (28 + 22 + 26 + 100 + 28) : 60;
   const todH = 20 + 22 + 65 + 8 + 65;
@@ -269,9 +315,9 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   const midH = Math.max(leftColH, rightColH) + 20;
   parts.push(box(0, y, WIDTH, midH, C.bg));
 
-  // ── LEFT COLUMN: Top Models ──
+  // ── LEFT: Top Models ──
   let ly = y + 28;
-  parts.push(sectionTag(leftX, ly, 'YOUR TOP MODELS'));
+  parts.push(sectionTag(leftX, ly, 'YOUR TOP MODELS', C));
   ly += 22;
 
   if (topModels.length > 0) {
@@ -288,27 +334,23 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
       parts.push(txt(leftX + colW, ly + 14, `${m.percentage.toFixed(1)}%`, {
         fill: C.gold, size: 13, weight: 700, family: MONO, anchor: 'end',
       }));
-
-      // Hairline track + gold fill
-      parts.push(line(leftX, ly + 26, leftX + colW, ly + 26, 'rgba(255,255,255,0.09)', 1));
+      parts.push(line(leftX, ly + 26, leftX + colW, ly + 26, C.barTrack, 1));
       parts.push(line(leftX, ly + 26, leftX + barW, ly + 26, C.gold, 1, opacity));
-
       ly += 42;
     }
   }
 
-  // ── LEFT COLUMN: Provider Mix ──
+  // ── LEFT: Provider Mix ──
   ly += 18;
-  parts.push(sectionTag(leftX, ly, 'PROVIDER MIX'));
+  parts.push(sectionTag(leftX, ly, 'PROVIDER MIX', C));
   ly += 22;
 
-  // Donut chart
   const donutCx = leftX + 70;
   const donutCy = ly + 70;
   const donutR = 50;
   const donutStroke = 14;
 
-  parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="${donutStroke}"/>`);
+  parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${C.trackStroke}" stroke-width="${donutStroke}"/>`);
 
   const circumference = 2 * Math.PI * donutR;
   let dashOffset = circumference / 4;
@@ -318,7 +360,6 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     dashOffset -= dash;
   }
 
-  // Center text
   parts.push(txt(donutCx, donutCy + 5, `${providers.length}`, {
     fill: C.ivory, size: 22, weight: 800, family: DISPLAY, anchor: 'middle',
   }));
@@ -326,7 +367,6 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     fill: C.muted, size: 8, weight: 400, family: MONO, anchor: 'middle', spacing: 1,
   }));
 
-  // Provider legend (right of donut)
   const legendX = leftX + 155;
   for (let i = 0; i < providerMix.length; i++) {
     const p = providerMix[i]!;
@@ -340,12 +380,12 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     }));
   }
 
-  // ── RIGHT COLUMN: Day of Week ──
+  // ── RIGHT: Day of Week ──
   let ry = y + 28;
-  parts.push(sectionTag(rightX, ry, 'CODING DAYS'));
+  parts.push(sectionTag(rightX, ry, 'CODING DAYS', C));
   ry += 22;
 
-  const dowOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
+  const dowOrder = [1, 2, 3, 4, 5, 6, 0];
   const dowEntries = dowOrder.map((dayNum) => {
     const entry = dow.find((e) => e.day === dayNum);
     return { label: DAY_NAMES[dayNum] ?? '', tokens: entry?.tokens ?? 0 };
@@ -374,7 +414,6 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
       const opacity = ratio < 0.35 ? 0.35 : ratio < 0.55 ? 0.6 : 1;
 
       parts.push(box(bx, by, barW, barH, C.gold, 1, { opacity }));
-
       parts.push(txt(bx + barW / 2, ry + barMaxH + 16, entry.label, {
         fill: isPeak ? C.gold : C.muted, size: 9, weight: isPeak ? 700 : 400,
         family: MONO, anchor: 'middle', spacing: 0.5,
@@ -383,9 +422,9 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     ry += barMaxH + 28;
   }
 
-  // ── RIGHT COLUMN: Time of Day ──
+  // ── RIGHT: Time of Day ──
   ry += 20;
-  parts.push(sectionTag(rightX, ry, 'WHEN YOU CODE'));
+  parts.push(sectionTag(rightX, ry, 'WHEN YOU CODE', C));
   ry += 22;
 
   const hourOfDay = more?.hourOfDay;
@@ -424,15 +463,12 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     const cy = ry + row * (todCellH + 8);
     const isPeak = period.label === peakPeriod.label;
 
-    // FIX #5: Make peak cell more visually distinct
     parts.push(box(cx, cy, todCellW, todCellH, C.surface2, 2, {
       stroke: isPeak ? C.borderHi : C.border, strokeWidth: isPeak ? 1.5 : 1,
     }));
-    // Gold hairline at top of peak cell
     if (isPeak) {
       parts.push(line(cx + 2, cy, cx + todCellW - 2, cy, C.gold, 2, 0.6));
     }
-
     parts.push(txt(cx + 14, cy + 20, period.label.toUpperCase(), {
       fill: isPeak ? C.gold : C.muted, size: 8, weight: 400, family: MONO, spacing: 1.5,
     }));
@@ -458,22 +494,20 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ── Col 1: Streak ──
   const c1x = PAD;
   let c1y = y + 24;
-  parts.push(sectionTag(c1x, c1y, 'STREAK'));
+  parts.push(sectionTag(c1x, c1y, 'STREAK', C));
   c1y += 20;
 
-  // FIX #4: Use a two-line layout instead of fragile inline offset
   parts.push(txt(c1x, c1y + 42, `${stats.longestStreak}`, {
     fill: C.gold, size: 60, weight: 800, family: DISPLAY, spacing: -2,
   }));
   parts.push(txt(c1x, c1y + 62, 'DAY LONGEST STREAK', {
     fill: C.muted, size: 9, weight: 400, family: MONO, spacing: 2,
   }));
-
   parts.push(txt(c1x, c1y + 86, `Current: ${stats.currentStreak} days`, {
     fill: C.muted, size: 11, weight: 400, family: MONO, spacing: 0.5,
   }));
 
-  // FIX #3: Bigger streak dots — 10px with 4px gap, fits better in column
+  // Streak dots
   c1y += 102;
   const activeDates = new Set<string>();
   for (const prov of providers) {
@@ -494,8 +528,8 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     const dx = c1x + col * (dotSize + dotGap);
     const dy = c1y + row * (dotSize + dotGap);
 
-    let dotColor = C.surface2;
-    let dotBorder = 'rgba(255,255,255,0.07)';
+    let dotColor = C.dotInactive;
+    let dotBorder = C.dotInactiveBorder;
     if (isCurrentStreak) {
       dotColor = C.gold;
       dotBorder = C.gold;
@@ -509,7 +543,7 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ── Col 2: Cache Efficiency ──
   const c2x = PAD + col3W + 16;
   let c2y = y + 24;
-  parts.push(sectionTag(c2x, c2y, 'CACHE'));
+  parts.push(sectionTag(c2x, c2y, 'CACHE', C));
   c2y += 20;
 
   const hitRate = stats.cacheHitRate;
@@ -521,7 +555,7 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   const ringR = 48;
   const ringStroke = 10;
 
-  parts.push(`<circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="${ringStroke}"/>`);
+  parts.push(`<circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${C.trackStroke}" stroke-width="${ringStroke}"/>`);
 
   if (hitRate > 0) {
     const sweep = Math.min(hitRate * 360, 359);
@@ -536,19 +570,35 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     fill: C.muted, size: 8, weight: 400, family: MONO, anchor: 'middle', spacing: 1.5,
   }));
 
-  // Cache stats below ring
+  // FIX #3: Cache stats in structured card layout with label/value separation
   c2y += 136;
   const cacheEcon = more?.cacheEconomics;
   if (cacheEcon) {
-    parts.push(txt(c2x, c2y + 14, `Reads: ${formatNumber(cacheEcon.readTokens)}`, {
-      fill: C.text, size: 12, weight: 500, family: MONO,
-    }));
-    parts.push(txt(c2x, c2y + 32, `Writes: ${formatNumber(cacheEcon.writeTokens)}`, {
-      fill: C.text, size: 12, weight: 500, family: MONO,
-    }));
+    const cacheStatItems = [
+      { label: 'READS', value: formatNumber(cacheEcon.readTokens), highlight: false },
+      { label: 'WRITES', value: formatNumber(cacheEcon.writeTokens), highlight: false },
+    ];
     if (cacheEcon.reuseRatio !== null && Number.isFinite(cacheEcon.reuseRatio)) {
-      parts.push(txt(c2x, c2y + 50, `Reuse: ${cacheEcon.reuseRatio.toFixed(1)}x`, {
-        fill: C.gold, size: 12, weight: 700, family: MONO,
+      cacheStatItems.push({ label: 'REUSE', value: `${cacheEcon.reuseRatio.toFixed(1)}x`, highlight: true });
+    }
+
+    const cacheCardW = (col3W - (cacheStatItems.length - 1) * 6) / cacheStatItems.length;
+    const cacheCardH = 52;
+    for (let i = 0; i < cacheStatItems.length; i++) {
+      const item = cacheStatItems[i]!;
+      const ix = c2x + i * (cacheCardW + 6);
+      const iy = c2y;
+
+      parts.push(box(ix, iy, cacheCardW, cacheCardH, C.surface2, 2, {
+        stroke: item.highlight ? C.borderHi : C.border, strokeWidth: 1,
+      }));
+      // Label at top
+      parts.push(txt(ix + cacheCardW / 2, iy + 16, item.label, {
+        fill: C.muted, size: 8, weight: 400, family: MONO, anchor: 'middle', spacing: 1.5,
+      }));
+      // Value below
+      parts.push(txt(ix + cacheCardW / 2, iy + 38, item.value, {
+        fill: item.highlight ? C.gold : C.ivory, size: 16, weight: 700, family: DISPLAY, anchor: 'middle', spacing: -0.5,
       }));
     }
   }
@@ -556,24 +606,20 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ── Col 3: Peak Day ──
   const c3x = PAD + 2 * (col3W + 16);
   let c3y = y + 24;
-  parts.push(sectionTag(c3x, c3y, 'PEAK DAY'));
+  parts.push(sectionTag(c3x, c3y, 'PEAK DAY', C));
   c3y += 20;
 
   if (stats.peakDay) {
     parts.push(box(c3x, c3y, col3W, 130, C.surface2, 2, { stroke: C.borderHi, strokeWidth: 1 }));
-
     parts.push(txt(c3x + col3W / 2, c3y + 24, formatDateLong(stats.peakDay.date).toUpperCase(), {
       fill: C.muted, size: 9, weight: 400, family: MONO, anchor: 'middle', spacing: 2.5,
     }));
-
     parts.push(txt(c3x + col3W / 2, c3y + 72, formatNumber(stats.peakDay.tokens), {
       fill: C.gold, size: 46, weight: 800, family: DISPLAY, anchor: 'middle', spacing: -2,
     }));
-
     parts.push(txt(c3x + col3W / 2, c3y + 94, 'TOKENS IN ONE DAY', {
       fill: C.muted, size: 9, weight: 400, family: MONO, anchor: 'middle', spacing: 2,
     }));
-
     const multiplier = stats.averageDailyTokens > 0
       ? (stats.peakDay.tokens / stats.averageDailyTokens).toFixed(1)
       : '0';
@@ -607,12 +653,10 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // ══════════════════════════════════════════════════════════════════
   // ACHIEVEMENTS — Two rows of 5 badges
   // ══════════════════════════════════════════════════════════════════
-  // FIX #7: Bigger badges in a 5×2 grid
   const achH = 180;
   parts.push(box(0, y, WIDTH, achH, C.bg));
   parts.push(line(PAD, y, WIDTH - PAD, y, C.gold, 1, 0.15));
-
-  parts.push(sectionTag(PAD, y + 24, `ACHIEVEMENTS · ${achievements.length} UNLOCKED`));
+  parts.push(sectionTag(PAD, y + 24, `ACHIEVEMENTS · ${achievements.length} UNLOCKED`, C));
 
   const ALL_BADGES = [
     { title: 'Streak Master', sub: '>30d streak' },
@@ -629,7 +673,6 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
 
   const earnedTitles = new Set(achievements.map((a) => a.title));
   const badgeCols = 5;
-  const badgeRows = 2;
   const badgeGapX = 10;
   const badgeGapY = 8;
   const badgeW = (INNER - (badgeCols - 1) * badgeGapX) / badgeCols;
@@ -644,8 +687,7 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
     const bx = PAD + col * (badgeW + badgeGapX);
     const by = badgeStartY + row * (badgeH + badgeGapY);
 
-    const opacity = isEarned ? 1 : 0.2;
-    parts.push(`<g opacity="${opacity}">`);
+    parts.push(`<g opacity="${isEarned ? 1 : 0.2}">`);
     parts.push(box(bx, by, badgeW, badgeH, C.surface2, 2, {
       stroke: isEarned ? C.borderHi : C.border, strokeWidth: 1,
     }));
@@ -681,12 +723,13 @@ export function renderWrappedSinglePageSvg(output: TokenleakOutput): string {
   // COMPOSE SVG
   // ══════════════════════════════════════════════════════════════════
   const totalHeight = y;
+  const noiseOpacity = isDark ? 0.03 : 0.02;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${totalHeight}" viewBox="0 0 ${WIDTH} ${totalHeight}" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility">`,
     `<rect width="${WIDTH}" height="${totalHeight}" fill="${C.bg}"/>`,
-    noiseDef(),
-    `<rect width="${WIDTH}" height="${totalHeight}" fill="transparent" filter="url(#grain)" opacity="0.03" pointer-events="none"/>`,
+    noiseDef(isDark),
+    `<rect width="${WIDTH}" height="${totalHeight}" fill="transparent" filter="url(#grain)" opacity="${noiseOpacity}" pointer-events="none"/>`,
     ...parts,
     '</svg>',
   ].join('\n');

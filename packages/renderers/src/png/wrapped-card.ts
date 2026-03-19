@@ -8,15 +8,13 @@ const PNG_DENSITY = 216;
 /**
  * Render a single-page "AI Coding Wrapped" infographic PNG.
  * The image is 1200px wide with dynamic height based on content.
+ * Supports both dark and light themes.
  */
 export async function renderWrappedPng(
   output: TokenleakOutput,
   options: { theme: 'dark' | 'light' },
 ): Promise<Buffer> {
-  // Theme param is accepted for API compatibility but single-page uses dark only
-  void options.theme;
-
-  const svgString = renderWrappedSinglePageSvg(output);
+  const svgString = renderWrappedSinglePageSvg(output, { theme: options.theme });
 
   const pngBuffer = await sharp(Buffer.from(svgString), {
     density: PNG_DENSITY,

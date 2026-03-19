@@ -87,11 +87,11 @@ describe('renderWrappedSinglePageSvg', () => {
     expect(svg).toContain('HIT RATE');
   });
 
-  it('renders cache economics when more stats are present', () => {
+  it('renders cache economics as structured cards when more stats are present', () => {
     const svg = renderWrappedSinglePageSvg(createOutput({ more: createMoreStats() }));
-    expect(svg).toContain('Reads:');
-    expect(svg).toContain('Writes:');
-    expect(svg).toContain('Reuse:');
+    expect(svg).toContain('READS');
+    expect(svg).toContain('WRITES');
+    expect(svg).toContain('REUSE');
   });
 
   it('renders with zeroed stats without crashing', () => {
@@ -219,5 +219,53 @@ describe('renderWrappedSinglePageSvg', () => {
     const height = parseInt(match![1]!, 10);
     expect(height).toBeLessThan(2000);
     expect(height).toBeGreaterThan(500);
+  });
+
+  // ── Light theme tests ──────────────────────────────────────────────
+  it('renders valid SVG with light theme', () => {
+    const svg = renderWrappedSinglePageSvg(createOutput(), { theme: 'light' });
+    expect(svg.trim()).toMatch(/^<svg[\s\S]*<\/svg>$/);
+    expect(svg).toContain('width="1200"');
+  });
+
+  it('light theme uses light background color', () => {
+    const svg = renderWrappedSinglePageSvg(createOutput(), { theme: 'light' });
+    expect(svg).toContain('#fafaf9');
+    expect(svg).not.toContain('#09090b');
+  });
+
+  it('light theme uses dark text for ivory', () => {
+    const svg = renderWrappedSinglePageSvg(createOutput(), { theme: 'light' });
+    expect(svg).toContain('#1a1a18');
+  });
+
+  it('dark and light themes produce different SVG', () => {
+    const output = createOutput();
+    const dark = renderWrappedSinglePageSvg(output, { theme: 'dark' });
+    const light = renderWrappedSinglePageSvg(output, { theme: 'light' });
+    expect(dark).not.toBe(light);
+  });
+
+  it('light theme includes all sections', () => {
+    const svg = renderWrappedSinglePageSvg(createOutput(), { theme: 'light' });
+    expect(svg).toContain('THE BIG NUMBERS');
+    expect(svg).toContain('STREAK');
+    expect(svg).toContain('CACHE');
+    expect(svg).toContain('ACHIEVEMENTS');
+    expect(svg).toContain('PEAK DAY');
+  });
+
+  it('light theme renders with zeroed stats without crashing', () => {
+    const svg = renderWrappedSinglePageSvg(
+      createOutput({ aggregated: createZeroedStats(), providers: [], more: null }),
+      { theme: 'light' },
+    );
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('</svg>');
+  });
+
+  it('defaults to dark theme when options omitted', () => {
+    const svg = renderWrappedSinglePageSvg(createOutput());
+    expect(svg).toContain('#09090b');
   });
 });
