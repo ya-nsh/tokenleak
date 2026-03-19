@@ -152,6 +152,17 @@ tokenleak cursor logout --name work
 tokenleak cursor logout --all --purge-cache
 ```
 
+- Getting a Cursor session token:
+
+  The exact Cursor UI may change, but this flow works when the token is not exposed directly in settings:
+
+  1. Open Cursor and sign in.
+  2. Open `https://www.cursor.com/settings`.
+  3. Open your browser developer tools, then go to the Network tab.
+  4. Refresh the settings page.
+  5. Inspect a request sent to `cursor.com` and copy the session token from the authenticated request headers or cookies.
+  6. Paste that token into `tokenleak cursor login --name <label>` when prompted.
+
 - Local checkout flow:
 
 ```bash
