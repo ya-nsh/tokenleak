@@ -366,7 +366,8 @@ export function renderWrappedSinglePageSvg(
     parts.push(txt(legendX + 16, py + 8, p.name, {
       fill: C.text, size: 13, weight: 500, family: BODY,
     }));
-    parts.push(txt(leftX + colW, py + 8, `${p.pct.toFixed(0)}%`, {
+    const pctLabel = p.pct > 0 && p.pct < 1 ? '<1%' : `${p.pct.toFixed(0)}%`;
+    parts.push(txt(leftX + colW, py + 8, pctLabel, {
       fill: C.gold, size: 12, weight: 700, family: MONO, anchor: 'end',
     }));
   }
