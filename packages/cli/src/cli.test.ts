@@ -1,11 +1,50 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { buildInteractiveSummary, resolveConfig, resolveFocusConfig, resolveTabbedDashboardProviderConfig, resolveTabbedDashboardProviders, computeDateRange, inferFormatFromPath, normalizeCliArgv, run, runFocus, renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak } from './cli';
+import {
+  buildInteractiveSummary,
+  resolveConfig,
+  resolveFocusConfig,
+  resolveTabbedDashboardProviderConfig,
+  resolveTabbedDashboardProviders,
+  computeDateRange,
+  inferFormatFromPath,
+  normalizeCliArgv,
+  run,
+  runFocus,
+  renderFocusReport,
+  colorScore,
+  colorDuration,
+  colorDensity,
+  colorProvider,
+  colorStreak,
+} from './cli';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { buildCliArgTokens, buildCliPreview } from './flags';
-import { INTERACTIVE_FLAG_LINES, shouldStartInteractiveCli, finalizeCliArgs, stripAnsi, visibleLength, padVisible, truncateVisible, clampScrollOffset, buildOutputSectionLines, buildTabbedDashboardOptions, createMenuOptions, renderProgressBar } from './interactive';
-import { writeFileSync, unlinkSync, mkdirSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  INTERACTIVE_FLAG_LINES,
+  shouldStartInteractiveCli,
+  finalizeCliArgs,
+  stripAnsi,
+  visibleLength,
+  padVisible,
+  truncateVisible,
+  clampScrollOffset,
+  buildOutputSectionLines,
+  buildLauncherBody,
+  buildTabbedDashboardOptions,
+  createMenuOptions,
+  renderProgressBar,
+} from './interactive';
+import {
+  writeFileSync,
+  unlinkSync,
+  mkdirSync,
+  existsSync,
+  cpSync,
+  mkdtempSync,
+  rmSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -18,9 +57,15 @@ function createProviderFixtureEnv(): { env: NodeJS.ProcessEnv; cleanup: () => vo
   const cursorRoot = join(fixtureRoot, 'cursor-root');
   const piAgentDir = join(fixtureRoot, 'pi-agent');
 
-  cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), { recursive: true });
-  cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), { recursive: true });
-  cpSync(join(REGISTRY_FIXTURES_DIR, 'cursor-cache'), join(cursorRoot, 'cursor-cache'), { recursive: true });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'claude-code'), join(claudeConfigDir, 'projects'), {
+    recursive: true,
+  });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'codex', 'sessions'), join(codexHome, 'sessions'), {
+    recursive: true,
+  });
+  cpSync(join(REGISTRY_FIXTURES_DIR, 'cursor-cache'), join(cursorRoot, 'cursor-cache'), {
+    recursive: true,
+  });
   cpSync(join(REGISTRY_FIXTURES_DIR, 'pi', 'agent'), piAgentDir, { recursive: true });
 
   return {
@@ -83,19 +128,25 @@ describe('interactive launcher', () => {
     expect(INTERACTIVE_FLAG_LINES).toContain('    explain <date>       explain one day of usage');
     expect(INTERACTIVE_FLAG_LINES).toContain('    focus                rank deep-work sessions');
     expect(INTERACTIVE_FLAG_LINES).toContain('    --cursor            shortcut for Cursor');
-    expect(INTERACTIVE_FLAG_LINES).toContain('-f, --format <format>   terminal | png | svg | json | wrapped');
-    expect(INTERACTIVE_FLAG_LINES).toContain('    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD');
+    expect(INTERACTIVE_FLAG_LINES).toContain(
+      '-f, --format <format>   terminal | png | svg | json | wrapped',
+    );
+    expect(INTERACTIVE_FLAG_LINES).toContain(
+      '    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD',
+    );
     expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
   });
 
   test('buildTabbedDashboardOptions preserves dashboard scope inputs', () => {
-    expect(buildTabbedDashboardOptions(
-      { days: 7, until: '2026-03-14' },
-      ['claude-code', 'codex'],
-      120,
-      true,
-      true,
-    )).toEqual({
+    expect(
+      buildTabbedDashboardOptions(
+        { days: 7, until: '2026-03-14' },
+        ['claude-code', 'codex'],
+        120,
+        true,
+        true,
+      ),
+    ).toEqual({
       compare: 'auto',
       initialTimeRange: '7d',
       noColor: true,
@@ -107,13 +158,15 @@ describe('interactive launcher', () => {
   });
 
   test('buildTabbedDashboardOptions maps custom ranges onto the nearest dashboard tab', () => {
-    expect(buildTabbedDashboardOptions(
-      { since: '2026-01-01', until: '2026-03-14' },
-      [],
-      null,
-      false,
-      false,
-    )).toMatchObject({
+    expect(
+      buildTabbedDashboardOptions(
+        { since: '2026-01-01', until: '2026-03-14' },
+        [],
+        null,
+        false,
+        false,
+      ),
+    ).toMatchObject({
       compare: 'auto',
       initialTimeRange: '90d',
       initialRange: {
@@ -127,23 +180,20 @@ describe('interactive launcher', () => {
   });
 
   test('buildTabbedDashboardOptions validates custom dates before storing them', () => {
-    expect(() => buildTabbedDashboardOptions(
-      { since: '2026-03-14', until: '2026-03-01' },
-      [],
-      null,
-      false,
-      false,
-      null,
-    )).toThrow('must not be after');
+    expect(() =>
+      buildTabbedDashboardOptions(
+        { since: '2026-03-14', until: '2026-03-01' },
+        [],
+        null,
+        false,
+        false,
+        null,
+      ),
+    ).toThrow('must not be after');
 
-    expect(() => buildTabbedDashboardOptions(
-      { since: 'not-a-date' },
-      [],
-      null,
-      false,
-      false,
-      null,
-    )).toThrow('Invalid --since date');
+    expect(() =>
+      buildTabbedDashboardOptions({ since: 'not-a-date' }, [], null, false, false, null),
+    ).toThrow('Invalid --since date');
   });
 
   test('resolveTabbedDashboardProviderConfig preserves selected providers', () => {
@@ -163,28 +213,28 @@ describe('consolidated menu', () => {
   test('has 10 items with unique shortcuts 1-0', () => {
     const options = createMenuOptions();
     expect(options).toHaveLength(10);
-    const shortcuts = options.map(o => o.shortcut);
+    const shortcuts = options.map((o) => o.shortcut);
     expect(new Set(shortcuts).size).toBe(10);
     expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
   });
 
   test('has Export as item 2', () => {
     const options = createMenuOptions();
-    const exportItem = options.find(o => o.shortcut === '2');
+    const exportItem = options.find((o) => o.shortcut === '2');
     expect(exportItem).toBeDefined();
     expect(exportItem!.title).toBe('Export');
   });
 
   test('has Build Custom Command as item 0', () => {
     const options = createMenuOptions();
-    const item0 = options.find(o => o.shortcut === '0');
+    const item0 = options.find((o) => o.shortcut === '0');
     expect(item0).toBeDefined();
     expect(item0!.title).toBe('Build Custom Command');
   });
 
   test('does not have separate Export JSON, Export SVG, or Export PNG items', () => {
     const options = createMenuOptions();
-    const titles = options.map(o => o.title);
+    const titles = options.map((o) => o.title);
     expect(titles).not.toContain('Export JSON');
     expect(titles).not.toContain('Export SVG');
     expect(titles).not.toContain('Export PNG');
@@ -200,13 +250,15 @@ describe('consolidated menu', () => {
 
 describe('flag serialization', () => {
   test('buildCliArgTokens serializes booleans and values in CLI order', () => {
-    expect(buildCliArgTokens({
-      format: 'png',
-      output: 'card.png',
-      cursor: true,
-      openCode: true,
-      noColor: true,
-    })).toEqual(['--format', 'png', '--output', 'card.png', '--cursor', '--open-code', '--no-color']);
+    expect(
+      buildCliArgTokens({
+        format: 'png',
+        output: 'card.png',
+        cursor: true,
+        openCode: true,
+        noColor: true,
+      }),
+    ).toEqual(['--format', 'png', '--output', 'card.png', '--cursor', '--open-code', '--no-color']);
   });
 
   test('buildCliPreview includes the tokenleak executable prefix', () => {
@@ -281,6 +333,52 @@ describe('interactive helpers', () => {
       '',
     ]);
   });
+
+  test('buildLauncherBody keeps the full two-column launcher in a large terminal', () => {
+    const output = stripAnsi(
+      buildLauncherBody(
+        { version: '1.2.0', helpText: 'help' },
+        createMenuOptions(),
+        0,
+        140,
+        40,
+      ).join('\n'),
+    );
+
+    expect(output).toContain('All Flags');
+    expect(output).toContain('Launch Dashboard');
+  });
+
+  test('buildLauncherBody switches to a compact menu when the stacked launcher would overflow', () => {
+    const output = stripAnsi(
+      buildLauncherBody(
+        { version: '1.2.0', helpText: 'help' },
+        createMenuOptions(),
+        0,
+        88,
+        20,
+      ).join('\n'),
+    );
+
+    expect(output).not.toContain('All Flags');
+    expect(output).toContain('Narrow pane detected. Press H for the full flag reference.');
+    expect(output).toContain('Launch Dashboard');
+  });
+
+  test('buildLauncherBody keeps the selected action visible in compact mode', () => {
+    const output = stripAnsi(
+      buildLauncherBody(
+        { version: '1.2.0', helpText: 'help' },
+        createMenuOptions(),
+        9,
+        88,
+        12,
+      ).join('\n'),
+    );
+
+    expect(output).toContain('Build Custom Command');
+    expect(output).toContain('tokenleak --format terminal --days 90');
+  });
 });
 
 describe('interactive summaries', () => {
@@ -291,7 +389,9 @@ describe('interactive summaries', () => {
   });
 
   test('summarizes list provider runs', () => {
-    expect(buildInteractiveSummary({ listProviders: true }, true, 0)).toBe('Provider registry loaded.');
+    expect(buildInteractiveSummary({ listProviders: true }, true, 0)).toBe(
+      'Provider registry loaded.',
+    );
   });
 
   test('summarizes live server runs', () => {
@@ -303,11 +403,15 @@ describe('interactive summaries', () => {
   });
 
   test('summarizes explain runs', () => {
-    expect(buildInteractiveSummary({ subcommand: 'explain' }, true, 0)).toBe('Explain report generated.');
+    expect(buildInteractiveSummary({ subcommand: 'explain' }, true, 0)).toBe(
+      'Explain report generated.',
+    );
   });
 
   test('summarizes focus runs', () => {
-    expect(buildInteractiveSummary({ subcommand: 'focus' }, true, 0)).toBe('Focus report generated.');
+    expect(buildInteractiveSummary({ subcommand: 'focus' }, true, 0)).toBe(
+      'Focus report generated.',
+    );
   });
 
   test('summarizes terminal dashboard runs', () => {
@@ -352,9 +456,7 @@ describe('computeDateRange', () => {
   });
 
   test('throws on invalid --until format', () => {
-    expect(() => computeDateRange({ until: '01-31-2025' })).toThrow(
-      'Invalid --until date',
-    );
+    expect(() => computeDateRange({ until: '01-31-2025' })).toThrow('Invalid --until date');
   });
 
   test('throws on impossible date like 2025-02-30', () => {
@@ -364,9 +466,9 @@ describe('computeDateRange', () => {
   });
 
   test('throws when --since is after --until', () => {
-    expect(() =>
-      computeDateRange({ since: '2025-06-01', until: '2025-01-01' }),
-    ).toThrow('must not be after');
+    expect(() => computeDateRange({ since: '2025-06-01', until: '2025-01-01' })).toThrow(
+      'must not be after',
+    );
   });
 });
 
@@ -434,7 +536,13 @@ describe('resolveConfig', () => {
   });
 
   test('passes provider shortcut flags through', () => {
-    const config = resolveConfig({ claude: true, codex: true, cursor: true, pi: true, openCode: true });
+    const config = resolveConfig({
+      claude: true,
+      codex: true,
+      cursor: true,
+      pi: true,
+      openCode: true,
+    });
     expect(config.claude).toBe(true);
     expect(config.codex).toBe(true);
     expect(config.cursor).toBe(true);
@@ -738,11 +846,14 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        ['bun', cliPath, '--format', 'json', '--provider', 'claude,', 'codex'],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
@@ -798,11 +909,14 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, '--format', 'terminal', '--compare', 'auto', '--provider', 'pi'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        ['bun', cliPath, '--format', 'terminal', '--compare', 'auto', '--provider', 'pi'],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
@@ -887,11 +1001,14 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'explain', '2026-03-11', '--format', 'json', '--provider', 'pi'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        ['bun', cliPath, 'explain', '2026-03-11', '--format', 'json', '--provider', 'pi'],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
@@ -945,10 +1062,10 @@ describe('renderFocusReport', () => {
         durationMs: 8_100_000,
         tokensPerHour: 45230,
         totalTokens: 102000,
-        cost: 3.50,
+        cost: 3.5,
         streak: 3,
         score: 8.5,
-        scoreBreakdown: { duration: 0.45, density: 0.30, streak: 0.25 },
+        scoreBreakdown: { duration: 0.45, density: 0.3, streak: 0.25 },
         rationale: ['dur 45%', 'den 30%', 'stk 25%'],
       },
       {
@@ -962,10 +1079,10 @@ describe('renderFocusReport', () => {
         durationMs: 5_400_000,
         tokensPerHour: 32100,
         totalTokens: 48150,
-        cost: 1.20,
+        cost: 1.2,
         streak: 2,
         score: 7.2,
-        scoreBreakdown: { duration: 0.40, density: 0.35, streak: 0.25 },
+        scoreBreakdown: { duration: 0.4, density: 0.35, streak: 0.25 },
         rationale: ['dur 40%', 'den 35%', 'stk 25%'],
       },
     ],
@@ -1018,7 +1135,9 @@ describe('renderFocusReport', () => {
     const lines = output.split('\n');
     // Each entry should appear as a single line containing both score and provider
     for (const entry of mockFocusReport.entries) {
-      const dataLines = lines.filter(l => l.includes(entry.score.toFixed(1)) && l.includes(entry.provider));
+      const dataLines = lines.filter(
+        (l) => l.includes(entry.score.toFixed(1)) && l.includes(entry.provider),
+      );
       expect(dataLines.length).toBe(1);
     }
   });
@@ -1026,15 +1145,18 @@ describe('renderFocusReport', () => {
   test('label column shrinks when terminal is narrow', () => {
     const longLabelReport = {
       method: 'test',
-      entries: [{
-        ...mockFocusReport.entries[0]!,
-        label: 'A very long label that forces the table to be wider than a narrow terminal allows',
-      }],
+      entries: [
+        {
+          ...mockFocusReport.entries[0]!,
+          label:
+            'A very long label that forces the table to be wider than a narrow terminal allows',
+        },
+      ],
     };
     const narrow = renderFocusReport(longLabelReport, 60, true);
     const wide = renderFocusReport(longLabelReport, 120, true);
-    const narrowTopLine = narrow.split('\n').find(l => l.startsWith('\u250C'))!;
-    const wideTopLine = wide.split('\n').find(l => l.startsWith('\u250C'))!;
+    const narrowTopLine = narrow.split('\n').find((l) => l.startsWith('\u250C'))!;
+    const wideTopLine = wide.split('\n').find((l) => l.startsWith('\u250C'))!;
     expect(wideTopLine.length).toBeGreaterThan(narrowTopLine.length);
   });
 
@@ -1052,7 +1174,7 @@ describe('renderFocusReport', () => {
     const output = renderFocusReport(mockFocusReport, 80, true);
     const lines = output.split('\n');
     // Count mid-separators — use noColor so startsWith/endsWith work
-    const midSeparators = lines.filter(l => l.startsWith('\u251C') && l.endsWith('\u2524'));
+    const midSeparators = lines.filter((l) => l.startsWith('\u251C') && l.endsWith('\u2524'));
     // header separator + (entries - 1) between-entry separators = 1 + 1 = 2
     expect(midSeparators.length).toBe(2);
   });
@@ -1060,7 +1182,13 @@ describe('renderFocusReport', () => {
   test('all table lines (borders + data) have identical visible width (noColor)', () => {
     const output = renderFocusReport(mockFocusReport, 90, true);
     const lines = output.split('\n');
-    const tableLines = lines.filter(l => l.includes('\u2502') || l.includes('\u250C') || l.includes('\u2514') || l.includes('\u251C'));
+    const tableLines = lines.filter(
+      (l) =>
+        l.includes('\u2502') ||
+        l.includes('\u250C') ||
+        l.includes('\u2514') ||
+        l.includes('\u251C'),
+    );
     expect(tableLines.length).toBeGreaterThan(0);
     const firstLen = tableLines[0]!.length;
     for (const line of tableLines) {
@@ -1071,10 +1199,13 @@ describe('renderFocusReport', () => {
   test('long labels are truncated with ellipsis at narrow width', () => {
     const longLabelReport = {
       method: 'test',
-      entries: [{
-        ...mockFocusReport.entries[0]!,
-        label: 'This is a very long label that should definitely be truncated when the terminal is narrow',
-      }],
+      entries: [
+        {
+          ...mockFocusReport.entries[0]!,
+          label:
+            'This is a very long label that should definitely be truncated when the terminal is narrow',
+        },
+      ],
     };
     const output = renderFocusReport(longLabelReport, 70, true);
     expect(output).toContain('\u2026'); // … ellipsis

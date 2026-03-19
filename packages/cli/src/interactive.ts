@@ -175,14 +175,17 @@ function renderRule(width: number): string {
   return color('-'.repeat(width), DIM);
 }
 
-function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | 'loadingTitle' | 'loadingDetail' | 'executionMode'> {
+function describeRequest(
+  args: CliArgs,
+): Pick<InteractiveRunRequest, 'title' | 'loadingTitle' | 'loadingDetail' | 'executionMode'> {
   const output = typeof args['output'] === 'string' ? args['output'] : null;
 
   if (args['liveServer']) {
     return {
       title: 'Live Dashboard',
       loadingTitle: 'Starting live dashboard',
-      loadingDetail: 'Launching the local server. Press Ctrl-C in the live view to stop it, then you will return here.',
+      loadingDetail:
+        'Launching the local server. Press Ctrl-C in the live view to stop it, then you will return here.',
       executionMode: 'inherit',
     };
   }
@@ -191,7 +194,8 @@ function describeRequest(args: CliArgs): Pick<InteractiveRunRequest, 'title' | '
     return {
       title: 'Wrapped Live',
       loadingTitle: 'Starting wrapped live presentation',
-      loadingDetail: 'Loading usage data and launching the local server. Press Ctrl-C to stop it, then you will return here.',
+      loadingDetail:
+        'Loading usage data and launching the local server. Press Ctrl-C to stop it, then you will return here.',
       executionMode: 'inherit',
     };
   }
@@ -320,16 +324,22 @@ function createSubcommandRunCommand(
   };
 }
 
-function renderMenu(options: MenuOption[], selectedIndex: number): string[] {
+function renderMenu(options: LauncherRenderableOption[], selectedIndex: number): string[] {
   return options.map((option, index) => {
     const isSelected = index === selectedIndex;
     const prefix = isSelected ? color('>', GREEN) : ' ';
-    const number = isSelected ? color(option.shortcut, WHITE + BOLD) : color(option.shortcut, YELLOW);
+    const number = isSelected
+      ? color(option.shortcut, WHITE + BOLD)
+      : color(option.shortcut, YELLOW);
     const title = isSelected ? color(option.title, WHITE + BOLD) : color(option.title, WHITE);
-    const description = isSelected ? color(option.description, CYAN) : color(option.description, DIM);
+    const description = isSelected
+      ? color(option.description, CYAN)
+      : color(option.description, DIM);
     return `${prefix} [${number}] ${title} ${description}`;
   });
 }
+
+type LauncherRenderableOption = Pick<MenuOption, 'shortcut' | 'title' | 'description' | 'preview'>;
 
 function renderFlagPanel(): string[] {
   return [
@@ -340,9 +350,24 @@ function renderFlagPanel(): string[] {
   ];
 }
 
+function sliceVisibleWindow<T>(
+  items: readonly T[],
+  selectedIndex: number,
+  maxVisible: number,
+): T[] {
+  if (items.length <= maxVisible) {
+    return [...items];
+  }
+
+  const visibleCount = Math.max(1, maxVisible);
+  const maxStart = items.length - visibleCount;
+  const start = Math.max(0, Math.min(maxStart, selectedIndex - Math.floor(visibleCount / 2)));
+  return items.slice(start, start + visibleCount);
+}
+
 function renderMenuPanel(
   context: InteractiveContext,
-  options: MenuOption[],
+  options: LauncherRenderableOption[],
   selectedIndex: number,
 ): string[] {
   const selected = options[selectedIndex]!;
@@ -352,7 +377,10 @@ function renderMenuPanel(
     `${color(`v${context.version}`, YELLOW)} ${color('interactive command center', CYAN)}`,
     '',
     color('Arrow keys move. Shortcut keys jump directly. Enter runs the selected action.', DIM),
-    color('Commands run inside this session, so you can keep selecting without leaving tokenleak.', DIM),
+    color(
+      'Commands run inside this session, so you can keep selecting without leaving tokenleak.',
+      DIM,
+    ),
     '',
     ...renderMenu(options, selectedIndex),
     '',
@@ -366,15 +394,99 @@ function renderMenuPanel(
   ];
 }
 
+function buildCompactLauncherBody(
+  context: { version: string; helpText: string },
+  options: LauncherRenderableOption[],
+  selectedIndex: number,
+  width: number,
+  rows: number,
+): string[] {
+  const selected = options[selectedIndex]!;
+  const menuLines = renderMenu(options, selectedIndex);
+  const compact = rows < 18;
+
+  const header = compact
+    ? [
+        color('Tokenleak Interactive Launcher', WHITE + BOLD),
+        color('Narrow pane detected. Press H for the full flag reference.', DIM),
+      ]
+    : [
+        color('Tokenleak Interactive Launcher', WHITE + BOLD),
+        `${color(`v${context.version}`, YELLOW)} ${color('adaptive launcher view', CYAN)}`,
+        color('Narrow pane detected. Press H for the full flag reference.', DIM),
+        '',
+      ];
+
+  const footer = compact
+    ? [
+        '',
+        color(truncateVisible(selected.preview, width), GREEN),
+        `${color('Up/Down', YELLOW)} move  ${color('Enter', YELLOW)} run  ${color('H', YELLOW)} help  ${color('Q', YELLOW)} quit`,
+      ]
+    : [
+        '',
+        color('Preview', WHITE + BOLD),
+        color(truncateVisible(selected.preview, width), GREEN),
+        '',
+        `${color('Up/Down', YELLOW)} move  ${color('Enter', YELLOW)} run  ${color('H', YELLOW)} help  ${color('Q', YELLOW)} quit`,
+        renderRule(44),
+      ];
+
+  const meta = [
+    color('Actions', WHITE + BOLD),
+    color('Use arrow keys to move through the launcher menu.', DIM),
+  ];
+  const fixedLineCount = header.length + meta.length + footer.length;
+  const menuViewport = Math.max(1, rows - fixedLineCount);
+  const visibleMenu = sliceVisibleWindow(menuLines, selectedIndex, menuViewport);
+
+  return [...header, ...meta, ...visibleMenu, ...footer].slice(0, Math.max(1, rows));
+}
+
+export function buildLauncherBody(
+  context: { version: string; helpText: string },
+  options: LauncherRenderableOption[],
+  selectedIndex: number,
+  width: number,
+  rows: number,
+): string[] {
+  const menuPanel = renderMenuPanel(context, options, selectedIndex);
+  const flagPanel = renderFlagPanel();
+
+  const wideBody = joinColumns(menuPanel, flagPanel, width);
+  if (width >= 118 && wideBody.length <= rows) {
+    return wideBody;
+  }
+
+  const stackedBody = [...menuPanel, '', ...flagPanel];
+  if (stackedBody.length <= rows) {
+    return stackedBody;
+  }
+
+  return buildCompactLauncherBody(context, options, selectedIndex, width, rows);
+}
+
 function renderHelpOverlay(helpText: string, width: number): string {
+  const rows = Math.max(6, process.stdout.rows ?? 40);
   const lines = helpText.trimEnd().split('\n');
   const header = [
     color('Tokenleak Help', WHITE + BOLD),
     color('Press Enter, Escape, H, or Q to return to the launcher.', DIM),
     '',
   ];
+  const availableHeight = Math.max(1, rows - header.length - 1);
+  const visibleLines = lines.slice(0, availableHeight).map((line) => truncateVisible(line, width));
+  const truncatedNotice =
+    lines.length > visibleLines.length
+      ? [
+          color(
+            'Help truncated to fit this pane. Resize taller or run `tokenleak --help` for the full output.',
+            DIM,
+          ),
+        ]
+      : [];
 
-  return `${HOME_CLEAR}${HIDE_CURSOR}${[...header, ...lines.map((line) => truncateVisible(line, width))].join('\n')}`;
+  return `${HOME_CLEAR}${HIDE_CURSOR}${[...header, ...visibleLines, ...truncatedNotice].join('\n')}`;
 }
 
 function renderLauncher(
@@ -382,12 +494,9 @@ function renderLauncher(
   options: MenuOption[],
   selectedIndex: number,
 ): string {
-  const width = process.stdout.columns ?? 120;
-  const menuPanel = renderMenuPanel(context, options, selectedIndex);
-  const flagPanel = renderFlagPanel();
-  const body = width >= 118
-    ? joinColumns(menuPanel, flagPanel, width)
-    : [...menuPanel, '', ...flagPanel];
+  const width = Math.max(40, process.stdout.columns ?? 120);
+  const rows = Math.max(8, process.stdout.rows ?? 40);
+  const body = buildLauncherBody(context, options, selectedIndex, width, rows);
 
   return `${HOME_CLEAR}${HIDE_CURSOR}${body.join('\n')}`;
 }
@@ -442,7 +551,11 @@ function renderLoading(request: InteractiveRunRequest, frame = 0, startedAt = Da
   return `${HOME_CLEAR}${HIDE_CURSOR}${lines.join('\n')}`;
 }
 
-export function clampScrollOffset(offset: number, totalLines: number, viewportHeight: number): number {
+export function clampScrollOffset(
+  offset: number,
+  totalLines: number,
+  viewportHeight: number,
+): number {
   const maxOffset = Math.max(0, totalLines - Math.max(1, viewportHeight));
   return Math.min(Math.max(0, offset), maxOffset);
 }
@@ -452,11 +565,7 @@ export function buildOutputSectionLines(title: string, content: string, width: n
   if (!normalized) return [];
 
   const lines = normalized.split('\n').map((line) => truncateVisible(line, width));
-  return [
-    color(title, WHITE + BOLD),
-    ...lines,
-    '',
-  ];
+  return [color(title, WHITE + BOLD), ...lines, ''];
 }
 
 function renderResult(
@@ -480,9 +589,10 @@ function renderResult(
     ...buildOutputSectionLines('Output', result.stdout, width),
     ...buildOutputSectionLines('Messages', result.stderr, width),
   ];
-  const body = contentLines.length > 0
-    ? contentLines
-    : [color('No captured output for this command.', DIM), ''];
+  const body =
+    contentLines.length > 0
+      ? contentLines
+      : [color('No captured output for this command.', DIM), ''];
   const footer = [
     renderRule(44),
     `${color('Up/Down', YELLOW)} scroll  ${color('PgUp/PgDn', YELLOW)} page  ${color('Enter', YELLOW)} launcher  ${color('Q', YELLOW)} quit`,
@@ -490,17 +600,18 @@ function renderResult(
   const viewportHeight = Math.max(4, rows - header.length - footer.length - 1);
   const effectiveOffset = clampScrollOffset(scrollOffset, body.length, viewportHeight);
   const visibleBody = body.slice(effectiveOffset, effectiveOffset + viewportHeight);
-  const padding = Array.from({ length: Math.max(0, viewportHeight - visibleBody.length) }, () => '');
-  const scrollStatus = body.length > viewportHeight
-    ? color(`Lines ${effectiveOffset + 1}-${Math.min(body.length, effectiveOffset + viewportHeight)} of ${body.length}`, DIM)
-    : color('All command output is visible.', DIM);
-  const lines = [
-    ...header,
-    ...visibleBody,
-    ...padding,
-    scrollStatus,
-    ...footer,
-  ];
+  const padding = Array.from(
+    { length: Math.max(0, viewportHeight - visibleBody.length) },
+    () => '',
+  );
+  const scrollStatus =
+    body.length > viewportHeight
+      ? color(
+          `Lines ${effectiveOffset + 1}-${Math.min(body.length, effectiveOffset + viewportHeight)} of ${body.length}`,
+          DIM,
+        )
+      : color('All command output is visible.', DIM);
+  const lines = [...header, ...visibleBody, ...padding, scrollStatus, ...footer];
 
   return `${HOME_CLEAR}${HIDE_CURSOR}${lines.join('\n')}`;
 }
@@ -629,7 +740,8 @@ async function ask(prompt: string, initialValue = ''): Promise<string> {
     readline.on('SIGINT', onSigint);
 
     const suffix = initialValue ? ` (${initialValue})` : '';
-    readline.question(`${prompt}${suffix}: `)
+    readline
+      .question(`${prompt}${suffix}: `)
       .then((value) => {
         finish(() => resolve(value.trim() || initialValue));
       })
@@ -655,7 +767,10 @@ async function promptSingleChoice<T extends string>(
   return new Promise<T>((resolve, reject) => {
     let selectedIndex = Math.max(0, Math.min(initialIndex, options.length - 1));
 
-    const onKeypress = (_input: string, key: { name?: string; ctrl?: boolean; sequence?: string }): void => {
+    const onKeypress = (
+      _input: string,
+      key: { name?: string; ctrl?: boolean; sequence?: string },
+    ): void => {
       if (key.ctrl && key.name === 'c') {
         cleanup();
         reject(new InteractiveExitError());
@@ -692,7 +807,16 @@ async function promptSingleChoice<T extends string>(
     };
 
     function render(): void {
-      paint(renderChoiceScreen(title, description, options, selectedIndex, undefined, `${color('Up/Down', YELLOW)} move  ${color('1-9', YELLOW)} pick  ${color('Enter', YELLOW)} confirm  ${color('Ctrl-C', YELLOW)} exit`));
+      paint(
+        renderChoiceScreen(
+          title,
+          description,
+          options,
+          selectedIndex,
+          undefined,
+          `${color('Up/Down', YELLOW)} move  ${color('1-9', YELLOW)} pick  ${color('Enter', YELLOW)} confirm  ${color('Ctrl-C', YELLOW)} exit`,
+        ),
+      );
     }
 
     function cleanup(): void {
@@ -716,7 +840,10 @@ async function promptMultiChoice<T extends string>(
     let selectedIndex = 0;
     const selectedValues = new Set<T>(initialValues);
 
-    const onKeypress = (_input: string, key: { name?: string; ctrl?: boolean; sequence?: string }): void => {
+    const onKeypress = (
+      _input: string,
+      key: { name?: string; ctrl?: boolean; sequence?: string },
+    ): void => {
       if (key.ctrl && key.name === 'c') {
         cleanup();
         reject(new InteractiveExitError());
@@ -861,10 +988,14 @@ async function promptWidth(): Promise<number | null> {
         return parsed;
       }
 
-      paint(`${HOME_CLEAR}${SHOW_CURSOR}${color('Width required', RED)}\n${color('Enter a positive whole number to continue.', DIM)}\n\nPress Enter to try again.`);
+      paint(
+        `${HOME_CLEAR}${SHOW_CURSOR}${color('Width required', RED)}\n${color('Enter a positive whole number to continue.', DIM)}\n\nPress Enter to try again.`,
+      );
       await ask('');
     } catch (error: unknown) {
-      paint(`${HOME_CLEAR}${SHOW_CURSOR}${color('Invalid width', RED)}\n${color(error instanceof Error ? error.message : String(error), DIM)}\n\nPress Enter to try again.`);
+      paint(
+        `${HOME_CLEAR}${SHOW_CURSOR}${color('Invalid width', RED)}\n${color(error instanceof Error ? error.message : String(error), DIM)}\n\nPress Enter to try again.`,
+      );
       await ask('');
     }
   }
@@ -876,8 +1007,16 @@ async function promptCompareSetting(): Promise<string | null> {
     'Optionally compare the current range against an earlier period.',
     [
       { value: 'off', label: 'No compare', description: 'Render a standard single-period report' },
-      { value: 'auto', label: 'Auto compare', description: 'Split the selected window automatically' },
-      { value: 'custom', label: 'Custom compare range', description: 'Provide an explicit YYYY-MM-DD..YYYY-MM-DD range' },
+      {
+        value: 'auto',
+        label: 'Auto compare',
+        description: 'Split the selected window automatically',
+      },
+      {
+        value: 'custom',
+        label: 'Custom compare range',
+        description: 'Provide an explicit YYYY-MM-DD..YYYY-MM-DD range',
+      },
     ],
   );
 
@@ -990,13 +1129,7 @@ async function buildDashboardPreset(): Promise<InteractiveCommand> {
 
   return {
     type: 'tabbed-dashboard',
-    options: buildTabbedDashboardOptions(
-      rangeArgs,
-      providers,
-      width,
-      noInsights,
-      noColor,
-    ),
+    options: buildTabbedDashboardOptions(rangeArgs, providers, width, noInsights, noColor),
   };
 }
 
@@ -1005,7 +1138,7 @@ async function buildJsonPreset(): Promise<InteractiveCommand> {
   const providers = await promptProviderSelection();
   const compare = await promptCompareSetting();
   const saveToFile = await askYesNo('Write JSON to a file', false);
-  const clipboard = !saveToFile && await askYesNo('Copy JSON to clipboard after render', false);
+  const clipboard = !saveToFile && (await askYesNo('Copy JSON to clipboard after render', false));
 
   const args: CliArgs = {
     format: 'json',
@@ -1028,9 +1161,7 @@ async function buildImagePreset(format: 'svg' | 'png'): Promise<InteractiveComma
   const compare = await promptCompareSetting();
   const output = await promptOutputPath(`tokenleak.${format}`);
   const shouldOpen = await askYesNo('Open the file when done', true);
-  const more = compare
-    ? true
-    : await askYesNo('Enable --more stats', format === 'png');
+  const more = compare ? true : await askYesNo('Enable --more stats', format === 'png');
 
   const args: CliArgs = {
     format,
@@ -1072,13 +1203,20 @@ async function buildComparePreset(): Promise<InteractiveCommand> {
     'Reference Period',
     'Choose how the earlier comparison period should be defined.',
     [
-      { value: 'auto', label: 'Auto compare', description: 'Split the chosen window automatically' },
-      { value: 'custom', label: 'Custom compare range', description: 'Enter an explicit prior range manually' },
+      {
+        value: 'auto',
+        label: 'Auto compare',
+        description: 'Split the chosen window automatically',
+      },
+      {
+        value: 'custom',
+        label: 'Custom compare range',
+        description: 'Enter an explicit prior range manually',
+      },
     ],
   );
-  const compare = compareMode === 'custom'
-    ? await ask('Previous range YYYY-MM-DD..YYYY-MM-DD')
-    : 'auto';
+  const compare =
+    compareMode === 'custom' ? await ask('Previous range YYYY-MM-DD..YYYY-MM-DD') : 'auto';
   const saveToFile = await askYesNo('Write compare output to a file', false);
 
   const args: CliArgs = {
@@ -1101,7 +1239,11 @@ async function buildExplainPreset(): Promise<InteractiveCommand> {
     'Explain Format',
     'Choose how the explain report should be rendered.',
     [
-      { value: 'terminal', label: 'Terminal', description: 'Narrative report in the current terminal' },
+      {
+        value: 'terminal',
+        label: 'Terminal',
+        description: 'Narrative report in the current terminal',
+      },
       { value: 'json', label: 'JSON', description: 'Structured explain payload' },
     ],
   );
@@ -1118,16 +1260,11 @@ async function buildExplainPreset(): Promise<InteractiveCommand> {
   if (noColor) args['noColor'] = true;
   applySelectedProviders(args, providers);
 
-  return createSubcommandRunCommand(
-    'explain',
-    args,
-    [date],
-    {
-      title: 'Explain Day',
-      loadingTitle: 'Building explain report',
-      loadingDetail: `Analyzing what drove usage on ${date}.`,
-    },
-  );
+  return createSubcommandRunCommand('explain', args, [date], {
+    title: 'Explain Day',
+    loadingTitle: 'Building explain report',
+    loadingDetail: `Analyzing what drove usage on ${date}.`,
+  });
 }
 
 async function buildFocusPreset(): Promise<InteractiveCommand> {
@@ -1135,7 +1272,11 @@ async function buildFocusPreset(): Promise<InteractiveCommand> {
     'Focus Format',
     'Choose how the focus report should be rendered.',
     [
-      { value: 'terminal', label: 'Terminal', description: 'Ranked session report in the current terminal' },
+      {
+        value: 'terminal',
+        label: 'Terminal',
+        description: 'Ranked session report in the current terminal',
+      },
       { value: 'json', label: 'JSON', description: 'Structured focus payload' },
     ],
   );
@@ -1154,16 +1295,11 @@ async function buildFocusPreset(): Promise<InteractiveCommand> {
   if (noColor) args['noColor'] = true;
   applySelectedProviders(args, providers);
 
-  return createSubcommandRunCommand(
-    'focus',
-    args,
-    [],
-    {
-      title: 'Focus Sessions',
-      loadingTitle: 'Ranking focus sessions',
-      loadingDetail: 'Finding the deepest work sessions for the selected range.',
-    },
-  );
+  return createSubcommandRunCommand('focus', args, [], {
+    title: 'Focus Sessions',
+    loadingTitle: 'Ranking focus sessions',
+    loadingDetail: 'Finding the deepest work sessions for the selected range.',
+  });
 }
 
 async function buildAdvisorPreset(): Promise<InteractiveCommand> {
@@ -1171,7 +1307,11 @@ async function buildAdvisorPreset(): Promise<InteractiveCommand> {
     'Advisor Format',
     'Choose how the advisor report should be rendered.',
     [
-      { value: 'terminal', label: 'Terminal', description: 'Efficiency recommendations in the current terminal' },
+      {
+        value: 'terminal',
+        label: 'Terminal',
+        description: 'Efficiency recommendations in the current terminal',
+      },
       { value: 'json', label: 'JSON', description: 'Structured advisor payload' },
     ],
   );
@@ -1221,15 +1361,11 @@ async function buildWrappedLivePreset(): Promise<InteractiveCommand> {
 }
 
 async function buildExportPreset(): Promise<InteractiveCommand> {
-  const format = await promptSingleChoice(
-    'Export Format',
-    'Choose the export format.',
-    [
-      { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
-      { value: 'svg', label: 'SVG', description: 'Shareable vector card' },
-      { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
-    ],
-  );
+  const format = await promptSingleChoice('Export Format', 'Choose the export format.', [
+    { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
+    { value: 'svg', label: 'SVG', description: 'Shareable vector card' },
+    { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
+  ]);
 
   if (format === 'json') {
     return buildJsonPreset();
@@ -1243,17 +1379,17 @@ async function buildListProvidersPreset(): Promise<InteractiveCommand> {
 }
 
 async function askFormatChoice(): Promise<string> {
-  return promptSingleChoice(
-    'Output Format',
-    'Choose the primary renderer for this command.',
-    [
-      { value: 'terminal', label: 'Terminal', description: 'Dashboard in the current terminal' },
-      { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
-      { value: 'svg', label: 'SVG', description: 'Shareable vector export' },
-      { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
-      { value: 'wrapped', label: '\u{1F389} Wrapped', description: 'Your AI coding story card (PNG)' },
-    ],
-  );
+  return promptSingleChoice('Output Format', 'Choose the primary renderer for this command.', [
+    { value: 'terminal', label: 'Terminal', description: 'Dashboard in the current terminal' },
+    { value: 'json', label: 'JSON', description: 'Structured machine-readable output' },
+    { value: 'svg', label: 'SVG', description: 'Shareable vector export' },
+    { value: 'png', label: 'PNG', description: 'Raster export for social and docs' },
+    {
+      value: 'wrapped',
+      label: '\u{1F389} Wrapped',
+      description: 'Your AI coding story card (PNG)',
+    },
+  ]);
 }
 
 async function buildCustomCommand(): Promise<InteractiveCommand> {
@@ -1261,9 +1397,21 @@ async function buildCustomCommand(): Promise<InteractiveCommand> {
     'Command Type',
     'Choose the command family you want to configure.',
     [
-      { value: 'run', label: 'Standard command', description: 'Render terminal, JSON, SVG, or PNG output' },
-      { value: 'live-server', label: 'Live server', description: 'Launch the browser dashboard locally' },
-      { value: 'list-providers', label: 'List providers', description: 'Inspect registered provider backends' },
+      {
+        value: 'run',
+        label: 'Standard command',
+        description: 'Render terminal, JSON, SVG, or PNG output',
+      },
+      {
+        value: 'live-server',
+        label: 'Live server',
+        description: 'Launch the browser dashboard locally',
+      },
+      {
+        value: 'list-providers',
+        label: 'List providers',
+        description: 'Inspect registered provider backends',
+      },
     ],
   );
 
@@ -1281,11 +1429,12 @@ async function buildCustomCommand(): Promise<InteractiveCommand> {
   const providers = await promptProviderSelection();
   const compare = await promptCompareSetting();
   const width = format === 'terminal' ? await promptWidth() : null;
-  const output = format === 'terminal'
-    ? await ask('Output file (blank keeps stdout)')
-    : format === 'json'
+  const output =
+    format === 'terminal'
       ? await ask('Output file (blank keeps stdout)')
-      : await ask('Output file', `tokenleak.${format}`);
+      : format === 'json'
+        ? await ask('Output file (blank keeps stdout)')
+        : await ask('Output file', `tokenleak.${format}`);
   const noColor = await askYesNo('Disable ANSI colors', false);
   const noInsights = format === 'terminal' ? await askYesNo('Hide insights', false) : false;
   const more = await askYesNo('Enable --more stats', format === 'png' || format === 'svg');
@@ -1398,7 +1547,10 @@ async function promptForMenuCommand(
   let resolving = false;
 
   return new Promise((resolve, reject) => {
-    const onKeypress = async (_input: string, key: { name?: string; sequence?: string; ctrl?: boolean }) => {
+    const onKeypress = async (
+      _input: string,
+      key: { name?: string; sequence?: string; ctrl?: boolean },
+    ) => {
       if (resolving) {
         return;
       }
@@ -1437,7 +1589,9 @@ async function promptForMenuCommand(
 
       if (key.name === 'h') {
         showHelp = true;
-        paint(renderHelpOverlay(context.helpText, Math.max(60, (process.stdout.columns ?? 120) - 1)));
+        paint(
+          renderHelpOverlay(context.helpText, Math.max(60, (process.stdout.columns ?? 120) - 1)),
+        );
         return;
       }
 
@@ -1500,8 +1654,16 @@ async function showExecutionResult(
   result: InteractiveExecutionResult,
 ): Promise<'menu' | 'exit'> {
   const body = [
-    ...buildOutputSectionLines('Output', result.stdout, Math.max(60, (process.stdout.columns ?? 120) - 1)),
-    ...buildOutputSectionLines('Messages', result.stderr, Math.max(60, (process.stdout.columns ?? 120) - 1)),
+    ...buildOutputSectionLines(
+      'Output',
+      result.stdout,
+      Math.max(60, (process.stdout.columns ?? 120) - 1),
+    ),
+    ...buildOutputSectionLines(
+      'Messages',
+      result.stderr,
+      Math.max(60, (process.stdout.columns ?? 120) - 1),
+    ),
   ];
   let scrollOffset = 0;
 
@@ -1636,9 +1798,8 @@ export async function startInteractiveCli(
             enterAltScreen();
           }
           if (dashboardError) {
-            const message = dashboardError instanceof Error
-              ? dashboardError.message
-              : String(dashboardError);
+            const message =
+              dashboardError instanceof Error ? dashboardError.message : String(dashboardError);
             const next = await showExecutionResult(request, {
               ok: false,
               summary: message,
