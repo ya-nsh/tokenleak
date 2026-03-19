@@ -341,14 +341,23 @@ export function renderWrappedSinglePageSvg(
   const donutR = 50;
   const donutStroke = 14;
 
+  // Track circle
   parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${C.trackStroke}" stroke-width="${donutStroke}"/>`);
 
-  const circumference = 2 * Math.PI * donutR;
-  let dashOffset = circumference / 4;
+  // Draw donut segments using arc paths — starts at 12 o'clock, clockwise
+  let startAngle = 0;
   for (const p of providerMix) {
-    const dash = (p.pct / 100) * circumference;
-    parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${escapeXml(p.color)}" stroke-width="${donutStroke}" stroke-linecap="butt" stroke-dasharray="${dash.toFixed(1)} ${circumference.toFixed(1)}" stroke-dashoffset="${dashOffset.toFixed(1)}"/>`);
-    dashOffset -= dash;
+    const sweep = (p.pct / 100) * 360;
+    if (sweep < 0.1) continue; // skip truly zero segments
+    const endAngle = Math.min(startAngle + sweep, 360);
+    // For near-full circles, use a circle element instead
+    if (sweep >= 359.9) {
+      parts.push(`<circle cx="${donutCx}" cy="${donutCy}" r="${donutR}" fill="none" stroke="${escapeXml(p.color)}" stroke-width="${donutStroke}"/>`);
+    } else {
+      const arc = describeArc(donutCx, donutCy, donutR, startAngle, endAngle);
+      parts.push(`<path d="${arc}" fill="none" stroke="${escapeXml(p.color)}" stroke-width="${donutStroke}" stroke-linecap="butt"/>`);
+    }
+    startAngle = endAngle;
   }
 
   parts.push(txt(donutCx, donutCy + 5, `${providers.length}`, {
