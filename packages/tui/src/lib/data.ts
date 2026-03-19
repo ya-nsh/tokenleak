@@ -1,5 +1,6 @@
 import type {
   AggregatedStats,
+  DailyUsage,
   DateRange,
   ProviderData,
 } from '@tokenleak/core';
@@ -24,6 +25,7 @@ export interface TuiData {
   allTimeStats: AggregatedStats;
   windows: TimeWindowData[];
   dateRange: DateRange;
+  mergedDaily: DailyUsage[];
 }
 
 function todayStr(): string {
@@ -70,6 +72,7 @@ export async function loadAllData(): Promise<TuiData> {
       allTimeStats: emptyStats,
       windows: [],
       dateRange: allTimeRange,
+      mergedDaily: [],
     };
   }
 
@@ -98,5 +101,20 @@ export async function loadAllData(): Promise<TuiData> {
     allTimeStats,
     windows,
     dateRange: allTimeRange,
+    mergedDaily: allMerged,
   };
+}
+
+/** Get daily usage data filtered to a specific time window */
+export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsage[] {
+  const today = todayStr();
+  const windowDays = [7, 30, 90, 0];
+  const days = windowDays[windowIndex];
+
+  if (days === undefined || days === 0) {
+    return data.mergedDaily;
+  }
+
+  const since = daysAgoStr(days);
+  return data.mergedDaily.filter((d) => d.date >= since && d.date <= today);
 }

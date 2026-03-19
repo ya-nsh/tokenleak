@@ -1,106 +1,15 @@
-import { Box, Text, createCliRenderer, createTextAttributes } from '@opentui/core';
+import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import { COLORS, BOLD } from './lib/theme.js';
-import { formatCost } from './lib/format.js';
-import { loadAllData, type TuiData } from './lib/data.js';
-import { createOverviewPanel } from './panels/overview.js';
-import { createTimeWindowsPanel } from './panels/time-windows.js';
-import { createProvidersPanel } from './panels/providers.js';
-import { createTopModelsPanel } from './panels/top-models.js';
-
-function formatDateTime(): string {
-  return new Date().toLocaleString('en-US', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-}
-
-function buildTopBar(totalCost: number | null) {
-  const costStr = totalCost !== null ? formatCost(totalCost) : '$...';
-
-  return Box(
-    {
-      flexDirection: 'row',
-      width: '100%',
-      justifyContent: 'space-between',
-      paddingLeft: 1,
-      paddingRight: 1,
-      height: 1,
-    },
-    Box(
-      { flexDirection: 'row', gap: 2 },
-      Text({ content: ' TOKENLEAK ', fg: COLORS.amber, attributes: BOLD }),
-      Text({ content: 'Bloomberg Terminal', fg: COLORS.dimWhite }),
-    ),
-    Box(
-      { flexDirection: 'row', gap: 2 },
-      Text({ content: `TOTAL: ${costStr}`, fg: COLORS.amber, attributes: BOLD }),
-      Text({ content: formatDateTime(), fg: COLORS.green }),
-    ),
-  );
-}
-
-function buildBottomBar(lastRefresh: string) {
-  return Box(
-    {
-      flexDirection: 'row',
-      width: '100%',
-      justifyContent: 'space-between',
-      paddingLeft: 1,
-      paddingRight: 1,
-      height: 1,
-    },
-    Text({
-      content: 'q: quit | r: refresh | 1-4: focus panel',
-      fg: COLORS.dimWhite,
-    }),
-    Text({
-      content: `Last refresh: ${lastRefresh}`,
-      fg: COLORS.dimWhite,
-    }),
-  );
-}
-
-function buildLayout(data: TuiData | null) {
-  const stats = data?.allTimeStats ?? null;
-  const providers = data?.providers ?? [];
-  const windows = data?.windows ?? [];
-  const topModels = stats?.topModels ?? [];
-  const totalCost = stats?.totalCost ?? null;
-
-  return Box(
-    {
-      flexDirection: 'column',
-      width: '100%',
-      height: '100%',
-      backgroundColor: COLORS.bg,
-    },
-    // Top bar
-    buildTopBar(totalCost),
-
-    // Main grid - top row
-    Box(
-      { flexDirection: 'row', flexGrow: 1, width: '100%' },
-      createOverviewPanel({ stats, providers }),
-      createTimeWindowsPanel({ windows }),
-    ),
-
-    // Main grid - bottom row
-    Box(
-      { flexDirection: 'row', flexGrow: 1, width: '100%' },
-      createProvidersPanel({ providers, allTimeStats: stats }),
-      createTopModelsPanel({ models: topModels }),
-    ),
-
-    // Bottom bar
-    buildBottomBar(formatDateTime()),
-  );
-}
+import { loadAllData, getDailyForWindow } from './lib/data.js';
+import { createInitialState, WINDOW_LABELS } from './lib/state.js';
+import type { AppState } from './lib/state.js';
+import { buildHeader } from './panels/header.js';
+import { createChartPanel } from './panels/chart-panel.js';
+import { createStatsRow } from './panels/stats-row.js';
+import { createModelList } from './panels/model-list.js';
+import { buildStatusBar } from './panels/status-bar.js';
+import { createBloombergView } from './panels/bloomberg.js';
 
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
@@ -109,45 +18,140 @@ function clearRoot(renderer: CliRenderer): void {
   }
 }
 
+function buildLayout(state: AppState, renderer: CliRenderer) {
+  const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
+  const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
+
+  const content =
+    state.selectedView === 'overview'
+      ? Box(
+          { flexDirection: 'column', width: '100%', flexGrow: 1 },
+          createChartPanel(state, daily),
+          createStatsRow(state, windowStats),
+          createModelList(state, windowStats),
+        )
+      : createBloombergView(state);
+
+  return Box(
+    {
+      flexDirection: 'column',
+      width: '100%',
+      height: '100%',
+      backgroundColor: COLORS.bg,
+    },
+    buildHeader(state, renderer),
+    content,
+    buildStatusBar(state),
+  );
+}
+
+function render(state: AppState, renderer: CliRenderer): void {
+  clearRoot(renderer);
+  renderer.root.add(buildLayout(state, renderer));
+  renderer.requestRender();
+}
+
 async function main(): Promise<void> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
     backgroundColor: COLORS.bg,
   });
 
-  // Show skeleton immediately
-  renderer.root.add(buildLayout(null));
-  renderer.requestRender();
+  const state = createInitialState();
 
-  // Load data in background
+  // Show loading state immediately
+  render(state, renderer);
+
   try {
     const data = await loadAllData();
+    state.data = data;
+    state.isLoading = false;
+    render(state, renderer);
 
-    // Clear and rebuild with real data
-    clearRoot(renderer);
-    renderer.root.add(buildLayout(data));
-    renderer.requestRender();
-
-    // Set up refresh handler
     renderer.addInputHandler((sequence: string) => {
-      if (sequence === 'r') {
-        clearRoot(renderer);
-        renderer.root.add(buildLayout(null));
-        renderer.requestRender();
-
-        loadAllData().then((freshData) => {
-          clearRoot(renderer);
-          renderer.root.add(buildLayout(freshData));
-          renderer.requestRender();
-        }).catch(() => {
-          // Keep showing loading state on error
-        });
+      // Tab / Right arrow: next time window
+      if (sequence === '\t' || sequence === '\x1b[C') {
+        state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
+        state.modelScrollOffset = 0;
+        render(state, renderer);
         return true;
       }
+
+      // Shift+Tab / Left arrow: prev time window
+      if (sequence === '\x1b[Z' || sequence === '\x1b[D') {
+        state.selectedWindowIndex =
+          (state.selectedWindowIndex - 1 + WINDOW_LABELS.length) % WINDOW_LABELS.length;
+        state.modelScrollOffset = 0;
+        render(state, renderer);
+        return true;
+      }
+
+      // 1: overview view
+      if (sequence === '1') {
+        state.selectedView = 'overview';
+        render(state, renderer);
+        return true;
+      }
+
+      // 2: bloomberg view
+      if (sequence === '2') {
+        state.selectedView = 'bloomberg';
+        render(state, renderer);
+        return true;
+      }
+
+      // j / Down: scroll model list down
+      if ((sequence === 'j' || sequence === '\x1b[B') && state.selectedView === 'overview') {
+        const maxModels = state.data?.allTimeStats.topModels.length ?? 0;
+        if (state.modelScrollOffset < maxModels - 1) {
+          state.modelScrollOffset++;
+          render(state, renderer);
+        }
+        return true;
+      }
+
+      // k / Up: scroll model list up
+      if ((sequence === 'k' || sequence === '\x1b[A') && state.selectedView === 'overview') {
+        if (state.modelScrollOffset > 0) {
+          state.modelScrollOffset--;
+          render(state, renderer);
+        }
+        return true;
+      }
+
+      // s: toggle sort mode
+      if (sequence === 's') {
+        state.sortMode = state.sortMode === 'cost' ? 'tokens' : 'cost';
+        state.modelScrollOffset = 0;
+        render(state, renderer);
+        return true;
+      }
+
+      // r: refresh data
+      if (sequence === 'r') {
+        state.isLoading = true;
+        render(state, renderer);
+
+        loadAllData()
+          .then((freshData) => {
+            state.data = freshData;
+            state.isLoading = false;
+            state.modelScrollOffset = 0;
+            render(state, renderer);
+          })
+          .catch(() => {
+            state.isLoading = false;
+            render(state, renderer);
+          });
+        return true;
+      }
+
+      // q: quit
       if (sequence === 'q') {
         renderer.destroy();
         process.exit(0);
       }
+
       return false;
     });
   } catch (err: unknown) {

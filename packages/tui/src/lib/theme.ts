@@ -26,6 +26,21 @@ export const PROVIDER_COLORS: Record<string, string> = {
   'open-code': '#ef4444',
 };
 
+/** Model colors for chart segments (8 distinct colors) */
+export const MODEL_COLORS = [
+  '#ffb900', // amber
+  '#00bcd4', // cyan
+  '#ff66ff', // magenta
+  '#4488ff', // blue
+  '#00ff00', // green
+  '#ff4444', // red
+  '#22c55e', // emerald
+  '#8b5cf6', // purple
+] as const;
+
+/** Pre-computed dim text attributes */
+export const DIM = createTextAttributes({ dim: true });
+
 /** Cycle colors for providers without a known brand color */
 const CYCLE_COLORS = [
   COLORS.green,
