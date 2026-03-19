@@ -421,10 +421,10 @@ export function renderWrappedSinglePageSvg(
 
   const hourOfDay = more?.hourOfDay;
   let todPeriods = [
-    { label: 'Morning', range: '6am-12pm', pct: 25 },
-    { label: 'Afternoon', range: '12-6pm', pct: 25 },
-    { label: 'Evening', range: '6-10pm', pct: 25 },
-    { label: 'Night', range: '10pm-6am', pct: 25 },
+    { label: 'Morning', range: '6am-12pm', pct: 0 },
+    { label: 'Afternoon', range: '12-6pm', pct: 0 },
+    { label: 'Evening', range: '6-10pm', pct: 0 },
+    { label: 'Night', range: '10pm-6am', pct: 0 },
   ];
 
   if (hourOfDay) {
@@ -433,12 +433,15 @@ export function renderWrappedSinglePageSvg(
       const morning = hourOfDay.filter((e) => e.hour >= 6 && e.hour < 12).reduce((s, e) => s + e.tokens, 0);
       const afternoon = hourOfDay.filter((e) => e.hour >= 12 && e.hour < 18).reduce((s, e) => s + e.tokens, 0);
       const evening = hourOfDay.filter((e) => e.hour >= 18 && e.hour < 22).reduce((s, e) => s + e.tokens, 0);
-      const night = total - morning - afternoon - evening;
+      const morningPct = Math.round((morning / total) * 100);
+      const afternoonPct = Math.round((afternoon / total) * 100);
+      const eveningPct = Math.round((evening / total) * 100);
+      const nightPct = Math.max(0, 100 - morningPct - afternoonPct - eveningPct);
       todPeriods = [
-        { label: 'Morning', range: '6am-12pm', pct: Math.round((morning / total) * 100) },
-        { label: 'Afternoon', range: '12-6pm', pct: Math.round((afternoon / total) * 100) },
-        { label: 'Evening', range: '6-10pm', pct: Math.round((evening / total) * 100) },
-        { label: 'Night', range: '10pm-6am', pct: 100 - Math.round((morning / total) * 100) - Math.round((afternoon / total) * 100) - Math.round((evening / total) * 100) },
+        { label: 'Morning', range: '6am-12pm', pct: morningPct },
+        { label: 'Afternoon', range: '12-6pm', pct: afternoonPct },
+        { label: 'Evening', range: '6-10pm', pct: eveningPct },
+        { label: 'Night', range: '10pm-6am', pct: nightPct },
       ];
     }
   }
@@ -648,7 +651,6 @@ export function renderWrappedSinglePageSvg(
   const achH = 180;
   parts.push(box(0, y, WIDTH, achH, C.bg));
   parts.push(line(PAD, y, WIDTH - PAD, y, C.gold, 1, 0.15));
-  parts.push(sectionTag(PAD, y + 24, `ACHIEVEMENTS · ${achievements.length} UNLOCKED`, C));
 
   const ALL_BADGES = [
     { title: 'Streak Master', sub: '>30d streak' },
@@ -663,7 +665,12 @@ export function renderWrappedSinglePageSvg(
     { title: 'Model Hopper', sub: '4+ models' },
   ];
 
-  const earnedTitles = new Set(achievements.map((a) => a.title));
+  // Only count achievements that match a known badge title
+  const badgeTitleSet = new Set(ALL_BADGES.map((b) => b.title));
+  const earnedTitles = new Set(achievements.filter((a) => badgeTitleSet.has(a.title)).map((a) => a.title));
+  const earnedCount = earnedTitles.size;
+
+  parts.push(sectionTag(PAD, y + 24, `ACHIEVEMENTS · ${earnedCount} UNLOCKED`, C));
   const badgeCols = 5;
   const badgeGapX = 10;
   const badgeGapY = 8;
@@ -701,8 +708,10 @@ export function renderWrappedSinglePageSvg(
   parts.push(box(0, y, WIDTH, footH, C.bg));
   parts.push(line(PAD, y, WIDTH - PAD, y, C.gold, 1, 0.15));
 
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  parts.push(txt(PAD, y + 28, `Generated ${now}`, {
+  const generatedTs = output.generated
+    ? output.generated.replace('T', ' ').slice(0, 19) + ' UTC'
+    : new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  parts.push(txt(PAD, y + 28, `Generated ${generatedTs}`, {
     fill: C.muted2, size: 9, weight: 400, family: MONO, spacing: 1,
   }));
   parts.push(txt(WIDTH - PAD, y + 28, 'tokenleak.dev', {
