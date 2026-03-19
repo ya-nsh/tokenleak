@@ -1,20 +1,22 @@
 import type { TokenleakOutput } from '@tokenleak/core';
-import { renderWrappedSlidesSvg } from '../svg/wrapped-slides';
+import { renderWrappedSinglePageSvg } from '../svg/wrapped-single-page';
 import sharp from 'sharp';
 
-// Lower density than terminal-card because wrapped is much taller (3000-4000px SVG).
-// 216 DPI gives 2x resolution (2400px wide) — sharp and fast to render.
+// 216 DPI gives 2x resolution (2400px wide) — sharp and crisp for social sharing.
 const PNG_DENSITY = 216;
 
 /**
- * Render a full "AI Coding Wrapped" multi-slide tall PNG image.
+ * Render a single-page "AI Coding Wrapped" infographic PNG.
  * The image is 1200px wide with dynamic height based on content.
  */
 export async function renderWrappedPng(
   output: TokenleakOutput,
   options: { theme: 'dark' | 'light' },
 ): Promise<Buffer> {
-  const svgString = renderWrappedSlidesSvg(output, options);
+  // Theme param is accepted for API compatibility but single-page uses dark only
+  void options.theme;
+
+  const svgString = renderWrappedSinglePageSvg(output);
 
   const pngBuffer = await sharp(Buffer.from(svgString), {
     density: PNG_DENSITY,
