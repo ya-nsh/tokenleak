@@ -16,6 +16,12 @@ function formatTokPerHour(tokPerHour: number): string {
   return `${formatTokens(tokPerHour)}/hr`;
 }
 
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}`;
+}
+
 function renderEntry(entry: FocusEntry, rank: number) {
   const barWidth = 10;
   const ratio = Math.min(entry.score / 100, 1);
@@ -23,7 +29,8 @@ function renderEntry(entry: FocusEntry, rank: number) {
 
   const rankStr = padLeft(`${rank}.`, 3);
   const scoreStr = padLeft(`${Math.round(entry.score)}`, 4);
-  const label = truncate(entry.label || entry.sessionId, 22);
+  const label = truncate(entry.label || entry.sessionId, 20);
+  const startDate = entry.start ? formatShortDate(entry.start.slice(0, 10)) : '';
   const duration = formatHours(entry.durationMs);
   const density = formatTokPerHour(entry.tokensPerHour);
   const cost = formatCost(entry.cost);
@@ -35,9 +42,10 @@ function renderEntry(entry: FocusEntry, rank: number) {
       Text({ content: `${rankStr} `, fg: COLORS.dimWhite }),
       Text({ content: bar, fg: COLORS.green }),
       Text({ content: ` ${scoreStr}  `, fg: COLORS.amber, attributes: BOLD }),
-      Text({ content: padRight(label, 24), fg: COLORS.white }),
+      Text({ content: padRight(label, 22), fg: COLORS.white }),
+      Text({ content: padLeft(startDate, 8), fg: COLORS.dimWhite }),
       Text({ content: padLeft(duration, 7), fg: COLORS.cyan }),
-      Text({ content: padLeft(density, 14), fg: COLORS.green }),
+      Text({ content: padLeft(density, 13), fg: COLORS.green }),
       Text({ content: padLeft(cost, 10), fg: COLORS.amber }),
     ),
     Text({
@@ -81,6 +89,19 @@ export function createFocusPanel(state: AppState, report: FocusReport | null) {
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
 
+  // Column header
+  const columnHeader = Box(
+    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: padRight('', 4), fg: COLORS.dimWhite }),
+    Text({ content: padRight('', 10), fg: COLORS.dimWhite }),
+    Text({ content: padRight('Score', 6), fg: COLORS.dimWhite }),
+    Text({ content: padRight('Session', 22), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Date', 8), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Dur', 7), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Density', 13), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Cost', 10), fg: COLORS.dimWhite }),
+  );
+
   return Box(
     {
       flexDirection: 'column',
@@ -98,6 +119,7 @@ export function createFocusPanel(state: AppState, report: FocusReport | null) {
       }),
     ),
     Text({ content: '', fg: COLORS.dimWhite }),
+    columnHeader,
     ...visible.map((e, i) => renderEntry(e, offset + i + 1)),
     ...scrollIndicators,
   );

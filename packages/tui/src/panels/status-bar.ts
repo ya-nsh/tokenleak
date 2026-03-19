@@ -1,5 +1,5 @@
 import { Box, Text } from '@opentui/core';
-import { COLORS, BOLD } from '../lib/theme.js';
+import { COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
 function formatUpdateTime(): string {
@@ -25,7 +25,7 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const viewKeys = '1-6:views';
+  const viewKeys = '1-7:views';
   const base = `tab/\u2190\u2192:period  ${viewKeys}  r:refresh  q:quit`;
 
   let keys: string;
@@ -35,6 +35,8 @@ export function buildStatusBar(state: AppState) {
     keys = `tab/\u2190\u2192:period  h/l:date  ${viewKeys}  r:refresh  q:quit`;
   } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare') {
     keys = `tab/\u2190\u2192:period  j/k:scroll  ${viewKeys}  r:refresh  q:quit`;
+  } else if (state.selectedView === 'export') {
+    keys = `p:png  w:wrapped  l:live  ${viewKeys}  r:refresh  q:quit`;
   } else {
     keys = base;
   }

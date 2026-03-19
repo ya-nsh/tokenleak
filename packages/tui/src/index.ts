@@ -1,5 +1,7 @@
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
+import type { TokenleakOutput } from '@tokenleak/core';
+import { SCHEMA_VERSION } from '@tokenleak/core';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
   loadAllData,
@@ -16,11 +18,12 @@ import { createChartPanel } from './panels/chart-panel.js';
 import { createStatsRow } from './panels/stats-row.js';
 import { createModelList } from './panels/model-list.js';
 import { buildStatusBar } from './panels/status-bar.js';
-import { createBloombergView } from './panels/bloomberg.js';
+import { createMatrixView } from './panels/bloomberg.js';
 import { createAdvisorPanel } from './panels/advisor.js';
 import { createFocusPanel } from './panels/focus.js';
 import { createExplainPanel } from './panels/explain.js';
 import { createComparePanel } from './panels/compare.js';
+import { createExportPanel } from './panels/export.js';
 
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
@@ -41,8 +44,8 @@ function buildContent(state: AppState) {
         createStatsRow(state, windowStats),
         createModelList(state, windowStats),
       );
-    case 'bloomberg':
-      return createBloombergView(state);
+    case 'matrix':
+      return createMatrixView(state);
     case 'advisor':
       return createAdvisorPanel(state, ensureAdvisorReport(state));
     case 'focus':
@@ -51,9 +54,40 @@ function buildContent(state: AppState) {
       return createExplainPanel(ensureExplainReport(state), state.explainDate);
     case 'compare':
       return createComparePanel(state, ensureCompareOutput(state));
+    case 'export':
+      return createExportPanel(state);
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
+}
+
+/** Build a TokenleakOutput from current state for renderers */
+function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
+  if (!windowStats) return null;
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    generated: new Date().toISOString(),
+    dateRange: state.data.dateRange,
+    providers: state.data.providers,
+    aggregated: windowStats,
+  };
+}
+
+let currentState: AppState;
+let currentRenderer: CliRenderer;
+
+function handleViewSwitch(mode: ViewMode): void {
+  if (currentState.selectedView !== mode) {
+    currentState.selectedView = mode;
+    currentState.modelScrollOffset = 0;
+    currentState.advisorScrollOffset = 0;
+    currentState.focusScrollOffset = 0;
+    currentState.compareScrollOffset = 0;
+  }
+  render(currentState, currentRenderer);
 }
 
 function buildLayout(state: AppState, renderer: CliRenderer) {
@@ -64,7 +98,7 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
       height: '100%',
       backgroundColor: COLORS.bg,
     },
-    buildHeader(state, renderer),
+    buildHeader(state, renderer, handleViewSwitch),
     buildContent(state),
     buildStatusBar(state),
   );
@@ -80,6 +114,9 @@ function render(state: AppState, renderer: CliRenderer): void {
 function invalidateWindowCaches(state: AppState): void {
   state.cachedAdvisorReport = null;
   state.cachedCompareOutput = null;
+  state.cachedFocusReport = null;
+  state.cachedExplainReport = null;
+  state.explainDate = null; // re-derive from new window's peak day
 }
 
 /** Null all caches (used on refresh) */
@@ -101,11 +138,12 @@ function shiftExplainDate(state: AppState, direction: number): void {
 
 const VIEW_KEYS: Record<string, ViewMode> = {
   '1': 'overview',
-  '2': 'bloomberg',
+  '2': 'matrix',
   '3': 'advisor',
   '4': 'focus',
   '5': 'explain',
   '6': 'compare',
+  '7': 'export',
 };
 
 /** Views that support j/k scrolling and their scroll offset field */
@@ -152,13 +190,73 @@ function setScrollOffset(state: AppState, value: number): void {
   }
 }
 
+/** Handle export actions (p/w/l keys in export view) */
+async function handleExport(
+  key: 'p' | 'w' | 'l',
+  state: AppState,
+  renderer: CliRenderer,
+): Promise<void> {
+  const output = buildTokenleakOutput(state);
+  if (!output) {
+    state.exportStatus = 'Error: No data loaded';
+    render(state, renderer);
+    return;
+  }
+
+  try {
+    if (key === 'p') {
+      state.exportStatus = 'Rendering PNG...';
+      render(state, renderer);
+
+      const { PngRenderer } = await import('@tokenleak/renderers');
+      const pngRenderer = new PngRenderer();
+      const buffer = await pngRenderer.render(output, {
+        format: 'png',
+        theme: 'dark',
+        width: 120,
+        showInsights: true,
+        noColor: false,
+        output: null,
+      });
+      const { writeFileSync } = await import('node:fs');
+      const outputPath = 'tokenleak.png';
+      writeFileSync(outputPath, buffer);
+      state.exportStatus = `Saved to ${outputPath}`;
+    } else if (key === 'w') {
+      state.exportStatus = 'Rendering Wrapped PNG...';
+      render(state, renderer);
+
+      const { renderWrappedPng } = await import('@tokenleak/renderers');
+      const buffer = await renderWrappedPng(output, { theme: 'dark' });
+      const { writeFileSync } = await import('node:fs');
+      const outputPath = 'tokenleak-wrapped.png';
+      writeFileSync(outputPath, buffer);
+      state.exportStatus = `Saved to ${outputPath}`;
+    } else if (key === 'l') {
+      state.exportStatus = 'Starting live server...';
+      render(state, renderer);
+
+      const { startWrappedLiveServer } = await import('@tokenleak/renderers');
+      const { port } = await startWrappedLiveServer(output);
+      state.exportStatus = `Live server running at http://localhost:${port} (Ctrl+C to stop)`;
+    }
+  } catch (err: unknown) {
+    state.exportStatus = `Error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  render(state, renderer);
+}
+
 async function main(): Promise<void> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
     backgroundColor: COLORS.bg,
+    useMouse: true,
   });
 
   const state = createInitialState();
+  currentState = state;
+  currentRenderer = renderer;
 
   // Show loading state immediately
   render(state, renderer);
@@ -189,18 +287,16 @@ async function main(): Promise<void> {
         return true;
       }
 
-      // 1-6: switch view
+      // 1-7: switch view
       const viewMode = VIEW_KEYS[sequence];
       if (viewMode) {
-        if (state.selectedView !== viewMode) {
-          state.selectedView = viewMode;
-          // Reset scroll offsets for the new view
-          state.modelScrollOffset = 0;
-          state.advisorScrollOffset = 0;
-          state.focusScrollOffset = 0;
-          state.compareScrollOffset = 0;
-        }
-        render(state, renderer);
+        handleViewSwitch(viewMode);
+        return true;
+      }
+
+      // Export view actions: p/w/l
+      if (state.selectedView === 'export' && (sequence === 'p' || sequence === 'w' || sequence === 'l')) {
+        handleExport(sequence, state, renderer);
         return true;
       }
 
@@ -277,6 +373,7 @@ async function main(): Promise<void> {
       if (sequence === 'r') {
         state.isLoading = true;
         invalidateAllCaches(state);
+        state.exportStatus = null;
         render(state, renderer);
 
         loadAllData()

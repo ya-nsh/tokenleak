@@ -155,13 +155,24 @@ export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
   return report;
 }
 
-/** Lazily compute and cache the FocusReport (window-independent) */
+/** Lazily compute and cache the FocusReport (window-dependent — filters events by date) */
 export function ensureFocusReport(state: AppState): FocusReport | null {
   if (!state.data) return null;
   if (state.cachedFocusReport) return state.cachedFocusReport;
 
   const allEvents = state.data.providers.flatMap((p) => p.events ?? []);
-  const report = buildFocusReport(allEvents);
+
+  // Filter events to the selected time window
+  const windowDays = [7, 30, 90, 0];
+  const days = windowDays[state.selectedWindowIndex];
+  let filtered = allEvents;
+  if (days && days > 0) {
+    const since = daysAgoStr(days);
+    const today = todayStr();
+    filtered = allEvents.filter((e) => e.date >= since && e.date <= today);
+  }
+
+  const report = buildFocusReport(filtered);
   state.cachedFocusReport = report;
   return report;
 }

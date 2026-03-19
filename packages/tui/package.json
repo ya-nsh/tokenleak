@@ -11,7 +11,8 @@
   "dependencies": {
     "@opentui/core": "latest",
     "@tokenleak/core": "workspace:*",
-    "@tokenleak/registry": "workspace:*"
+    "@tokenleak/registry": "workspace:*",
+    "@tokenleak/renderers": "workspace:*"
   },
   "devDependencies": {
     "@tokenleak/typescript-config": "workspace:*",

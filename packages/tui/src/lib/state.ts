@@ -1,7 +1,7 @@
 import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput } from '@tokenleak/core';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'bloomberg' | 'advisor' | 'focus' | 'explain' | 'compare';
+export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export';
 export type SortMode = 'cost' | 'tokens';
 
 export interface AppState {
@@ -17,6 +17,9 @@ export interface AppState {
   focusScrollOffset: number;
   advisorScrollOffset: number;
   compareScrollOffset: number;
+
+  // export view state
+  exportStatus: string | null;      // status message shown during export
 
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
@@ -40,6 +43,7 @@ export function createInitialState(): AppState {
     focusScrollOffset: 0,
     advisorScrollOffset: 0,
     compareScrollOffset: 0,
+    exportStatus: null,
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,

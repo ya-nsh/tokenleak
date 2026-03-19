@@ -14,7 +14,23 @@ function formatCompactTime(): string {
   return `${month}/${day} ${hours}:${minutes}`;
 }
 
-export function buildHeader(state: AppState, renderer: CliRenderer) {
+export type ViewSwitchCallback = (mode: ViewMode) => void;
+
+const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
+  { key: '1', label: 'Overview', mode: 'overview' },
+  { key: '2', label: 'Matrix', mode: 'matrix' },
+  { key: '3', label: 'Advisor', mode: 'advisor' },
+  { key: '4', label: 'Focus', mode: 'focus' },
+  { key: '5', label: 'Explain', mode: 'explain' },
+  { key: '6', label: 'Compare', mode: 'compare' },
+  { key: '7', label: 'Export', mode: 'export' },
+];
+
+export function buildHeader(
+  state: AppState,
+  renderer: CliRenderer,
+  onViewSwitch?: ViewSwitchCallback,
+) {
   const costStr = state.data
     ? formatCost(state.data.allTimeStats.totalCost)
     : '$...';
@@ -24,7 +40,7 @@ export function buildHeader(state: AppState, renderer: CliRenderer) {
   const windowCost = stats ? formatCost(stats.totalCost) : costStr;
 
   // Build tab indicators manually since TabSelect is a Renderable
-  const tabParts: ReturnType<typeof Text>[] = [];
+  const tabParts: ReturnType<typeof Text | typeof Box>[] = [];
   for (let i = 0; i < WINDOW_LABELS.length; i++) {
     const label = WINDOW_LABELS[i];
     const isSelected = i === windowIdx;
@@ -47,35 +63,27 @@ export function buildHeader(state: AppState, renderer: CliRenderer) {
     }
   }
 
-  // View mode indicators
-  const viewParts: ReturnType<typeof Text>[] = [];
-  const views: { key: string; label: string; mode: ViewMode }[] = [
-    { key: '1', label: 'Overview', mode: 'overview' },
-    { key: '2', label: 'Bloomberg', mode: 'bloomberg' },
-    { key: '3', label: 'Advisor', mode: 'advisor' },
-    { key: '4', label: 'Focus', mode: 'focus' },
-    { key: '5', label: 'Explain', mode: 'explain' },
-    { key: '6', label: 'Compare', mode: 'compare' },
-  ];
-  for (const v of views) {
+  // View mode indicators — each is a clickable Box
+  const viewParts: ReturnType<typeof Box>[] = [];
+  for (const v of VIEWS) {
     const isActive = state.selectedView === v.mode;
-    if (isActive) {
-      viewParts.push(
+    const viewMode = v.mode;
+
+    viewParts.push(
+      Box(
+        {
+          onMouseDown: onViewSwitch
+            ? () => { onViewSwitch(viewMode); }
+            : undefined,
+        },
         Text({
           content: ` ${v.label} `,
-          fg: COLORS.bg,
-          bg: COLORS.cyan,
-          attributes: BOLD,
+          fg: isActive ? COLORS.bg : COLORS.dimWhite,
+          bg: isActive ? COLORS.cyan : undefined,
+          attributes: isActive ? BOLD : undefined,
         }),
-      );
-    } else {
-      viewParts.push(
-        Text({
-          content: ` ${v.label} `,
-          fg: COLORS.dimWhite,
-        }),
-      );
-    }
+      ),
+    );
   }
 
   return Box(
