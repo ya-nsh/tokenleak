@@ -713,7 +713,7 @@ export function renderWrappedSinglePageSvg(
   parts.push(txt(PAD, y + 28, `Generated ${generatedTs}`, {
     fill: C.muted2, size: 9, weight: 400, family: MONO, spacing: 1,
   }));
-  parts.push(txt(WIDTH - PAD, y + 28, 'tokenleak.dev', {
+  parts.push(txt(WIDTH - PAD, y + 28, 'tokenleak.devaa.dev', {
     fill: C.gold, size: 11, weight: 700, family: MONO, anchor: 'end', opacity: 0.5, spacing: 0.5,
   }));
 
