@@ -1,6 +1,7 @@
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput } from '@tokenleak/core';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'bloomberg';
+export type ViewMode = 'overview' | 'bloomberg' | 'advisor' | 'focus' | 'explain' | 'compare';
 export type SortMode = 'cost' | 'tokens';
 
 export interface AppState {
@@ -10,6 +11,18 @@ export interface AppState {
   data: TuiData | null;
   sortMode: SortMode;
   modelScrollOffset: number;
+
+  // new view state
+  explainDate: string | null;       // YYYY-MM-DD, defaults to peak day
+  focusScrollOffset: number;
+  advisorScrollOffset: number;
+  compareScrollOffset: number;
+
+  // lazy caches (null = not yet computed, cleared on refresh)
+  cachedAdvisorReport: AdvisorReport | null;
+  cachedFocusReport: FocusReport | null;
+  cachedExplainReport: ExplainReport | null;
+  cachedCompareOutput: CompareOutput | null;
 }
 
 export const WINDOW_LABELS = ['7D', '30D', '90D', 'ALL'] as const;
@@ -23,5 +36,13 @@ export function createInitialState(): AppState {
     data: null,
     sortMode: 'cost',
     modelScrollOffset: 0,
+    explainDate: null,
+    focusScrollOffset: 0,
+    advisorScrollOffset: 0,
+    compareScrollOffset: 0,
+    cachedAdvisorReport: null,
+    cachedFocusReport: null,
+    cachedExplainReport: null,
+    cachedCompareOutput: null,
   };
 }

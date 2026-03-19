@@ -2,7 +2,7 @@ import { Box, Text } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import { formatCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
-import type { AppState } from '../lib/state.js';
+import type { AppState, ViewMode } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
 
 function formatCompactTime(): string {
@@ -49,9 +49,13 @@ export function buildHeader(state: AppState, renderer: CliRenderer) {
 
   // View mode indicators
   const viewParts: ReturnType<typeof Text>[] = [];
-  const views = [
-    { key: '1', label: 'Overview', mode: 'overview' as const },
-    { key: '2', label: 'Bloomberg', mode: 'bloomberg' as const },
+  const views: { key: string; label: string; mode: ViewMode }[] = [
+    { key: '1', label: 'Overview', mode: 'overview' },
+    { key: '2', label: 'Bloomberg', mode: 'bloomberg' },
+    { key: '3', label: 'Advisor', mode: 'advisor' },
+    { key: '4', label: 'Focus', mode: 'focus' },
+    { key: '5', label: 'Explain', mode: 'explain' },
+    { key: '6', label: 'Compare', mode: 'compare' },
   ];
   for (const v of views) {
     const isActive = state.selectedView === v.mode;

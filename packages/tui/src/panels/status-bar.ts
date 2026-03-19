@@ -25,9 +25,19 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const keys = state.selectedView === 'overview'
-    ? 'tab/\u2190\u2192:period  j/k:scroll  s:sort  1:overview  2:bloomberg  r:refresh  q:quit'
-    : 'tab/\u2190\u2192:period  1:overview  2:bloomberg  r:refresh  q:quit';
+  const viewKeys = '1-6:views';
+  const base = `tab/\u2190\u2192:period  ${viewKeys}  r:refresh  q:quit`;
+
+  let keys: string;
+  if (state.selectedView === 'overview') {
+    keys = `tab/\u2190\u2192:period  j/k:scroll  s:sort  ${viewKeys}  r:refresh  q:quit`;
+  } else if (state.selectedView === 'explain') {
+    keys = `tab/\u2190\u2192:period  h/l:date  ${viewKeys}  r:refresh  q:quit`;
+  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare') {
+    keys = `tab/\u2190\u2192:period  j/k:scroll  ${viewKeys}  r:refresh  q:quit`;
+  } else {
+    keys = base;
+  }
 
   return Box(
     {

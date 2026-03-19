@@ -1,10 +1,23 @@
 import type {
   AggregatedStats,
+  AdvisorReport,
+  CompareOutput,
   DailyUsage,
   DateRange,
+  ExplainReport,
+  FocusReport,
   ProviderData,
+  TokenleakOutput,
 } from '@tokenleak/core';
-import { aggregate, mergeProviderData } from '@tokenleak/core';
+import {
+  aggregate,
+  analyzeEfficiency,
+  buildExplainReport,
+  buildFocusReport,
+  compareRanges,
+  mergeProviderData,
+  SCHEMA_VERSION,
+} from '@tokenleak/core';
 import {
   ProviderRegistry,
   ClaudeCodeProvider,
@@ -12,7 +25,9 @@ import {
   CursorProvider,
   OpenCodeProvider,
   PiProvider,
+  MODEL_PRICING,
 } from '@tokenleak/registry';
+import type { AppState } from './state.js';
 
 export interface TimeWindowData {
   label: string;
@@ -117,4 +132,69 @@ export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsag
 
   const since = daysAgoStr(days);
   return data.mergedDaily.filter((d) => d.date >= since && d.date <= today);
+}
+
+/** Lazily compute and cache the AdvisorReport (window-dependent) */
+export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedAdvisorReport) return state.cachedAdvisorReport;
+
+  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
+  if (!windowStats) return null;
+
+  const output: TokenleakOutput = {
+    schemaVersion: SCHEMA_VERSION,
+    generated: new Date().toISOString(),
+    dateRange: state.data.dateRange,
+    providers: state.data.providers,
+    aggregated: windowStats,
+  };
+
+  const report = analyzeEfficiency(output, MODEL_PRICING);
+  state.cachedAdvisorReport = report;
+  return report;
+}
+
+/** Lazily compute and cache the FocusReport (window-independent) */
+export function ensureFocusReport(state: AppState): FocusReport | null {
+  if (!state.data) return null;
+  if (state.cachedFocusReport) return state.cachedFocusReport;
+
+  const allEvents = state.data.providers.flatMap((p) => p.events ?? []);
+  const report = buildFocusReport(allEvents);
+  state.cachedFocusReport = report;
+  return report;
+}
+
+/** Lazily compute and cache the ExplainReport (date-dependent) */
+export function ensureExplainReport(state: AppState): ExplainReport | null {
+  if (!state.data) return null;
+  if (state.cachedExplainReport && state.cachedExplainReport.date === state.explainDate) {
+    return state.cachedExplainReport;
+  }
+
+  // Default to peak day from current window
+  if (!state.explainDate) {
+    const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
+    state.explainDate = windowStats?.peakDay?.date ?? todayStr();
+  }
+
+  const report = buildExplainReport(state.data.providers, state.explainDate);
+  state.cachedExplainReport = report;
+  return report;
+}
+
+/** Lazily compute and cache CompareOutput (window-dependent) */
+export function ensureCompareOutput(state: AppState): CompareOutput | null {
+  if (!state.data) return null;
+  if (state.cachedCompareOutput) return state.cachedCompareOutput;
+
+  const windowDays = [7, 30, 90, 0];
+  const days = windowDays[state.selectedWindowIndex] || 365;
+  const today = todayStr();
+  const rangeB: DateRange = { since: daysAgoStr(days), until: today };
+  const rangeA: DateRange = { since: daysAgoStr(days * 2), until: daysAgoStr(days + 1) };
+  const output = compareRanges(state.data.mergedDaily, rangeA, rangeB);
+  state.cachedCompareOutput = output;
+  return output;
 }
