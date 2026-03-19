@@ -152,8 +152,28 @@ tokenleak cursor logout --name work
 tokenleak cursor logout --all --purge-cache
 ```
 
+- Local checkout flow:
+
+```bash
+# Build once from the repo root
+bun install
+bun run build
+
+# Validate the saved Cursor session token
+bun packages/cli/dist/cli.js cursor status
+
+# Trigger the first Cursor cache sync and show Cursor-only usage
+bun packages/cli/dist/cli.js --provider cursor --format terminal
+
+# Inspect raw Cursor data
+bun packages/cli/dist/cli.js --provider cursor --format json
+```
+
 - Normal dashboard/report runs auto-refresh Cursor cache when you are logged in and Cursor is requested or available.
 - If refresh fails but cached CSVs exist, Tokenleak falls back to the cached data.
+- `tokenleak cursor status` only validates the saved session token. It does not mark Cursor as available by itself.
+- `tokenleak --list-providers` reports whether local provider data exists. For Cursor, that means `cursor-cache/usage*.csv` must already be present.
+- If `cursor status` is valid but `--list-providers` still shows Cursor as unavailable, run `tokenleak --provider cursor` once to sync the cache, then rerun `--list-providers`.
 - Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
 
 ### Date filtering
@@ -427,6 +447,8 @@ Reads JSONL session logs from the Codex sessions directory. Parses `response` ev
 ### Cursor
 
 Reads Cursor usage CSV exports from the local Tokenleak cache. The cache is populated by authenticating with `tokenleak cursor login`, after which normal runs auto-refresh the CSVs when possible.
+
+`tokenleak cursor status` confirms that your saved session token is valid. Cursor only becomes `[available]` in `tokenleak --list-providers` after the local cache has at least one `usage*.csv` file, usually after the first `tokenleak --provider cursor` run.
 
 |                   |                                                       |
 | ----------------- | ----------------------------------------------------- |
