@@ -221,20 +221,12 @@ export function renderWrappedSinglePageSvg(
     fill: C.ivoryDim, size: 15, weight: 400, family: BODY,
   }));
 
-  // FIX #1: Stamp — wider box, shorter label text, better spacing
-  const stampW = 260;
+  // Stamp — just the brand name
+  const stampW = 140;
   const stampX = WIDTH - PAD - stampW;
   parts.push(box(stampX, y + 78, stampW, 36, 'transparent', 2, { stroke: C.borderHi, strokeWidth: 1 }));
-  parts.push(txt(stampX + 18, y + 101, 'TokenLeak', {
-    fill: C.gold, size: 15, weight: 800, family: DISPLAY, spacing: -0.5,
-  }));
-  const sepX = stampX + 118;
-  parts.push(line(sepX, y + 86, sepX, y + 107, C.borderHi, 1));
-  parts.push(txt(sepX + 14, y + 100, 'BUILT WITH', {
-    fill: C.muted, size: 8, weight: 400, family: MONO, spacing: 1.2,
-  }));
-  parts.push(txt(sepX + 14, y + 111, 'TOKENLEAK', {
-    fill: C.muted, size: 8, weight: 400, family: MONO, spacing: 1.2,
+  parts.push(txt(stampX + stampW / 2, y + 101, 'TokenLeak', {
+    fill: C.gold, size: 16, weight: 800, family: DISPLAY, spacing: -0.5, anchor: 'middle',
   }));
 
   // Days of data indicator
