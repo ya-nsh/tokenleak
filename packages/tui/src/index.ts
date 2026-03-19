@@ -102,8 +102,11 @@ async function main(): Promise<void> {
 
       // j / Down: scroll model list down
       if ((sequence === 'j' || sequence === '\x1b[B') && state.selectedView === 'overview') {
-        const maxModels = state.data?.allTimeStats.topModels.length ?? 0;
-        if (state.modelScrollOffset < maxModels - 1) {
+        const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
+        const modelCount = windowStats?.topModels.length ?? 0;
+        const visibleCount = 10;
+        const maxOffset = Math.max(0, modelCount - visibleCount);
+        if (state.modelScrollOffset < maxOffset) {
           state.modelScrollOffset++;
           render(state, renderer);
         }
