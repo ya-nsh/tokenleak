@@ -1738,6 +1738,11 @@ const main = defineCommand({
       description: 'Analyze usage and suggest cost-saving model switches',
       default: false,
     },
+    legacy: {
+      type: 'boolean',
+      description: 'Open the classic interactive launcher instead of TUI',
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -1979,8 +1984,12 @@ if (isDirectExecution) {
       helpText: buildHelpText(),
     }, executeInteractiveCommand, launchTabbed);
   } else if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
-    const { main: startTui } = await import('@tokenleak/tui');
-    await startTui();
+    try {
+      const { main: startTui } = await import('@tokenleak/tui');
+      await startTui();
+    } catch (error: unknown) {
+      handleError(error);
+    }
   } else {
     await runMain(main);
   }
