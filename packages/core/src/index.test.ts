@@ -3,7 +3,7 @@ import { VERSION } from './index';
 
 describe('core', () => {
   it('exports a version string', () => {
-    expect(VERSION).toBe('1.2.0');
+    expect(VERSION).toBe('2.0.0');
   });
 
   it('version is a valid semver format', () => {
