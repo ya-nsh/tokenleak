@@ -1,0 +1,21 @@
+{
+  "name": "@tokenleak/tui",
+  "version": "1.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.88",
+    "@tokenleak/core": "workspace:*",
+    "@tokenleak/registry": "workspace:*",
+    "@tokenleak/renderers": "workspace:*"
+  },
+  "devDependencies": {
+    "@tokenleak/typescript-config": "workspace:*",
+    "typescript": "^5.7.0"
+  }
+}
