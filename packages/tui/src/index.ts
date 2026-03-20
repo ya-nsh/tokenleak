@@ -2,6 +2,12 @@ import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { SCHEMA_VERSION } from '@tokenleak/core';
+import {
+  CursorAuthError,
+  resolveCursorSetupStatus,
+  saveCursorCredentials,
+  validateCursorSession,
+} from '@tokenleak/registry';
 import { computeAchievements } from '@tokenleak/renderers';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
@@ -28,6 +34,7 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
+import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
@@ -37,6 +44,10 @@ function clearRoot(renderer: CliRenderer): void {
 }
 
 function buildContent(state: AppState) {
+  if (state.showCursorSetup) {
+    return createCursorSetupPanel(state);
+  }
+
   // Help overlay takes priority
   if (state.showHelp) {
     return createHelpPanel();
@@ -113,6 +124,172 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   return output;
 }
 
+function resetCursorSetupForm(state: AppState): void {
+  state.cursorSetupField = 'token';
+  state.cursorSetupLabel = '';
+  state.cursorSetupToken = '';
+  state.cursorSetupMessage = null;
+  state.cursorSetupSubmitting = false;
+}
+
+function openCursorSetup(state: AppState): void {
+  state.showCursorSetup = true;
+  state.showHelp = false;
+  state.cursorSetupMessage = null;
+}
+
+function closeCursorSetup(state: AppState): void {
+  state.showCursorSetup = false;
+  state.cursorSetupMessage = null;
+  state.cursorSetupSubmitting = false;
+}
+
+function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof loadAllData>>): void {
+  state.data = freshData;
+  state.isLoading = false;
+  state.modelScrollOffset = 0;
+  state.advisorScrollOffset = 0;
+  state.focusScrollOffset = 0;
+  state.compareScrollOffset = 0;
+  state.wrappedScrollOffset = 0;
+  state.explainDate = null;
+  state.cursorSetupStatusOverride = null;
+}
+
+async function reloadAllData(state: AppState, renderer: CliRenderer, failurePrefix?: string): Promise<void> {
+  state.isLoading = true;
+  invalidateAllCaches(state);
+  state.exportStatus = null;
+  render(state, renderer);
+
+  try {
+    const freshData = await loadAllData();
+    applyLoadedData(state, freshData);
+  } catch (err: unknown) {
+    state.isLoading = false;
+    state.exportStatus = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  render(state, renderer);
+}
+
+function appendCursorSetupText(state: AppState, text: string): void {
+  if (!text) {
+    return;
+  }
+
+  if (state.cursorSetupField === 'label') {
+    state.cursorSetupLabel += text;
+    return;
+  }
+
+  state.cursorSetupToken += text;
+}
+
+function deleteCursorSetupChar(state: AppState): void {
+  if (state.cursorSetupField === 'label') {
+    state.cursorSetupLabel = state.cursorSetupLabel.slice(0, -1);
+    return;
+  }
+
+  state.cursorSetupToken = state.cursorSetupToken.slice(0, -1);
+}
+
+async function submitCursorSetup(state: AppState, renderer: CliRenderer): Promise<void> {
+  if (state.cursorSetupSubmitting) {
+    return;
+  }
+
+  state.cursorSetupSubmitting = true;
+  state.cursorSetupMessage = null;
+  render(state, renderer);
+
+  try {
+    const token = state.cursorSetupToken.trim();
+    const label = state.cursorSetupLabel.trim() || undefined;
+
+    if (token) {
+      const validation = await validateCursorSession(token);
+      if (!validation.valid) {
+        throw new CursorAuthError(validation.error ?? 'Invalid session token', validation.reason);
+      }
+
+      saveCursorCredentials(token, label);
+    }
+
+    const status = await resolveCursorSetupStatus({ attemptSync: true });
+    state.cursorSetupStatusOverride = status;
+
+    if (status.state === 'ready') {
+      resetCursorSetupForm(state);
+      closeCursorSetup(state);
+      await reloadAllData(state, renderer, 'Cursor reload failed');
+      return;
+    }
+
+    if (!token && status.state === 'needs_auth') {
+      throw new CursorAuthError('Enter a Cursor session token to continue.');
+    }
+
+    state.cursorSetupMessage = status.error ?? 'Cursor setup still needs attention.';
+  } catch (err: unknown) {
+    state.cursorSetupMessage = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.cursorSetupSubmitting = false;
+    render(state, renderer);
+  }
+}
+
+function isPrintableInput(sequence: string): boolean {
+  return sequence.length > 0
+    && !sequence.includes('\x1b')
+    && !/[\u0000-\u001f\u007f]/.test(sequence);
+}
+
+function handleCursorSetupInput(sequence: string, state: AppState, renderer: CliRenderer): boolean {
+  if (!state.showCursorSetup) {
+    return false;
+  }
+
+  if (state.cursorSetupSubmitting) {
+    if (sequence === '\x1b') {
+      return true;
+    }
+    return true;
+  }
+
+  if (sequence === '\x1b') {
+    closeCursorSetup(state);
+    render(state, renderer);
+    return true;
+  }
+
+  if (sequence === '\t') {
+    state.cursorSetupField = state.cursorSetupField === 'token' ? 'label' : 'token';
+    render(state, renderer);
+    return true;
+  }
+
+  if (sequence === '\r' || sequence === '\n') {
+    void submitCursorSetup(state, renderer);
+    return true;
+  }
+
+  if (sequence === '\u0008' || sequence === '\u007f') {
+    deleteCursorSetupChar(state);
+    render(state, renderer);
+    return true;
+  }
+
+  if (isPrintableInput(sequence)) {
+    appendCursorSetupText(state, sequence);
+    render(state, renderer);
+    return true;
+  }
+
+  return true;
+}
+
 let currentState: AppState;
 let currentRenderer: CliRenderer;
 
@@ -133,6 +310,7 @@ function handleViewSwitch(mode: ViewMode): void {
 }
 
 function buildLayout(state: AppState, renderer: CliRenderer) {
+  const cursorBanner = buildCursorBanner(state);
   return Box(
     {
       flexDirection: 'column',
@@ -141,6 +319,7 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
       backgroundColor: COLORS.bg,
     },
     buildHeader(state, renderer, handleViewSwitch),
+    ...(cursorBanner ? [cursorBanner] : []),
     buildContent(state),
     buildStatusBar(state),
   );
@@ -317,11 +496,14 @@ export async function main(): Promise<void> {
 
   try {
     const data = await loadAllData();
-    state.data = data;
-    state.isLoading = false;
+    applyLoadedData(state, data);
     render(state, renderer);
 
     renderer.addInputHandler((sequence: string) => {
+      if (handleCursorSetupInput(sequence, state, renderer)) {
+        return true;
+      }
+
       // Help toggle: ? key
       if (sequence === '?') {
         state.showHelp = !state.showHelp;
@@ -342,7 +524,20 @@ export async function main(): Promise<void> {
           renderer.destroy();
           process.exit(0);
         }
+        if (sequence === 'c' && buildCursorBanner(state)) {
+          resetCursorSetupForm(state);
+          openCursorSetup(state);
+          render(state, renderer);
+          return true;
+        }
         return false;
+      }
+
+      if (sequence === 'c' && buildCursorBanner(state)) {
+        resetCursorSetupForm(state);
+        openCursorSetup(state);
+        render(state, renderer);
+        return true;
       }
 
       // Tab or >: next time window
@@ -476,28 +671,7 @@ export async function main(): Promise<void> {
 
       // r: refresh data
       if (sequence === 'r') {
-        state.isLoading = true;
-        invalidateAllCaches(state);
-        state.exportStatus = null;
-        render(state, renderer);
-
-        loadAllData()
-          .then((freshData) => {
-            state.data = freshData;
-            state.isLoading = false;
-            state.modelScrollOffset = 0;
-            state.advisorScrollOffset = 0;
-            state.focusScrollOffset = 0;
-            state.compareScrollOffset = 0;
-            state.wrappedScrollOffset = 0;
-            state.explainDate = null;
-            render(state, renderer);
-          })
-          .catch((err: unknown) => {
-            state.isLoading = false;
-            state.exportStatus = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
-            render(state, renderer);
-          });
+        void reloadAllData(state, renderer);
         return true;
       }
 
@@ -547,4 +721,3 @@ export async function main(): Promise<void> {
     });
   }
 }
-

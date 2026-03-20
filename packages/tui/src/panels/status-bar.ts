@@ -1,6 +1,7 @@
 import { Box, Text } from '@opentui/core';
 import { COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
+import { getCursorBannerText } from './cursor-setup.js';
 
 function formatUpdateTime(): string {
   const now = new Date();
@@ -40,22 +41,38 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
+  if (state.showCursorSetup) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: 'tab:field  enter:submit  esc:close', fg: COLORS.dimWhite }),
+      Text({ content: `Updated ${formatUpdateTime()}`, fg: COLORS.dimWhite }),
+    );
+  }
+
   const helpHint = '?:help';
   const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-8:view`;
+  const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
 
   let keys: string;
   if (state.selectedView === 'overview') {
-    keys = `${nav}  j/k:scroll  s:sort  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:scroll  s:sort  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'matrix') {
-    keys = `${nav}  [/]:page  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  [/]:page  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'explain') {
-    keys = `${nav}  h/l:date  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  h/l:date  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped') {
-    keys = `${nav}  j/k:scroll  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
-    keys = `${nav}  p:png  w:wrapped  l:live  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  p:png  w:wrapped  l:live  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else {
-    keys = `${nav}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   }
 
   return Box(

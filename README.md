@@ -153,6 +153,7 @@ tokenleak cursor accounts --json
 tokenleak cursor switch work
 tokenleak cursor logout --name work
 tokenleak cursor logout --all --purge-cache
+tokenleak cursor reset
 ```
 
 - Getting a Cursor session token:
@@ -186,6 +187,7 @@ bun packages/cli/dist/cli.js --provider cursor --format json
 - Normal dashboard/report runs auto-refresh Cursor cache when you are logged in and Cursor is requested or available.
 - If refresh fails but cached CSVs exist, Tokenleak falls back to the cached data.
 - `tokenleak cursor status` only validates the saved session token. It does not mark Cursor as available by itself.
+- `tokenleak cursor reset` clears saved Cursor credentials and the local Cursor cache so you can re-test the in-TUI setup flow from a clean state.
 - `tokenleak --list-providers` reports whether local provider data exists. For Cursor, that means `cursor-cache/usage*.csv` must already be present.
 - If `cursor status` is valid but `--list-providers` still shows Cursor as unavailable, run `tokenleak --provider cursor` once to sync the cache, then rerun `--list-providers`.
 - Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
@@ -390,8 +392,11 @@ In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with 
 | `h` / `l` | Previous/next day (in Explain view) |
 | `s` | Toggle sort mode (in Overview) |
 | `r` | Refresh data |
+| `c` | Open Cursor setup when the dashboard shows a Cursor auth/sync banner |
 | `?` | Help overlay |
 | `q` | Quit |
+
+When Cursor needs setup, re-authentication, or a cache retry, the TUI shows a contextual banner. Press `c` to open the built-in Cursor setup flow, paste a session token, validate it, and sync usage CSVs without leaving the dashboard.
 
 The Matrix view spans 4 pages:
 1. Overview + time windows + providers + top models
