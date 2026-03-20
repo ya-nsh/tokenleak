@@ -41,8 +41,10 @@ export function createHelpPanel() {
       Box(
         { flexDirection: 'column', flexGrow: 1 },
         ...helpSection('NAVIGATION', [
-          ['Tab / \u2192', 'Next time period'],
-          ['Shift+Tab / \u2190', 'Prev time period'],
+          ['\u2192', 'Next view'],
+          ['\u2190', 'Prev view'],
+          ['Tab / >', 'Next time period'],
+          ['Shift+Tab / <', 'Prev time period'],
           ['j / \u2193', 'Scroll down'],
           ['k / \u2191', 'Scroll up'],
           ['[ / ]', 'Matrix page (in Matrix)'],
