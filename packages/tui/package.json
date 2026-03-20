@@ -8,7 +8,7 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "dev": "bun src/index.ts",
+    "dev": "bun src/bin.ts",
     "build": "tsc",
     "check": "tsc --noEmit"
   },

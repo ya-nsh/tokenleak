@@ -10,7 +10,7 @@ const result = await Bun.build({
   entrypoints: ['packages/cli/src/cli.ts'],
   outdir: 'dist',
   target: 'bun',
-  external: ['sharp'],
+  external: ['sharp', '@opentui/core'],
   naming: 'tokenleak',
   minify: false,
 });
