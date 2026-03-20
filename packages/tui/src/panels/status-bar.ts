@@ -51,7 +51,7 @@ export function buildStatusBar(state: AppState) {
         paddingRight: 1,
         height: 1,
       },
-      Text({ content: 'tab:field  enter:submit  esc:close', fg: COLORS.dimWhite }),
+      Text({ content: 'tab:field  enter:token submit  esc:close', fg: COLORS.dimWhite }),
       Text({ content: `Updated ${formatUpdateTime()}`, fg: COLORS.dimWhite }),
     );
   }

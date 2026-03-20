@@ -1,7 +1,23 @@
-import { Box, Text } from '@opentui/core';
+import { Box, InputRenderable, InputRenderableEvents, RenderableEvents, Text } from '@opentui/core';
+import type { CliRenderer } from '@opentui/core';
 import { getCursorCredentialsPath, type CursorSetupStatus } from '@tokenleak/registry';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState, CursorSetupField } from '../lib/state.js';
+
+export const CURSOR_SESSION_COOKIE_NAME = 'WorkosCursorSessionToken';
+
+export interface CursorSetupCallbacks {
+  onFieldFocus: (field: CursorSetupField) => void;
+  onLabelInput: (value: string) => void;
+  onTokenInput: (value: string) => void;
+  onSubmit: () => void;
+}
+
+export interface CursorSetupPanel {
+  panel: ReturnType<typeof Box>;
+  labelInput: InputRenderable;
+  tokenInput: InputRenderable;
+}
 
 function getCursorStatus(state: AppState): CursorSetupStatus | null {
   return state.cursorSetupStatusOverride ?? state.data?.cursorSetupStatus ?? null;
@@ -45,19 +61,11 @@ export function buildCursorBanner(state: AppState) {
   );
 }
 
-function renderField(label: string, value: string, isFocused: boolean, placeholder: string, masked = false) {
-  const displayValue = value.length > 0
-    ? (masked ? '*'.repeat(Math.min(value.length, 48)) : value)
-    : placeholder;
+function renderField(label: string, input: InputRenderable) {
   return Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 2, paddingRight: 2 },
     Text({ content: `${label}: `, fg: COLORS.cyan, attributes: BOLD }),
-    Text({
-      content: displayValue,
-      fg: value.length > 0 ? COLORS.white : COLORS.dimWhite,
-      bg: isFocused ? COLORS.blue : undefined,
-      attributes: isFocused ? BOLD : undefined,
-    }),
+    input,
   );
 }
 
@@ -83,12 +91,14 @@ function getMessageKind(state: AppState): boolean {
     || message.toLowerCase().includes('failed');
 }
 
-function getInstructions(status: CursorSetupStatus | null): string[] {
+export function getCursorSetupInstructions(status: CursorSetupStatus | null): string[] {
   const lines = [
     '1. Sign in to Cursor and open https://www.cursor.com/settings',
-    '2. Open browser devtools, inspect a request to cursor.com, and copy the session token',
-    '3. Paste the token here, then press Enter to validate, save, and sync usage CSVs',
-    `4. Tokenleak stores the token in plaintext at ${getCursorCredentialsPath()}`,
+    '2. Open browser devtools, then go to Application (or Storage) > Cookies > https://www.cursor.com',
+    `3. Copy the ${CURSOR_SESSION_COOKIE_NAME} cookie value and paste it here`,
+    '4. Press Enter in the token field to validate, save, and sync usage CSVs',
+    `5. Tokenleak stores the token in plaintext at ${getCursorCredentialsPath()}`,
+    `6. Browser labels vary, but ${CURSOR_SESSION_COOKIE_NAME} is the cookie name to look for`,
   ];
 
   if (!status) {
@@ -116,39 +126,95 @@ function getInstructions(status: CursorSetupStatus | null): string[] {
 function hintForField(field: CursorSetupField): string {
   return field === 'token'
     ? 'Tab: label field  Enter: validate/save/sync  Esc: close'
-    : 'Tab: token field  Enter: validate/save/sync  Esc: close';
+    : 'Tab: token field  Enter on token: validate/save/sync  Esc: close';
 }
 
-export function createCursorSetupPanel(state: AppState) {
+function createFieldInput(
+  renderer: CliRenderer,
+  value: string,
+  placeholder: string,
+  field: CursorSetupField,
+  onInput: (value: string) => void,
+  onFieldFocus: (field: CursorSetupField) => void,
+): InputRenderable {
+  const input = new InputRenderable(renderer, {
+    width: '100%',
+    flexGrow: 1,
+    value,
+    placeholder,
+    backgroundColor: COLORS.bg,
+    focusedBackgroundColor: COLORS.blue,
+    textColor: COLORS.white,
+    focusedTextColor: COLORS.white,
+    placeholderColor: COLORS.dimWhite,
+  });
+
+  input.on(InputRenderableEvents.INPUT, onInput);
+  input.on(RenderableEvents.FOCUSED, () => onFieldFocus(field));
+
+  return input;
+}
+
+export function createCursorSetupPanel(
+  state: AppState,
+  renderer: CliRenderer,
+  callbacks: CursorSetupCallbacks,
+): CursorSetupPanel {
   const status = getCursorStatus(state);
   const message = state.cursorSetupMessage ?? status?.error ?? null;
   const isError = getMessageKind(state);
   const title = status?.state === 'needs_reauth'
     ? ' Cursor Re-authentication '
     : ' Cursor Setup ';
-
-  return Box(
-    {
-      flexDirection: 'column',
-      width: '100%',
-      flexGrow: 1,
-      borderStyle: 'single',
-      borderColor: COLORS.amber,
-      padding: 1,
-    },
-    Text({ content: title, fg: COLORS.amber, attributes: BOLD }),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    ...getInstructions(status).map((line) => Text({ content: `  ${line}`, fg: COLORS.white })),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderField('Label', state.cursorSetupLabel, state.cursorSetupField === 'label', '(optional)', false),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderField('Token', state.cursorSetupToken, state.cursorSetupField === 'token', '(paste session token)', true),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    buildStatusLine(
-      state.cursorSetupSubmitting ? 'Validating token and syncing Cursor cache...' : message,
-      isError,
-    ),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    Text({ content: `  ${hintForField(state.cursorSetupField)}`, fg: COLORS.dimWhite }),
+  const labelInput = createFieldInput(
+    renderer,
+    state.cursorSetupLabel,
+    '(optional)',
+    'label',
+    callbacks.onLabelInput,
+    callbacks.onFieldFocus,
   );
+  const tokenInput = createFieldInput(
+    renderer,
+    state.cursorSetupToken,
+    `(paste ${CURSOR_SESSION_COOKIE_NAME})`,
+    'token',
+    callbacks.onTokenInput,
+    callbacks.onFieldFocus,
+  );
+
+  labelInput.on(InputRenderableEvents.ENTER, () => {
+    callbacks.onFieldFocus('token');
+    tokenInput.focus();
+  });
+  tokenInput.on(InputRenderableEvents.ENTER, callbacks.onSubmit);
+
+  return {
+    labelInput,
+    tokenInput,
+    panel: Box(
+      {
+        flexDirection: 'column',
+        width: '100%',
+        flexGrow: 1,
+        borderStyle: 'single',
+        borderColor: COLORS.amber,
+        padding: 1,
+      },
+      Text({ content: title, fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      ...getCursorSetupInstructions(status).map((line) => Text({ content: `  ${line}`, fg: COLORS.white })),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      renderField('Label', labelInput),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      renderField('Token', tokenInput),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      buildStatusLine(
+        state.cursorSetupSubmitting ? 'Validating token and syncing Cursor cache...' : message,
+        isError,
+      ),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      Text({ content: `  ${hintForField(state.cursorSetupField)}`, fg: COLORS.dimWhite }),
+    ),
+  };
 }

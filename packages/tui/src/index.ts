@@ -36,6 +36,9 @@ import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
+const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
+const CURSOR_SETUP_TOKEN_INPUT_ID = 'cursor-setup-token-input';
+
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
   for (const child of children) {
@@ -43,9 +46,27 @@ function clearRoot(renderer: CliRenderer): void {
   }
 }
 
-function buildContent(state: AppState) {
+function buildContent(state: AppState, renderer: CliRenderer) {
   if (state.showCursorSetup) {
-    return createCursorSetupPanel(state);
+    const { panel, labelInput, tokenInput } = createCursorSetupPanel(state, renderer, {
+      onFieldFocus: (field) => {
+        state.cursorSetupField = field;
+      },
+      onLabelInput: (value) => {
+        state.cursorSetupLabel = value;
+      },
+      onTokenInput: (value) => {
+        state.cursorSetupToken = value;
+      },
+      onSubmit: () => {
+        void submitCursorSetup(state, renderer);
+      },
+    });
+
+    labelInput.id = CURSOR_SETUP_LABEL_INPUT_ID;
+    tokenInput.id = CURSOR_SETUP_TOKEN_INPUT_ID;
+
+    return panel;
   }
 
   // Help overlay takes priority
@@ -135,6 +156,7 @@ function resetCursorSetupForm(state: AppState): void {
 function openCursorSetup(state: AppState): void {
   state.showCursorSetup = true;
   state.showHelp = false;
+  state.cursorSetupField = 'token';
   state.cursorSetupMessage = null;
 }
 
@@ -171,28 +193,6 @@ async function reloadAllData(state: AppState, renderer: CliRenderer, failurePref
   }
 
   render(state, renderer);
-}
-
-function appendCursorSetupText(state: AppState, text: string): void {
-  if (!text) {
-    return;
-  }
-
-  if (state.cursorSetupField === 'label') {
-    state.cursorSetupLabel += text;
-    return;
-  }
-
-  state.cursorSetupToken += text;
-}
-
-function deleteCursorSetupChar(state: AppState): void {
-  if (state.cursorSetupField === 'label') {
-    state.cursorSetupLabel = state.cursorSetupLabel.slice(0, -1);
-    return;
-  }
-
-  state.cursorSetupToken = state.cursorSetupToken.slice(0, -1);
 }
 
 async function submitCursorSetup(state: AppState, renderer: CliRenderer): Promise<void> {
@@ -240,12 +240,6 @@ async function submitCursorSetup(state: AppState, renderer: CliRenderer): Promis
   }
 }
 
-function isPrintableInput(sequence: string): boolean {
-  return sequence.length > 0
-    && !sequence.includes('\x1b')
-    && !/[\u0000-\u001f\u007f]/.test(sequence);
-}
-
 function handleCursorSetupInput(sequence: string, state: AppState, renderer: CliRenderer): boolean {
   if (!state.showCursorSetup) {
     return false;
@@ -264,30 +258,13 @@ function handleCursorSetupInput(sequence: string, state: AppState, renderer: Cli
     return true;
   }
 
-  if (sequence === '\t') {
+  if (sequence === '\t' || sequence === '\x1b[Z') {
     state.cursorSetupField = state.cursorSetupField === 'token' ? 'label' : 'token';
     render(state, renderer);
     return true;
   }
 
-  if (sequence === '\r' || sequence === '\n') {
-    void submitCursorSetup(state, renderer);
-    return true;
-  }
-
-  if (sequence === '\u0008' || sequence === '\u007f') {
-    deleteCursorSetupChar(state);
-    render(state, renderer);
-    return true;
-  }
-
-  if (isPrintableInput(sequence)) {
-    appendCursorSetupText(state, sequence);
-    render(state, renderer);
-    return true;
-  }
-
-  return true;
+  return false;
 }
 
 let currentState: AppState;
@@ -320,14 +297,29 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
     },
     buildHeader(state, renderer, handleViewSwitch),
     ...(cursorBanner ? [cursorBanner] : []),
-    buildContent(state),
+    buildContent(state, renderer),
     buildStatusBar(state),
   );
+}
+
+function focusCursorSetupField(state: AppState, renderer: CliRenderer): void {
+  if (!state.showCursorSetup) {
+    return;
+  }
+
+  const targetId = state.cursorSetupField === 'label'
+    ? CURSOR_SETUP_LABEL_INPUT_ID
+    : CURSOR_SETUP_TOKEN_INPUT_ID;
+  const target = renderer.root.findDescendantById(targetId);
+  if (target) {
+    target.focus();
+  }
 }
 
 function render(state: AppState, renderer: CliRenderer): void {
   clearRoot(renderer);
   renderer.root.add(buildLayout(state, renderer));
+  focusCursorSetupField(state, renderer);
   renderer.requestRender();
 }
 
