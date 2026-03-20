@@ -81,7 +81,7 @@ function buildStatusLine(message: string | null, isError: boolean) {
   });
 }
 
-function getMessageKind(state: AppState): boolean {
+function isErrorMessage(state: AppState): boolean {
   const status = getCursorStatus(state);
   const statusError = status?.error ?? '';
   const message = state.cursorSetupMessage ?? statusError;
@@ -162,7 +162,7 @@ export function createCursorSetupPanel(
 ): CursorSetupPanel {
   const status = getCursorStatus(state);
   const message = state.cursorSetupMessage ?? status?.error ?? null;
-  const isError = getMessageKind(state);
+  const isError = isErrorMessage(state);
   const title = status?.state === 'needs_reauth'
     ? ' Cursor Re-authentication '
     : ' Cursor Setup ';

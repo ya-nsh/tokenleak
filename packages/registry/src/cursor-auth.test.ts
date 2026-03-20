@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   getCursorCacheDir,
+  removeAllCursorAccounts,
   resolveCursorSetupStatus,
   saveCursorCredentials,
+  validateCursorSession,
 } from './cursor-auth';
 
 const SAMPLE_CSV = [
@@ -87,5 +89,50 @@ describe('resolveCursorSetupStatus', () => {
       hasCache: true,
       reason: 'api',
     });
+  });
+
+  test('returns needs_reauth when the active account fails auth but another account syncs', async () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    saveCursorCredentials('user-personal::token-personal', 'personal');
+
+    globalThis.fetch = (async (_url, init) => {
+      const cookie = String((init?.headers as Record<string, string> | undefined)?.['Cookie'] ?? '');
+      if (cookie.includes('user-personal::token-personal')) {
+        return new Response('forbidden', { status: 403 });
+      }
+      return new Response(SAMPLE_CSV, { status: 200 });
+    }) as typeof fetch;
+
+    await expect(resolveCursorSetupStatus({ attemptSync: true })).resolves.toMatchObject({
+      state: 'needs_reauth',
+      hasCredentials: true,
+      hasCache: true,
+      reason: 'auth',
+    });
+  });
+
+  test('treats aborted validation requests as network failures', async () => {
+    globalThis.fetch = (async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    }) as typeof fetch;
+
+    await expect(validateCursorSession('user-work::token-work')).resolves.toMatchObject({
+      valid: false,
+      reason: 'network',
+    });
+  });
+
+  test('purge removes archived cache files too', () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    mkdirSync(join(getCursorCacheDir(), 'archive'), { recursive: true });
+    writeFileSync(join(getCursorCacheDir(), 'usage.csv'), SAMPLE_CSV);
+    writeFileSync(join(getCursorCacheDir(), 'archive', 'old.csv'), SAMPLE_CSV);
+
+    removeAllCursorAccounts(true);
+
+    expect(existsSync(join(getCursorCacheDir(), 'usage.csv'))).toBe(false);
+    expect(existsSync(join(getCursorCacheDir(), 'archive'))).toBe(false);
   });
 });

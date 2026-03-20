@@ -78,6 +78,7 @@ export interface SyncCursorResult {
   rows: number;
   error?: string;
   reason?: CursorFailureReason;
+  activeAccountSynced?: boolean;
 }
 
 export interface CursorSetupStatus {
@@ -121,6 +122,30 @@ function atomicWriteFile(path: string, contents: string, mode?: number): void {
     chmodSync(tempPath, mode);
   }
   renameSync(tempPath, path);
+}
+
+const CURSOR_FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CURSOR_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new CursorAuthError(
+        `Failed to connect: request timed out after ${CURSOR_FETCH_TIMEOUT_MS}ms`,
+        'network',
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function buildCursorHeaders(sessionToken: string): Record<string, string> {
@@ -401,6 +426,9 @@ export function removeAllCursorAccounts(purgeCache: boolean): void {
   if (existsSync(cacheDir)) {
     for (const entry of readdirSync(cacheDir)) {
       if (entry === 'archive') {
+        if (purgeCache) {
+          rmSync(join(cacheDir, entry), { recursive: true, force: true });
+        }
         continue;
       }
 
@@ -459,7 +487,7 @@ export function setActiveCursorAccount(nameOrId: string): void {
   saveCursorCredentialsStore(store);
 }
 
-function getActiveCursorCredentials(): CursorCredentials | null {
+export function getActiveCursorCredentials(): CursorCredentials | null {
   const store = loadCursorCredentialsStore();
   if (!store) {
     return null;
@@ -481,7 +509,7 @@ export function getCursorCredentialsFor(nameOrId: string): CursorCredentials | n
 export async function validateCursorSession(sessionToken: string): Promise<ValidateCursorSessionResult> {
   let response: Response;
   try {
-    response = await fetch(CURSOR_USAGE_SUMMARY_ENDPOINT, {
+    response = await fetchWithTimeout(CURSOR_USAGE_SUMMARY_ENDPOINT, {
       headers: buildCursorHeaders(sessionToken),
     });
   } catch (error: unknown) {
@@ -535,10 +563,21 @@ export async function validateCursorSession(sessionToken: string): Promise<Valid
   }
 }
 
-export async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
-  const response = await fetch(CURSOR_USAGE_CSV_ENDPOINT, {
-    headers: buildCursorHeaders(sessionToken),
-  });
+async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(CURSOR_USAGE_CSV_ENDPOINT, {
+      headers: buildCursorHeaders(sessionToken),
+    });
+  } catch (error: unknown) {
+    if (error instanceof CursorAuthError) {
+      throw error;
+    }
+    throw new CursorAuthError(
+      `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+      'network',
+    );
+  }
 
   if (response.status === 401 || response.status === 403) {
     throw new CursorAuthError(
@@ -571,6 +610,8 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
   let totalRows = 0;
   let successCount = 0;
   const errors: Array<{ accountId: string; message: string; reason: CursorFailureReason }> = [];
+  let activeAccountSynced = false;
+  let activeAccountFailure: { message: string; reason: CursorFailureReason } | null = null;
 
   for (const [accountId, credentials] of Object.entries(store.accounts)) {
     try {
@@ -590,21 +631,32 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
       }
       successCount += 1;
       totalRows += countCursorCsvRows(csvText);
+      if (accountId === store.activeAccountId) {
+        activeAccountSynced = true;
+      }
     } catch (error: unknown) {
-      errors.push({
+      const failure = {
         accountId,
         message: error instanceof Error ? error.message : String(error),
         reason: toFailureReason(error),
-      });
+      };
+      errors.push(failure);
+      if (accountId === store.activeAccountId) {
+        activeAccountFailure = {
+          message: failure.message,
+          reason: failure.reason,
+        };
+      }
     }
   }
 
-  if (successCount === 0) {
+  if (successCount === 0 || !activeAccountSynced) {
     return {
       synced: false,
       rows: 0,
-      error: errors[0]?.message ?? 'Cursor sync failed',
-      reason: errors[0]?.reason ?? 'unknown',
+      error: activeAccountFailure?.message ?? errors[0]?.message ?? 'Cursor sync failed',
+      reason: activeAccountFailure?.reason ?? errors[0]?.reason ?? 'unknown',
+      activeAccountSynced,
     };
   }
 
@@ -613,6 +665,7 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
     rows: totalRows,
     error: errors.length > 0 ? `Some accounts failed to sync (${errors.length}/${Object.keys(store.accounts).length})` : undefined,
     reason: errors.length > 0 ? 'partial' : undefined,
+    activeAccountSynced,
   };
 }
 
@@ -696,7 +749,7 @@ export async function resolveCursorSetupStatus(
 
   if (isCursorAuthFailureReason(syncResult.reason)) {
     return {
-      state: nextHasCache ? 'sync_failed_cached' : 'needs_reauth',
+      state: 'needs_reauth',
       hasCredentials,
       hasCache: nextHasCache,
       error: syncResult.error,

@@ -17,6 +17,7 @@ export { splitJsonlRecords } from './parsers/index';
 export { ClaudeCodeProvider, CodexProvider, CursorProvider, OpenCodeProvider, PiProvider } from './providers/index';
 export {
   CursorAuthError,
+  getActiveCursorCredentials,
   getCursorCacheDir,
   getCursorCredentialsFor,
   getCursorCredentialsPath,

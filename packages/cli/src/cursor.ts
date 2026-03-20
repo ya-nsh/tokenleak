@@ -1,5 +1,6 @@
 import {
   CursorAuthError,
+  getActiveCursorCredentials,
   getCursorCacheDir,
   getCursorCredentialsFor,
   getCursorCredentialsPath,
@@ -26,6 +27,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { TokenleakError } from './errors.js';
 
 export {
+  getActiveCursorCredentials,
   getCursorCacheDir,
   getCursorCredentialsFor,
   getCursorCredentialsPath,
@@ -191,15 +193,6 @@ async function runCursorStatus(name?: string): Promise<void> {
   }
 }
 
-function getActiveCursorCredentials(): CursorCredentials | null {
-  const store = loadCursorCredentialsStore();
-  if (!store) {
-    return null;
-  }
-
-  return store.accounts[store.activeAccountId] ?? null;
-}
-
 function runCursorLogout(name: string | undefined, all: boolean, purgeCache: boolean): void {
   if (all) {
     removeAllCursorAccounts(purgeCache);
@@ -237,110 +230,123 @@ function wrapCursorError(error: unknown): never {
   if (error instanceof CursorAuthError) {
     throw new TokenleakError(error.message);
   }
-  if (error instanceof Error) {
-    throw new TokenleakError(error.message);
-  }
-  throw new TokenleakError(String(error));
+  throw error;
 }
 
 export async function runCursorCommand(argv: string[]): Promise<void> {
-  try {
-    const command = argv[0];
-    if (!command || command === '--help' || command === '-h') {
-      process.stdout.write(buildCursorHelpText());
-      return;
-    }
+  const command = argv[0];
+  if (!command || command === '--help' || command === '-h') {
+    process.stdout.write(buildCursorHelpText());
+    return;
+  }
 
-    if (command === 'login') {
-      let name: string | undefined;
-      for (let index = 1; index < argv.length; ) {
-        const arg = argv[index]!;
-        if (arg === '--name') {
-          [name, index] = parseNameFlag(argv, index);
-        } else {
-          throw new TokenleakError(`Unknown cursor flag "${arg}"`);
-        }
-      }
-
-      await runCursorLogin(name);
-      return;
-    }
-
-    if (command === 'status') {
-      let name: string | undefined;
-      for (let index = 1; index < argv.length; ) {
-        const arg = argv[index]!;
-        if (arg === '--name') {
-          [name, index] = parseNameFlag(argv, index);
-        } else {
-          throw new TokenleakError(`Unknown cursor flag "${arg}"`);
-        }
-      }
-
-      await runCursorStatus(name);
-      return;
-    }
-
-    if (command === 'accounts') {
-      if (argv.length > 2 || (argv[1] && argv[1] !== '--json')) {
-        throw new TokenleakError(`Unknown cursor flag "${argv[1]}"`);
-      }
-      printCursorAccounts(argv.includes('--json'));
-      return;
-    }
-
-    if (command === 'switch') {
-      const target = argv[1];
-      if (!target) {
-        throw new TokenleakError('tokenleak cursor switch requires a name or account id');
-      }
-      setActiveCursorAccount(target);
-      process.stdout.write(`Active Cursor account set to ${target}.\n`);
-      return;
-    }
-
-    if (command === 'logout') {
-      let name: string | undefined;
-      let all = false;
-      let purgeCache = false;
-      for (let index = 1; index < argv.length; ) {
-        const arg = argv[index]!;
-        if (arg === '--name') {
-          [name, index] = parseNameFlag(argv, index);
-          continue;
-        }
-        if (arg === '--all') {
-          all = true;
-          index += 1;
-          continue;
-        }
-        if (arg === '--purge-cache') {
-          purgeCache = true;
-          index += 1;
-          continue;
-        }
+  if (command === 'login') {
+    let name: string | undefined;
+    for (let index = 1; index < argv.length; ) {
+      const arg = argv[index]!;
+      if (arg === '--name') {
+        [name, index] = parseNameFlag(argv, index);
+      } else {
         throw new TokenleakError(`Unknown cursor flag "${arg}"`);
       }
-
-      if (all && name) {
-        throw new TokenleakError('tokenleak cursor logout cannot combine --all with --name');
-      }
-
-      runCursorLogout(name, all, purgeCache);
-      return;
     }
 
-    if (command === 'reset') {
-      if (argv.length > 1) {
-        throw new TokenleakError(`Unknown cursor flag "${argv[1]}"`);
-      }
-      resetCursorProviderState();
-      process.stdout.write('Cleared saved Cursor accounts and local usage cache.\n');
-      return;
+    try {
+      await runCursorLogin(name);
+    } catch (error: unknown) {
+      wrapCursorError(error);
     }
-
-    throw new TokenleakError(`Unknown cursor command "${command}"`);
-  } catch (error: unknown) {
-    wrapCursorError(error);
+    return;
   }
+
+  if (command === 'status') {
+    let name: string | undefined;
+    for (let index = 1; index < argv.length; ) {
+      const arg = argv[index]!;
+      if (arg === '--name') {
+        [name, index] = parseNameFlag(argv, index);
+      } else {
+        throw new TokenleakError(`Unknown cursor flag "${arg}"`);
+      }
+    }
+
+    try {
+      await runCursorStatus(name);
+    } catch (error: unknown) {
+      wrapCursorError(error);
+    }
+    return;
+  }
+
+  if (command === 'accounts') {
+    if (argv.length > 2 || (argv[1] && argv[1] !== '--json')) {
+      throw new TokenleakError(`Unknown cursor flag "${argv[1]}"`);
+    }
+    printCursorAccounts(argv.includes('--json'));
+    return;
+  }
+
+  if (command === 'switch') {
+    const target = argv[1];
+    if (!target) {
+      throw new TokenleakError('tokenleak cursor switch requires a name or account id');
+    }
+    try {
+      setActiveCursorAccount(target);
+    } catch (error: unknown) {
+      wrapCursorError(error);
+    }
+    process.stdout.write(`Active Cursor account set to ${target}.\n`);
+    return;
+  }
+
+  if (command === 'logout') {
+    let name: string | undefined;
+    let all = false;
+    let purgeCache = false;
+    for (let index = 1; index < argv.length; ) {
+      const arg = argv[index]!;
+      if (arg === '--name') {
+        [name, index] = parseNameFlag(argv, index);
+        continue;
+      }
+      if (arg === '--all') {
+        all = true;
+        index += 1;
+        continue;
+      }
+      if (arg === '--purge-cache') {
+        purgeCache = true;
+        index += 1;
+        continue;
+      }
+      throw new TokenleakError(`Unknown cursor flag "${arg}"`);
+    }
+
+    if (all && name) {
+      throw new TokenleakError('tokenleak cursor logout cannot combine --all with --name');
+    }
+
+    try {
+      runCursorLogout(name, all, purgeCache);
+    } catch (error: unknown) {
+      wrapCursorError(error);
+    }
+    return;
+  }
+
+  if (command === 'reset') {
+    if (argv.length > 1) {
+      throw new TokenleakError(`Unknown cursor flag "${argv[1]}"`);
+    }
+    try {
+      resetCursorProviderState();
+    } catch (error: unknown) {
+      wrapCursorError(error);
+    }
+    process.stdout.write('Cleared saved Cursor accounts and local usage cache.\n');
+    return;
+  }
+
+  throw new TokenleakError(`Unknown cursor command "${command}"`);
 }

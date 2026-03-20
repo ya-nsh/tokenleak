@@ -175,6 +175,7 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
   state.explainDate = null;
+  // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
 
@@ -246,9 +247,6 @@ function handleCursorSetupInput(sequence: string, state: AppState, renderer: Cli
   }
 
   if (state.cursorSetupSubmitting) {
-    if (sequence === '\x1b') {
-      return true;
-    }
     return true;
   }
 
@@ -265,6 +263,17 @@ function handleCursorSetupInput(sequence: string, state: AppState, renderer: Cli
   }
 
   return false;
+}
+
+function tryOpenCursorSetup(state: AppState, renderer: CliRenderer): boolean {
+  if (!buildCursorBanner(state)) {
+    return false;
+  }
+
+  resetCursorSetupForm(state);
+  openCursorSetup(state);
+  render(state, renderer);
+  return true;
 }
 
 let currentState: AppState;
@@ -516,20 +525,14 @@ export async function main(): Promise<void> {
           renderer.destroy();
           process.exit(0);
         }
-        if (sequence === 'c' && buildCursorBanner(state)) {
-          resetCursorSetupForm(state);
-          openCursorSetup(state);
-          render(state, renderer);
-          return true;
+        if (sequence === 'c') {
+          return tryOpenCursorSetup(state, renderer);
         }
         return false;
       }
 
-      if (sequence === 'c' && buildCursorBanner(state)) {
-        resetCursorSetupForm(state);
-        openCursorSetup(state);
-        render(state, renderer);
-        return true;
+      if (sequence === 'c') {
+        return tryOpenCursorSetup(state, renderer);
       }
 
       // Tab or >: next time window
