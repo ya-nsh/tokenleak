@@ -191,6 +191,10 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '8': 'wrapped',
 };
 
+const VIEW_ORDER: ViewMode[] = [
+  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped',
+];
+
 /** Views that support j/k scrolling and their scroll offset field */
 const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped']);
 
@@ -341,8 +345,8 @@ export async function main(): Promise<void> {
         return false;
       }
 
-      // Tab / Right arrow: next time window
-      if (sequence === '\t' || sequence === '\x1b[C') {
+      // Tab: next time window
+      if (sequence === '\t') {
         state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
         state.modelScrollOffset = 0;
         invalidateWindowCaches(state);
@@ -350,13 +354,29 @@ export async function main(): Promise<void> {
         return true;
       }
 
-      // Shift+Tab / Left arrow: prev time window
-      if (sequence === '\x1b[Z' || sequence === '\x1b[D') {
+      // Shift+Tab: prev time window
+      if (sequence === '\x1b[Z') {
         state.selectedWindowIndex =
           (state.selectedWindowIndex - 1 + WINDOW_LABELS.length) % WINDOW_LABELS.length;
         state.modelScrollOffset = 0;
         invalidateWindowCaches(state);
         render(state, renderer);
+        return true;
+      }
+
+      // Right arrow: next view
+      if (sequence === '\x1b[C') {
+        const idx = VIEW_ORDER.indexOf(state.selectedView);
+        const next = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length]!;
+        handleViewSwitch(next);
+        return true;
+      }
+
+      // Left arrow: prev view
+      if (sequence === '\x1b[D') {
+        const idx = VIEW_ORDER.indexOf(state.selectedView);
+        const prev = VIEW_ORDER[(idx - 1 + VIEW_ORDER.length) % VIEW_ORDER.length]!;
+        handleViewSwitch(prev);
         return true;
       }
 

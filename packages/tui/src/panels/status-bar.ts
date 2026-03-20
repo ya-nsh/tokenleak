@@ -40,23 +40,22 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const viewKeys = '1-8:views';
   const helpHint = '?:help';
-  const base = `tab/\u2190\u2192:period  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+  const nav = `\u2190\u2192:view  tab:period`;
 
   let keys: string;
   if (state.selectedView === 'overview') {
-    keys = `tab/\u2190\u2192:period  j/k:scroll  s:sort  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:scroll  s:sort  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'matrix') {
-    keys = `tab/\u2190\u2192:period  [/]:page  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  [/]:page  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'explain') {
-    keys = `tab/\u2190\u2192:period  h/l:date  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  h/l:date  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped') {
-    keys = `tab/\u2190\u2192:period  j/k:scroll  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:scroll  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
-    keys = `p:png  w:wrapped  l:live  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+    keys = `${nav}  p:png  w:wrapped  l:live  r:refresh  ${helpHint}  q:quit`;
   } else {
-    keys = base;
+    keys = `${nav}  r:refresh  ${helpHint}  q:quit`;
   }
 
   return Box(
