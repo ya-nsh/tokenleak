@@ -297,7 +297,7 @@ async function handleExport(
   render(state, renderer);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
     backgroundColor: COLORS.bg,
@@ -528,7 +528,3 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});

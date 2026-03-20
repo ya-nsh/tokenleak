@@ -148,7 +148,7 @@ function buildHelpText(): string {
   return [
     `tokenleak ${VERSION}`,
     'Visualize AI coding assistant token usage across providers.',
-    'Running `tokenleak` with no flags opens an interactive launcher in a TTY.',
+    'Running `tokenleak` with no flags opens the TUI dashboard in a TTY.',
     '',
     'Usage:',
     '  tokenleak [flags]',
@@ -187,6 +187,7 @@ function buildHelpText(): string {
     '      --upload <target>   Upload rendered output, currently: gist',
     '  -L, --live-server       Start the interactive local dashboard',
     '      --wrapped-live      Start the AI Wrapped presentation in a browser',
+    '      --legacy            Open the classic interactive launcher instead of TUI',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
     '      --help              Show this help',
@@ -1737,6 +1738,11 @@ const main = defineCommand({
       description: 'Analyze usage and suggest cost-saving model switches',
       default: false,
     },
+    legacy: {
+      type: 'boolean',
+      description: 'Open the classic interactive launcher instead of TUI',
+      default: false,
+    },
   },
   async run({ args }) {
     try {
@@ -1962,7 +1968,7 @@ if (isDirectExecution) {
     process.exit(0);
   }
 
-  if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+  if (argv.includes('--legacy') && shouldStartInteractiveCli(argv.filter((a) => a !== '--legacy'), Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
       const scopedProviders = await resolveTabbedDashboardProviders(opts);
 
@@ -1977,6 +1983,13 @@ if (isDirectExecution) {
       version: VERSION,
       helpText: buildHelpText(),
     }, executeInteractiveCommand, launchTabbed);
+  } else if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+    try {
+      const { main: startTui } = await import('@tokenleak/tui');
+      await startTui();
+    } catch (error: unknown) {
+      handleError(error);
+    }
   } else {
     await runMain(main);
   }

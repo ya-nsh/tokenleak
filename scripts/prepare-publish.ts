@@ -20,6 +20,7 @@ const publishPkg = {
   files: ['tokenleak'],
   dependencies: {
     sharp: '^0.34.0',
+    '@opentui/core': '^0.1.88',
   },
   engines: {
     bun: '>=1.0.0',
