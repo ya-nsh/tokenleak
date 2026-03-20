@@ -1,8 +1,10 @@
 import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats } from '@tokenleak/core';
+import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
 export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped';
 export type SortMode = 'cost' | 'tokens';
+export type CursorSetupField = 'label' | 'token';
 
 export interface AppState {
   selectedWindowIndex: number; // 0=1D, 1=7D, 2=30D, 3=90D, 4=ALL
@@ -29,6 +31,15 @@ export interface AppState {
 
   // export view state
   exportStatus: string | null;      // status message shown during export
+
+  // cursor setup modal state
+  showCursorSetup: boolean;
+  cursorSetupField: CursorSetupField;
+  cursorSetupLabel: string;
+  cursorSetupToken: string;
+  cursorSetupMessage: string | null;
+  cursorSetupSubmitting: boolean;
+  cursorSetupStatusOverride: CursorSetupStatus | null;
 
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
@@ -57,6 +68,13 @@ export function createInitialState(): AppState {
     showHelp: false,
     wrappedScrollOffset: 0,
     exportStatus: null,
+    showCursorSetup: false,
+    cursorSetupField: 'token',
+    cursorSetupLabel: '',
+    cursorSetupToken: '',
+    cursorSetupMessage: null,
+    cursorSetupSubmitting: false,
+    cursorSetupStatusOverride: null,
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,

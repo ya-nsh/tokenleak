@@ -29,6 +29,8 @@ import {
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
+  resolveCursorSetupStatus,
+  type CursorSetupStatus,
 } from '@tokenleak/registry';
 import type { AppState } from './state.js';
 import { WINDOW_DAYS } from './state.js';
@@ -45,6 +47,7 @@ export interface TuiData {
   windows: TimeWindowData[];
   dateRange: DateRange;
   mergedDaily: DailyUsage[];
+  cursorSetupStatus: CursorSetupStatus;
 }
 
 function todayStr(): string {
@@ -71,6 +74,7 @@ function createRegistry(): ProviderRegistry {
 
 /** Load all provider data and compute aggregations for multiple time windows */
 export async function loadAllData(): Promise<TuiData> {
+  const cursorSetupStatus = await resolveCursorSetupStatus({ attemptSync: true });
   const registry = createRegistry();
   const today = todayStr();
 
@@ -92,6 +96,7 @@ export async function loadAllData(): Promise<TuiData> {
       windows: [],
       dateRange: allTimeRange,
       mergedDaily: [],
+      cursorSetupStatus,
     };
   }
 
@@ -122,6 +127,7 @@ export async function loadAllData(): Promise<TuiData> {
     windows,
     dateRange: allTimeRange,
     mergedDaily: allMerged,
+    cursorSetupStatus,
   };
 }
 

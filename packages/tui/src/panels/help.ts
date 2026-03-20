@@ -52,6 +52,7 @@ export function createHelpPanel() {
         ...helpSection('ACTIONS', [
           ['s', 'Toggle sort mode'],
           ['r', 'Refresh data'],
+          ['c', 'Open Cursor setup'],
           ['q', 'Quit'],
         ]),
         ...helpSection('EXPORT VIEW', [

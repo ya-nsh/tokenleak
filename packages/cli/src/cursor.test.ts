@@ -8,6 +8,7 @@ import {
   listCursorAccounts,
   loadCursorCredentialsStore,
   removeAllCursorAccounts,
+  resetCursorProviderState,
   saveCursorCredentials,
   setActiveCursorAccount,
   shouldSyncCursorForRun,
@@ -154,5 +155,17 @@ describe('cursor auth and sync helpers', () => {
 
     removeAllCursorAccounts(true);
     expect(existsSync(getCursorCredentialsPath())).toBe(false);
+  });
+
+  test('reset helper clears all saved accounts and local cache', () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    mkdirSync(getCursorCacheDir(), { recursive: true });
+    writeFileSync(join(getCursorCacheDir(), 'usage.csv'), SAMPLE_CSV);
+
+    resetCursorProviderState();
+
+    expect(existsSync(getCursorCredentialsPath())).toBe(false);
+    expect(existsSync(join(getCursorCacheDir(), 'usage.csv'))).toBe(false);
+    expect(listCursorAccounts()).toEqual([]);
   });
 });

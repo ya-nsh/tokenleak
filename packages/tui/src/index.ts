@@ -2,6 +2,12 @@ import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { SCHEMA_VERSION } from '@tokenleak/core';
+import {
+  CursorAuthError,
+  resolveCursorSetupStatus,
+  saveCursorCredentials,
+  validateCursorSession,
+} from '@tokenleak/registry';
 import { computeAchievements } from '@tokenleak/renderers';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
@@ -28,6 +34,10 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
+import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
+
+const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
+const CURSOR_SETUP_TOKEN_INPUT_ID = 'cursor-setup-token-input';
 
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
@@ -36,7 +46,29 @@ function clearRoot(renderer: CliRenderer): void {
   }
 }
 
-function buildContent(state: AppState) {
+function buildContent(state: AppState, renderer: CliRenderer) {
+  if (state.showCursorSetup) {
+    const { panel, labelInput, tokenInput } = createCursorSetupPanel(state, renderer, {
+      onFieldFocus: (field) => {
+        state.cursorSetupField = field;
+      },
+      onLabelInput: (value) => {
+        state.cursorSetupLabel = value;
+      },
+      onTokenInput: (value) => {
+        state.cursorSetupToken = value;
+      },
+      onSubmit: () => {
+        void submitCursorSetup(state, renderer);
+      },
+    });
+
+    labelInput.id = CURSOR_SETUP_LABEL_INPUT_ID;
+    tokenInput.id = CURSOR_SETUP_TOKEN_INPUT_ID;
+
+    return panel;
+  }
+
   // Help overlay takes priority
   if (state.showHelp) {
     return createHelpPanel();
@@ -113,6 +145,137 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   return output;
 }
 
+function resetCursorSetupForm(state: AppState): void {
+  state.cursorSetupField = 'token';
+  state.cursorSetupLabel = '';
+  state.cursorSetupToken = '';
+  state.cursorSetupMessage = null;
+  state.cursorSetupSubmitting = false;
+}
+
+function openCursorSetup(state: AppState): void {
+  state.showCursorSetup = true;
+  state.showHelp = false;
+  state.cursorSetupField = 'token';
+  state.cursorSetupMessage = null;
+}
+
+function closeCursorSetup(state: AppState): void {
+  state.showCursorSetup = false;
+  state.cursorSetupMessage = null;
+  state.cursorSetupSubmitting = false;
+}
+
+function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof loadAllData>>): void {
+  state.data = freshData;
+  state.isLoading = false;
+  state.modelScrollOffset = 0;
+  state.advisorScrollOffset = 0;
+  state.focusScrollOffset = 0;
+  state.compareScrollOffset = 0;
+  state.wrappedScrollOffset = 0;
+  state.explainDate = null;
+  // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
+  state.cursorSetupStatusOverride = null;
+}
+
+async function reloadAllData(state: AppState, renderer: CliRenderer, failurePrefix?: string): Promise<void> {
+  state.isLoading = true;
+  invalidateAllCaches(state);
+  state.exportStatus = null;
+  render(state, renderer);
+
+  try {
+    const freshData = await loadAllData();
+    applyLoadedData(state, freshData);
+  } catch (err: unknown) {
+    state.isLoading = false;
+    state.exportStatus = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  render(state, renderer);
+}
+
+async function submitCursorSetup(state: AppState, renderer: CliRenderer): Promise<void> {
+  if (state.cursorSetupSubmitting) {
+    return;
+  }
+
+  state.cursorSetupSubmitting = true;
+  state.cursorSetupMessage = null;
+  render(state, renderer);
+
+  try {
+    const token = state.cursorSetupToken.trim();
+    const label = state.cursorSetupLabel.trim() || undefined;
+
+    if (token) {
+      const validation = await validateCursorSession(token);
+      if (!validation.valid) {
+        throw new CursorAuthError(validation.error ?? 'Invalid session token', validation.reason);
+      }
+
+      saveCursorCredentials(token, label);
+    }
+
+    const status = await resolveCursorSetupStatus({ attemptSync: true });
+    state.cursorSetupStatusOverride = status;
+
+    if (status.state === 'ready') {
+      resetCursorSetupForm(state);
+      closeCursorSetup(state);
+      await reloadAllData(state, renderer, 'Cursor reload failed');
+      return;
+    }
+
+    if (!token && status.state === 'needs_auth') {
+      throw new CursorAuthError('Enter a Cursor session token to continue.');
+    }
+
+    state.cursorSetupMessage = status.error ?? 'Cursor setup still needs attention.';
+  } catch (err: unknown) {
+    state.cursorSetupMessage = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.cursorSetupSubmitting = false;
+    render(state, renderer);
+  }
+}
+
+function handleCursorSetupInput(sequence: string, state: AppState, renderer: CliRenderer): boolean {
+  if (!state.showCursorSetup) {
+    return false;
+  }
+
+  if (state.cursorSetupSubmitting) {
+    return true;
+  }
+
+  if (sequence === '\x1b') {
+    closeCursorSetup(state);
+    render(state, renderer);
+    return true;
+  }
+
+  if (sequence === '\t' || sequence === '\x1b[Z') {
+    state.cursorSetupField = state.cursorSetupField === 'token' ? 'label' : 'token';
+    render(state, renderer);
+    return true;
+  }
+
+  return false;
+}
+
+function tryOpenCursorSetup(state: AppState, renderer: CliRenderer): boolean {
+  if (!buildCursorBanner(state)) {
+    return false;
+  }
+
+  resetCursorSetupForm(state);
+  openCursorSetup(state);
+  render(state, renderer);
+  return true;
+}
+
 let currentState: AppState;
 let currentRenderer: CliRenderer;
 
@@ -133,6 +296,7 @@ function handleViewSwitch(mode: ViewMode): void {
 }
 
 function buildLayout(state: AppState, renderer: CliRenderer) {
+  const cursorBanner = buildCursorBanner(state);
   return Box(
     {
       flexDirection: 'column',
@@ -141,14 +305,30 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
       backgroundColor: COLORS.bg,
     },
     buildHeader(state, renderer, handleViewSwitch),
-    buildContent(state),
+    ...(cursorBanner ? [cursorBanner] : []),
+    buildContent(state, renderer),
     buildStatusBar(state),
   );
+}
+
+function focusCursorSetupField(state: AppState, renderer: CliRenderer): void {
+  if (!state.showCursorSetup) {
+    return;
+  }
+
+  const targetId = state.cursorSetupField === 'label'
+    ? CURSOR_SETUP_LABEL_INPUT_ID
+    : CURSOR_SETUP_TOKEN_INPUT_ID;
+  const target = renderer.root.findDescendantById(targetId);
+  if (target) {
+    target.focus();
+  }
 }
 
 function render(state: AppState, renderer: CliRenderer): void {
   clearRoot(renderer);
   renderer.root.add(buildLayout(state, renderer));
+  focusCursorSetupField(state, renderer);
   renderer.requestRender();
 }
 
@@ -317,11 +497,14 @@ export async function main(): Promise<void> {
 
   try {
     const data = await loadAllData();
-    state.data = data;
-    state.isLoading = false;
+    applyLoadedData(state, data);
     render(state, renderer);
 
     renderer.addInputHandler((sequence: string) => {
+      if (handleCursorSetupInput(sequence, state, renderer)) {
+        return true;
+      }
+
       // Help toggle: ? key
       if (sequence === '?') {
         state.showHelp = !state.showHelp;
@@ -342,7 +525,14 @@ export async function main(): Promise<void> {
           renderer.destroy();
           process.exit(0);
         }
+        if (sequence === 'c') {
+          return tryOpenCursorSetup(state, renderer);
+        }
         return false;
+      }
+
+      if (sequence === 'c') {
+        return tryOpenCursorSetup(state, renderer);
       }
 
       // Tab or >: next time window
@@ -476,28 +666,7 @@ export async function main(): Promise<void> {
 
       // r: refresh data
       if (sequence === 'r') {
-        state.isLoading = true;
-        invalidateAllCaches(state);
-        state.exportStatus = null;
-        render(state, renderer);
-
-        loadAllData()
-          .then((freshData) => {
-            state.data = freshData;
-            state.isLoading = false;
-            state.modelScrollOffset = 0;
-            state.advisorScrollOffset = 0;
-            state.focusScrollOffset = 0;
-            state.compareScrollOffset = 0;
-            state.wrappedScrollOffset = 0;
-            state.explainDate = null;
-            render(state, renderer);
-          })
-          .catch((err: unknown) => {
-            state.isLoading = false;
-            state.exportStatus = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
-            render(state, renderer);
-          });
+        void reloadAllData(state, renderer);
         return true;
       }
 
@@ -547,4 +716,3 @@ export async function main(): Promise<void> {
     });
   }
 }
-
