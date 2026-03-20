@@ -39,18 +39,18 @@ npx tokenleak --help
 ```
 
 After installing, run `tokenleak` in your terminal. It auto-detects supported providers from their local logs.
-In an interactive TTY, plain `tokenleak` opens a launcher where you can:
+In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 8 views:
 
-- render the standard terminal dashboard
-- open a tabbed terminal dashboard
-- export JSON, SVG, or PNG
-- build compare reports
-- run explain reports for a specific day
-- run focus reports for deep-work sessions
-- inspect richer analytics such as model efficiency, cache ROI, session/project drill-downs, and attribution clusters
-- start the local live dashboard
-- launch the interactive AI Wrapped presentation in a browser
-- inspect provider availability and aliases
+- **Overview** — heatmap, stats, providers, and top models
+- **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
+- **Advisor** — model efficiency recommendations with projected savings
+- **Focus** — deep-work session rankings scored by duration, density, and streaks
+- **Explain** — narrative day-by-day usage breakdown
+- **Compare** — side-by-side period comparison with deltas
+- **Export** — save PNG, Wrapped PNG, or launch a live server
+- **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
+
+Use `tokenleak --legacy` to open the classic interactive launcher instead.
 
 ### From source
 
@@ -68,10 +68,13 @@ bun dist/tokenleak.js
 ## Usage
 
 ```bash
-# Open the interactive launcher (TTY only)
+# Open the TUI dashboard (TTY only)
 tokenleak
 
-# Skip the launcher and render directly with flags
+# Open the classic interactive launcher
+tokenleak --legacy
+
+# Skip the TUI and render directly with flags
 tokenleak --format terminal
 
 # Start the local live dashboard server
@@ -280,7 +283,7 @@ The wrapped card includes 12 sections: title, big numbers, streak story, top mod
 
 Achievements are computed from your actual data — earn badges like Streak Master (30+ day streak), Cache Master (>50% hit rate), Night Owl (>40% usage 10pm-6am), Power User (>10k avg daily tokens), and more.
 
-The interactive launcher also includes Wrapped as option `3` with a guided setup flow.
+The TUI dashboard includes a Wrapped view (press `8` or arrow to it). The classic launcher (`tokenleak --legacy`) also offers a guided Wrapped setup flow.
 
 ### Wrapped Live
 
@@ -299,7 +302,7 @@ tokenleak --wrapped-live --provider claude-code,codex
 
 The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
 
-The interactive launcher includes Wrapped Live as option `4`.
+The classic launcher (`tokenleak --legacy`) includes Wrapped Live as a menu option.
 
 ### Model Efficiency Advisor
 
@@ -372,19 +375,33 @@ tokenleak --format json --upload gist
 
 ## Interactive modes
 
-### Launcher
+### TUI dashboard (default)
 
-In a real TTY, `tokenleak` opens a launcher instead of rendering immediately. You can move with arrow keys, use number shortcuts, inspect the exact command preview before running it, and stay inside the same session after each command finishes.
+In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 8 views with keyboard and mouse navigation:
 
-### Tabbed terminal dashboard
+| Key | Action |
+| --- | --- |
+| `←` / `→` | Switch between views |
+| `Tab` / `>` | Next time period (1D → 7D → 30D → 90D → ALL) |
+| `Shift+Tab` / `<` | Previous time period |
+| `1`–`8` | Jump directly to a view |
+| `j` / `k` | Scroll up/down in scrollable views |
+| `[` / `]` | Matrix page navigation (in Matrix view) |
+| `h` / `l` | Previous/next day (in Explain view) |
+| `s` | Toggle sort mode (in Overview) |
+| `r` | Refresh data |
+| `?` | Help overlay |
+| `q` | Quit |
 
-The launcher can open a full-screen terminal dashboard with:
+The Matrix view spans 4 pages:
+1. Overview + time windows + providers + top models
+2. Hour-of-day, day-of-week, I/O breakdown, monthly burn
+3. Cache economics, cache ROI, session metrics, top projects
+4. Model efficiency, attribution clusters, top sessions, cache ROI by model
 
-- time ranges: `7d`, `30d`, `90d`, `365d`
-- metric tabs: `overview`, `sess`, `tok`, `model`, `cwd`, `dow`, `tod`
-- keyboard navigation for scrolling and switching views
+### Classic launcher
 
-This mode uses event-level data when available, so session, token, project, attribution, model-efficiency, and hour-of-day views are most useful for providers that include session metadata in their local logs.
+`tokenleak --legacy` opens the previous interactive launcher with a numbered menu, command preview, and guided setup flows for exports, wrapped cards, and the live dashboard.
 
 ### Live dashboard
 
@@ -392,7 +409,7 @@ This mode uses event-level data when available, so session, token, project, attr
 
 ## All flags
 
-When you run bare `tokenleak` in a real terminal, the launcher shows these flags in-app before you run anything.
+When you run bare `tokenleak` in a real terminal, the TUI dashboard launches. Pass flags to skip the TUI and render directly.
 
 Subcommands:
 
@@ -426,6 +443,7 @@ Subcommands:
 | `--live-server` | `-L` | `false` | Start the local browser dashboard |
 | `--wrapped-live` |  | `false` | Start the interactive AI Wrapped presentation in a browser |
 | `--advisor` |  | `false` | Run the model efficiency advisor |
+| `--legacy` |  | `false` | Open the classic interactive launcher instead of the TUI |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |
 | `--version` |  |  | Print version information |
@@ -743,12 +761,13 @@ tokenleak/
     core/           Shared types, constants, aggregation engine
     registry/       Provider parsers and model pricing
     renderers/      JSON, SVG, PNG, and terminal output
+    tui/            Full-screen TUI dashboard (default interactive mode)
     cli/            CLI entrypoint and config handling
     mcp/            MCP server for AI assistant integration
   scripts/
     build-npm.ts    Bundles CLI for npm publishing
   dist/
-    tokenleak.js    Bundled CLI (generated)
+    tokenleak       Bundled CLI (generated)
 ```
 
 ## Contributing
