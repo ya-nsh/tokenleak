@@ -16,6 +16,7 @@
     "@tokenleak/core": "workspace:*",
     "@tokenleak/registry": "workspace:*",
     "@tokenleak/renderers": "workspace:*",
+    "@tokenleak/tui": "workspace:*",
     "citty": "^0.2.1"
   },
   "devDependencies": {

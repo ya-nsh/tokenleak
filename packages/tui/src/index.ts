@@ -297,7 +297,7 @@ async function handleExport(
   render(state, renderer);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
     backgroundColor: COLORS.bg,
@@ -528,7 +528,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+// Auto-run when executed directly (e.g. `bun src/index.ts`)
+const isDirectExecution =
+  typeof Bun !== 'undefined'
+    ? Bun.main === import.meta.path
+    : process.argv[1] !== undefined &&
+      import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+
+if (isDirectExecution) {
+  main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}

@@ -124,6 +124,15 @@ describe('interactive launcher', () => {
     expect(shouldStartInteractiveCli([], true, false)).toBe(false);
   });
 
+  test('--legacy flag routes to classic launcher (not TUI)', () => {
+    // --legacy alone should still trigger interactive (after filtering)
+    const legacyArgv = ['--legacy'];
+    const filtered = legacyArgv.filter((a) => a !== '--legacy');
+    expect(shouldStartInteractiveCli(filtered, true, true)).toBe(true);
+    // --legacy with other flags should not trigger interactive
+    expect(shouldStartInteractiveCli(['--legacy', '--help'], true, true)).toBe(false);
+  });
+
   test('flag panel includes key interactive flags', () => {
     expect(INTERACTIVE_FLAG_LINES).toContain('    explain <date>       explain one day of usage');
     expect(INTERACTIVE_FLAG_LINES).toContain('    focus                rank deep-work sessions');
