@@ -16,14 +16,14 @@ function formatTokPerHour(tokPerHour: number): string {
   return `${formatTokens(tokPerHour)}/hr`;
 }
 
-function renderEntry(entry: FocusEntry, rank: number) {
+function renderEntry(entry: FocusEntry, rank: number, sessionColWidth: number) {
   const barWidth = 10;
   const ratio = Math.min(entry.score / 100, 1);
   const bar = asciiBar(ratio, barWidth);
 
   const rankStr = padLeft(`${rank}.`, 3);
   const scoreStr = padLeft(`${Math.round(entry.score)}`, 4);
-  const label = truncate(entry.label || entry.sessionId, 20);
+  const label = truncate(entry.label || entry.sessionId, sessionColWidth);
   const startDate = entry.start ? formatShortDate(entry.start.slice(0, 10)) : '';
   const duration = formatHours(entry.durationMs);
   const density = formatTokPerHour(entry.tokensPerHour);
@@ -36,7 +36,7 @@ function renderEntry(entry: FocusEntry, rank: number) {
       Text({ content: `${rankStr} `, fg: COLORS.dimWhite }),
       Text({ content: bar, fg: COLORS.green }),
       Text({ content: ` ${scoreStr}  `, fg: COLORS.amber, attributes: BOLD }),
-      Text({ content: padRight(label, 22), fg: COLORS.white }),
+      Text({ content: padRight(label, sessionColWidth + 2), fg: COLORS.white }),
       Text({ content: padLeft(startDate, 8), fg: COLORS.dimWhite }),
       Text({ content: padLeft(duration, 7), fg: COLORS.cyan }),
       Text({ content: padLeft(density, 13), fg: COLORS.green }),
@@ -74,6 +74,13 @@ export function createFocusPanel(state: AppState, report: FocusReport | null) {
   const offset = state.focusScrollOffset;
   const visible = entries.slice(offset, offset + VISIBLE_ROWS);
 
+  // Compute dynamic session label width from visible entries
+  const SESSION_MIN_WIDTH = 12;
+  const SESSION_MAX_WIDTH = 36;
+  const rawLabels = visible.map((e) => (e.label || e.sessionId).length);
+  const maxRaw = rawLabels.length > 0 ? Math.max(...rawLabels) : SESSION_MIN_WIDTH;
+  const sessionColWidth = Math.min(SESSION_MAX_WIDTH, Math.max(SESSION_MIN_WIDTH, maxRaw));
+
   const scrollIndicators: ReturnType<typeof Text>[] = [];
   if (offset > 0) {
     scrollIndicators.push(Text({ content: `  ${offset} more above`, fg: COLORS.dimWhite }));
@@ -89,7 +96,7 @@ export function createFocusPanel(state: AppState, report: FocusReport | null) {
     Text({ content: padRight('', 4), fg: COLORS.dimWhite }),
     Text({ content: padRight('', 10), fg: COLORS.dimWhite }),
     Text({ content: padRight('Score', 6), fg: COLORS.dimWhite }),
-    Text({ content: padRight('Session', 22), fg: COLORS.dimWhite }),
+    Text({ content: padRight('Session', sessionColWidth + 2), fg: COLORS.dimWhite }),
     Text({ content: padLeft('Date', 8), fg: COLORS.dimWhite }),
     Text({ content: padLeft('Dur', 7), fg: COLORS.dimWhite }),
     Text({ content: padLeft('Density', 13), fg: COLORS.dimWhite }),
@@ -114,7 +121,7 @@ export function createFocusPanel(state: AppState, report: FocusReport | null) {
     ),
     Text({ content: '', fg: COLORS.dimWhite }),
     columnHeader,
-    ...visible.map((e, i) => renderEntry(e, offset + i + 1)),
+    ...visible.map((e, i) => renderEntry(e, offset + i + 1, sessionColWidth)),
     ...scrollIndicators,
   );
 }

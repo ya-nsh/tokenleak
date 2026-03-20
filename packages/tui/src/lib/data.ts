@@ -6,6 +6,7 @@ import type {
   DateRange,
   ExplainReport,
   FocusReport,
+  MoreStats,
   ProviderData,
   TokenleakOutput,
 } from '@tokenleak/core';
@@ -14,7 +15,9 @@ import {
   analyzeEfficiency,
   buildExplainReport,
   buildFocusReport,
+  buildMoreStats,
   compareRanges,
+  dayOfWeekBreakdown,
   mergeProviderData,
   SCHEMA_VERSION,
 } from '@tokenleak/core';
@@ -28,6 +31,7 @@ import {
   MODEL_PRICING,
 } from '@tokenleak/registry';
 import type { AppState } from './state.js';
+import { WINDOW_DAYS } from './state.js';
 
 export interface TimeWindowData {
   label: string;
@@ -96,6 +100,7 @@ export async function loadAllData(): Promise<TuiData> {
 
   // Compute time-window aggregations by filtering daily data
   const windowConfigs = [
+    { label: '1D', days: 1 },
     { label: '7D', days: 7 },
     { label: '30D', days: 30 },
     { label: '90D', days: 90 },
@@ -123,8 +128,7 @@ export async function loadAllData(): Promise<TuiData> {
 /** Get daily usage data filtered to a specific time window */
 export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsage[] {
   const today = todayStr();
-  const windowDays = [7, 30, 90, 0];
-  const days = windowDays[windowIndex];
+  const days = WINDOW_DAYS[windowIndex];
 
   if (days === undefined || days === 0) {
     return data.mergedDaily;
@@ -132,6 +136,26 @@ export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsag
 
   const since = daysAgoStr(days - 1); // trailing N days including today
   return data.mergedDaily.filter((d) => d.date >= since && d.date <= today);
+}
+
+/** Build window-scoped date range and providers for the selected window */
+function getScopedWindowData(state: AppState): { windowRange: DateRange; scopedProviders: ProviderData[] } | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  const days = WINDOW_DAYS[state.selectedWindowIndex];
+  const today = todayStr();
+
+  const windowRange: DateRange = days && days > 0
+    ? { since: daysAgoStr(days - 1), until: today }
+    : state.data.dateRange;
+
+  const scopedProviders: ProviderData[] = state.data.providers.map((p) => {
+    if (!days || !p.events) return p;
+    const filteredEvents = p.events.filter((e) => e.date >= windowRange.since && e.date <= windowRange.until);
+    const filteredDaily = p.daily?.filter((d) => d.date >= windowRange.since && d.date <= windowRange.until);
+    return { ...p, events: filteredEvents, daily: filteredDaily };
+  });
+
+  return { windowRange, scopedProviders };
 }
 
 /** Lazily compute and cache the AdvisorReport (window-dependent) */
@@ -142,27 +166,14 @@ export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
   const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
   if (!windowStats) return null;
 
-  // Scope the dateRange and providers to the selected window
-  const windowDays = [7, 30, 90, 0];
-  const days = windowDays[state.selectedWindowIndex];
-  const today = todayStr();
-  const windowRange: DateRange = days && days > 0
-    ? { since: daysAgoStr(days - 1), until: today }
-    : state.data.dateRange;
-
-  // Filter provider events to the window
-  const scopedProviders: ProviderData[] = state.data.providers.map((p) => {
-    if (!days || days === 0 || !p.events) return p;
-    const filteredEvents = p.events.filter((e) => e.date >= windowRange.since && e.date <= windowRange.until);
-    const filteredDaily = p.daily?.filter((d) => d.date >= windowRange.since && d.date <= windowRange.until);
-    return { ...p, events: filteredEvents, daily: filteredDaily };
-  });
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
-    dateRange: windowRange,
-    providers: scopedProviders,
+    dateRange: scoped.windowRange,
+    providers: scoped.scopedProviders,
     aggregated: windowStats,
   };
 
@@ -179,8 +190,7 @@ export function ensureFocusReport(state: AppState): FocusReport | null {
   const allEvents = state.data.providers.flatMap((p) => p.events ?? []);
 
   // Filter events to the selected time window
-  const windowDays = [7, 30, 90, 0];
-  const days = windowDays[state.selectedWindowIndex];
+  const days = WINDOW_DAYS[state.selectedWindowIndex];
   let filtered = allEvents;
   if (days && days > 0) {
     const since = daysAgoStr(days - 1);
@@ -216,8 +226,7 @@ export function ensureCompareOutput(state: AppState): CompareOutput | null {
   if (!state.data) return null;
   if (state.cachedCompareOutput) return state.cachedCompareOutput;
 
-  const windowDays = [7, 30, 90, 0];
-  const days = windowDays[state.selectedWindowIndex] || 365;
+  const days = WINDOW_DAYS[state.selectedWindowIndex] || 365;
   const today = todayStr();
   // rangeB = current period (trailing N days including today)
   // rangeA = previous period of equal length (N days ending the day before rangeB starts)
@@ -226,4 +235,24 @@ export function ensureCompareOutput(state: AppState): CompareOutput | null {
   const output = compareRanges(state.data.mergedDaily, rangeA, rangeB);
   state.cachedCompareOutput = output;
   return output;
+}
+
+/** Lazily compute and cache MoreStats (window-dependent) */
+export function ensureMoreStats(state: AppState): MoreStats | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedMoreStats) return state.cachedMoreStats;
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const more = buildMoreStats(scoped.scopedProviders, scoped.windowRange);
+  state.cachedMoreStats = more;
+  return more;
+}
+
+/** Get day-of-week breakdown for the current window's daily data */
+export function getDayOfWeekForWindow(state: AppState) {
+  if (!state.data) return [];
+  const daily = getDailyForWindow(state.data, state.selectedWindowIndex);
+  return dayOfWeekBreakdown(daily);
 }

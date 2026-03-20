@@ -1,9 +1,24 @@
 import { Box, Text } from '@opentui/core';
 import type { AppState } from '../lib/state.js';
+import { WINDOW_DAYS } from '../lib/state.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatTokens, formatCost, padRight, padLeft, asciiBar, truncate, formatPercent } from '../lib/format.js';
 import { getProviderColor } from '../lib/theme.js';
 import { createTimeWindowsPanel } from './time-windows.js';
+import { ensureMoreStats, getDayOfWeekForWindow } from '../lib/data.js';
+
+// Page 2 panels
+import { createHourOfDayPanel, createDayOfWeekPanel } from './matrix-activity.js';
+import { createInputOutputPanel, createMonthlyBurnPanel } from './matrix-io.js';
+
+// Page 3 panels
+import { createCacheEconomicsPanel, createCacheRoiPanel } from './matrix-cache.js';
+import { createSessionsPanel, createTopProjectsPanel } from './matrix-sessions.js';
+
+// Page 4 panels
+import { createModelEfficiencyPanel, createAttributionPanel, createTopSessionsPanel, createCacheRoiByModelPanel } from './matrix-efficiency.js';
+
+const MATRIX_PAGE_COUNT = 4;
 
 /** Stat row helper for overview quadrant */
 function statRow(label: string, value: string, valueColor: string = COLORS.green) {
@@ -83,9 +98,8 @@ function createProvidersPanel(state: AppState) {
     );
 
     // Use window stats for providers — filter each provider's daily data
+    const days = WINDOW_DAYS[state.selectedWindowIndex];
     const providerTotals = providers.map((p) => {
-      const windowDays = [7, 30, 90, 0] as const;
-      const days = windowDays[state.selectedWindowIndex];
       let provTokens = p.totalTokens;
       let provCost = p.totalCost;
 
@@ -209,24 +223,139 @@ function createTopModelsPanel(state: AppState) {
   );
 }
 
-export function createMatrixView(state: AppState) {
-  const windows = state.data?.windows ?? [];
+/** Page indicator at the bottom of matrix view */
+function createPageIndicator(page: number) {
+  const dots = Array.from({ length: MATRIX_PAGE_COUNT }, (_, i) =>
+    i === page ? '\u25CF' : '\u25CB',
+  ).join(' ');
 
   return Box(
-    { flexDirection: 'column', width: '100%', height: '100%', flexGrow: 1 },
+    { flexDirection: 'row', width: '100%', justifyContent: 'center', height: 1 },
+    Text({ content: `Page ${page + 1}/${MATRIX_PAGE_COUNT}  ${dots}  `, fg: COLORS.dimWhite }),
+    Text({ content: '[', fg: COLORS.amber }),
+    Text({ content: ':prev  ', fg: COLORS.dimWhite }),
+    Text({ content: ']', fg: COLORS.amber }),
+    Text({ content: ':next', fg: COLORS.dimWhite }),
+  );
+}
 
-    // Top row: Overview + Time Windows
+/** Page 1: Overview + Time Windows + Providers + Top Models (existing layout) */
+function createPage0(state: AppState) {
+  const windows = state.data?.windows ?? [];
+  return Box(
+    { flexDirection: 'column', width: '100%', flexGrow: 1 },
     Box(
       { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
       createOverviewPanel(state),
       createTimeWindowsPanel({ windows }),
     ),
-
-    // Bottom row: Providers + Top Models
     Box(
       { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
       createProvidersPanel(state),
       createTopModelsPanel(state),
     ),
+  );
+}
+
+/** Page 2: Activity Patterns (Hour of Day + Day of Week + I/O + Monthly Burn) */
+function createPage1(state: AppState) {
+  const more = ensureMoreStats(state);
+  const dowData = getDayOfWeekForWindow(state);
+
+  if (!more) {
+    return Box(
+      { flexDirection: 'column', width: '100%', flexGrow: 1, padding: 2 },
+      Text({ content: 'No extended stats available for this period', fg: COLORS.dimWhite }),
+    );
+  }
+
+  const stats = state.data?.windows[state.selectedWindowIndex]?.stats;
+
+  return Box(
+    { flexDirection: 'column', width: '100%', flexGrow: 1 },
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createHourOfDayPanel(more.hourOfDay),
+      createDayOfWeekPanel(dowData),
+    ),
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createInputOutputPanel(more.inputOutput, {
+        totalInputTokens: stats?.totalInputTokens ?? 0,
+        totalOutputTokens: stats?.totalOutputTokens ?? 0,
+      }),
+      createMonthlyBurnPanel(more.monthlyBurn),
+    ),
+  );
+}
+
+/** Page 3: Cache & Sessions */
+function createPage2(state: AppState) {
+  const more = ensureMoreStats(state);
+
+  if (!more) {
+    return Box(
+      { flexDirection: 'column', width: '100%', flexGrow: 1, padding: 2 },
+      Text({ content: 'No extended stats available for this period', fg: COLORS.dimWhite }),
+    );
+  }
+
+  return Box(
+    { flexDirection: 'column', width: '100%', flexGrow: 1 },
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createCacheEconomicsPanel(more.cacheEconomics),
+      createCacheRoiPanel(more.cacheRoi),
+    ),
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createSessionsPanel(more.sessionMetrics),
+      createTopProjectsPanel(more.projectDrilldown),
+    ),
+  );
+}
+
+/** Page 4: Efficiency & Attribution */
+function createPage3(state: AppState) {
+  const more = ensureMoreStats(state);
+
+  if (!more) {
+    return Box(
+      { flexDirection: 'column', width: '100%', flexGrow: 1, padding: 2 },
+      Text({ content: 'No extended stats available for this period', fg: COLORS.dimWhite }),
+    );
+  }
+
+  return Box(
+    { flexDirection: 'column', width: '100%', flexGrow: 1 },
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createModelEfficiencyPanel(more.modelEfficiency),
+      createAttributionPanel(more.attribution),
+    ),
+    Box(
+      { flexDirection: 'row', flexGrow: 1, width: '100%', height: '50%' },
+      createTopSessionsPanel(more.sessionDrilldown),
+      createCacheRoiByModelPanel(more.cacheRoi),
+    ),
+  );
+}
+
+export function createMatrixView(state: AppState) {
+  const page = state.matrixPage;
+  let pageContent: ReturnType<typeof Box>;
+
+  switch (page) {
+    case 0: pageContent = createPage0(state); break;
+    case 1: pageContent = createPage1(state); break;
+    case 2: pageContent = createPage2(state); break;
+    case 3: pageContent = createPage3(state); break;
+    default: pageContent = createPage0(state); break;
+  }
+
+  return Box(
+    { flexDirection: 'column', width: '100%', height: '100%', flexGrow: 1 },
+    pageContent,
+    createPageIndicator(page),
   );
 }

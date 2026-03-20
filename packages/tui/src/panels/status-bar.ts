@@ -25,18 +25,36 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const viewKeys = '1-7:views';
-  const base = `tab/\u2190\u2192:period  ${viewKeys}  r:refresh  q:quit`;
+  if (state.showHelp) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: '?/Esc:close help  q:quit', fg: COLORS.dimWhite }),
+      Text({ content: `Updated ${formatUpdateTime()}`, fg: COLORS.dimWhite }),
+    );
+  }
+
+  const viewKeys = '1-8:views';
+  const helpHint = '?:help';
+  const base = `tab/\u2190\u2192:period  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
 
   let keys: string;
   if (state.selectedView === 'overview') {
-    keys = `tab/\u2190\u2192:period  j/k:scroll  s:sort  ${viewKeys}  r:refresh  q:quit`;
+    keys = `tab/\u2190\u2192:period  j/k:scroll  s:sort  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+  } else if (state.selectedView === 'matrix') {
+    keys = `tab/\u2190\u2192:period  [/]:page  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'explain') {
-    keys = `tab/\u2190\u2192:period  h/l:date  ${viewKeys}  r:refresh  q:quit`;
-  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare') {
-    keys = `tab/\u2190\u2192:period  j/k:scroll  ${viewKeys}  r:refresh  q:quit`;
+    keys = `tab/\u2190\u2192:period  h/l:date  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
+  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped') {
+    keys = `tab/\u2190\u2192:period  j/k:scroll  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
-    keys = `p:png  w:wrapped  l:live  ${viewKeys}  r:refresh  q:quit`;
+    keys = `p:png  w:wrapped  l:live  ${viewKeys}  r:refresh  ${helpHint}  q:quit`;
   } else {
     keys = base;
   }

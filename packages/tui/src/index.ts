@@ -2,6 +2,7 @@ import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { SCHEMA_VERSION } from '@tokenleak/core';
+import { computeAchievements } from '@tokenleak/renderers';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
   loadAllData,
@@ -10,8 +11,9 @@ import {
   ensureFocusReport,
   ensureExplainReport,
   ensureCompareOutput,
+  ensureMoreStats,
 } from './lib/data.js';
-import { createInitialState, WINDOW_LABELS } from './lib/state.js';
+import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader } from './panels/header.js';
 import { createChartPanel } from './panels/chart-panel.js';
@@ -24,6 +26,8 @@ import { createFocusPanel } from './panels/focus.js';
 import { createExplainPanel } from './panels/explain.js';
 import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
+import { createWrappedPanel } from './panels/wrapped.js';
+import { createHelpPanel } from './panels/help.js';
 
 function clearRoot(renderer: CliRenderer): void {
   const children = renderer.root.getChildren();
@@ -33,6 +37,11 @@ function clearRoot(renderer: CliRenderer): void {
 }
 
 function buildContent(state: AppState) {
+  // Help overlay takes priority
+  if (state.showHelp) {
+    return createHelpPanel();
+  }
+
   const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
   const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
 
@@ -56,6 +65,16 @@ function buildContent(state: AppState) {
       return createComparePanel(state, ensureCompareOutput(state));
     case 'export':
       return createExportPanel(state);
+    case 'wrapped': {
+      const output = buildTokenleakOutput(state);
+      const achievements = output ? computeAchievements(output) : [];
+      const providers = state.data?.providers.map((p) => ({
+        displayName: p.displayName,
+        totalTokens: p.totalTokens,
+        totalCost: p.totalCost,
+      })) ?? [];
+      return createWrappedPanel(windowStats, achievements, providers, state.wrappedScrollOffset, ensureMoreStats(state));
+    }
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -68,21 +87,30 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   if (!windowStats) return null;
 
   // Scope dateRange to the selected window
-  const windowDays = [7, 30, 90, 0] as const;
-  const days = windowDays[state.selectedWindowIndex];
+  const days = WINDOW_DAYS[state.selectedWindowIndex];
   const today = new Date().toISOString().slice(0, 10);
 
   const dateRange = days && days > 0
     ? { since: (() => { const d = new Date(); d.setDate(d.getDate() - (days - 1)); return d.toISOString().slice(0, 10); })(), until: today }
     : state.data.dateRange;
 
-  return {
+  // Attach more stats if available for achievements that need hourOfDay
+  const more = ensureMoreStats(state);
+
+  const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
     dateRange,
     providers: state.data.providers,
     aggregated: windowStats,
   };
+
+  // Attach more stats for computeAchievements to use
+  if (more) {
+    (output as TokenleakOutput & { more?: unknown }).more = more;
+  }
+
+  return output;
 }
 
 let currentState: AppState;
@@ -95,6 +123,11 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.advisorScrollOffset = 0;
     currentState.focusScrollOffset = 0;
     currentState.compareScrollOffset = 0;
+    currentState.wrappedScrollOffset = 0;
+    // Reset matrix page when switching to matrix
+    if (mode === 'matrix') {
+      currentState.matrixPage = 0;
+    }
   }
   render(currentState, currentRenderer);
 }
@@ -125,6 +158,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedCompareOutput = null;
   state.cachedFocusReport = null;
   state.cachedExplainReport = null;
+  state.cachedMoreStats = null;
   state.explainDate = null; // re-derive from new window's peak day
 }
 
@@ -134,6 +168,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedFocusReport = null;
   state.cachedExplainReport = null;
   state.cachedCompareOutput = null;
+  state.cachedMoreStats = null;
 }
 
 /** Navigate explain date forward or backward by one day */
@@ -153,10 +188,11 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '5': 'explain',
   '6': 'compare',
   '7': 'export',
+  '8': 'wrapped',
 };
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped']);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
@@ -168,6 +204,8 @@ function getScrollableItemCount(state: AppState): number {
     }
     case 'compare':
       return 6; // fixed metric rows
+    case 'wrapped':
+      return 30; // approximate content rows
     default:
       return 0;
   }
@@ -178,6 +216,7 @@ function getVisibleCount(view: ViewMode): number {
     case 'advisor': return 10;
     case 'focus': return 12;
     case 'compare': return 6;
+    case 'wrapped': return 20;
     default: return 10;
   }
 }
@@ -187,6 +226,7 @@ function getScrollOffset(state: AppState): number {
     case 'advisor': return state.advisorScrollOffset;
     case 'focus': return state.focusScrollOffset;
     case 'compare': return state.compareScrollOffset;
+    case 'wrapped': return state.wrappedScrollOffset;
     default: return 0;
   }
 }
@@ -196,6 +236,7 @@ function setScrollOffset(state: AppState, value: number): void {
     case 'advisor': state.advisorScrollOffset = value; break;
     case 'focus': state.focusScrollOffset = value; break;
     case 'compare': state.compareScrollOffset = value; break;
+    case 'wrapped': state.wrappedScrollOffset = value; break;
   }
 }
 
@@ -277,6 +318,29 @@ async function main(): Promise<void> {
     render(state, renderer);
 
     renderer.addInputHandler((sequence: string) => {
+      // Help toggle: ? key
+      if (sequence === '?') {
+        state.showHelp = !state.showHelp;
+        render(state, renderer);
+        return true;
+      }
+
+      // Escape closes help
+      if (sequence === '\x1b' && state.showHelp) {
+        state.showHelp = false;
+        render(state, renderer);
+        return true;
+      }
+
+      // While help is shown, only ?, Escape, and q are handled
+      if (state.showHelp) {
+        if (sequence === 'q') {
+          renderer.destroy();
+          process.exit(0);
+        }
+        return false;
+      }
+
       // Tab / Right arrow: next time window
       if (sequence === '\t' || sequence === '\x1b[C') {
         state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
@@ -296,7 +360,19 @@ async function main(): Promise<void> {
         return true;
       }
 
-      // 1-7: switch view
+      // Matrix page navigation: , or [ = prev page, . or ] = next page
+      if ((sequence === ',' || sequence === '[') && state.selectedView === 'matrix') {
+        state.matrixPage = Math.max(0, state.matrixPage - 1);
+        render(state, renderer);
+        return true;
+      }
+      if ((sequence === '.' || sequence === ']') && state.selectedView === 'matrix') {
+        state.matrixPage = Math.min(3, state.matrixPage + 1);
+        render(state, renderer);
+        return true;
+      }
+
+      // 1-8: switch view
       const viewMode = VIEW_KEYS[sequence];
       if (viewMode) {
         handleViewSwitch(viewMode);
@@ -393,6 +469,7 @@ async function main(): Promise<void> {
             state.advisorScrollOffset = 0;
             state.focusScrollOffset = 0;
             state.compareScrollOffset = 0;
+            state.wrappedScrollOffset = 0;
             state.explainDate = null;
             render(state, renderer);
           })
