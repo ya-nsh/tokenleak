@@ -41,7 +41,7 @@ export function buildStatusBar(state: AppState) {
   }
 
   const helpHint = '?:help';
-  const nav = `\u2190\u2192:view  tab:period`;
+  const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-8:view`;
 
   let keys: string;
   if (state.selectedView === 'overview') {

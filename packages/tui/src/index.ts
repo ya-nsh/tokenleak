@@ -345,8 +345,8 @@ export async function main(): Promise<void> {
         return false;
       }
 
-      // Tab: next time window
-      if (sequence === '\t') {
+      // Tab or >: next time window
+      if (sequence === '\t' || sequence === '>') {
         state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
         state.modelScrollOffset = 0;
         invalidateWindowCaches(state);
@@ -354,8 +354,8 @@ export async function main(): Promise<void> {
         return true;
       }
 
-      // Shift+Tab: prev time window
-      if (sequence === '\x1b[Z') {
+      // Shift+Tab or <: prev time window
+      if (sequence === '\x1b[Z' || sequence === '<') {
         state.selectedWindowIndex =
           (state.selectedWindowIndex - 1 + WINDOW_LABELS.length) % WINDOW_LABELS.length;
         state.modelScrollOffset = 0;

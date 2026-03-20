@@ -43,8 +43,8 @@ export function createHelpPanel() {
         ...helpSection('NAVIGATION', [
           ['\u2192', 'Next view'],
           ['\u2190', 'Prev view'],
-          ['Tab', 'Next time period'],
-          ['Shift+Tab', 'Prev time period'],
+          ['Tab / >', 'Next time period'],
+          ['Shift+Tab / <', 'Prev time period'],
           ['j / \u2193', 'Scroll down'],
           ['k / \u2191', 'Scroll up'],
           ['[ / ]', 'Matrix page (in Matrix)'],
