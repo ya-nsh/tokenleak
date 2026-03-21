@@ -270,6 +270,10 @@ When you use `--format png` or `--format svg`, Tokenleak enables expanded compar
 
 Generate a Spotify-Wrapped-style story card as a tall PNG image showing your AI coding stats, streaks, model usage, habits, achievements, and more.
 
+Current wrapped card generated from the latest Tokenleak build:
+
+![Tokenleak AI Wrapped card](./docs/wrapped-card.png)
+
 ```bash
 # Generate your wrapped card (dark theme, opens automatically)
 tokenleak --format wrapped --open
@@ -302,7 +306,9 @@ tokenleak --wrapped-live --days 365 --claude
 tokenleak --wrapped-live --provider claude-code,codex
 ```
 
-The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
+`tokenleak --format wrapped` is the static export path: it writes a tall PNG you can attach to docs, posts, or issues. `tokenleak --wrapped-live` uses the same underlying stats, but serves them as a browser deck that is better for demos, screenshares, and walking through each section interactively.
+
+The Wrapped Live server starts on `http://localhost:3456` and automatically increments to the next free port if `3456` is already taken. The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
 
 The classic launcher (`tokenleak --legacy`) includes Wrapped Live as a menu option.
 
