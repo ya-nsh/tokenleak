@@ -2,7 +2,7 @@
 
 See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
-![Tokenleak preview card](./docs/preview.png)
+![Tokenleak OpenTUI overview](./docs/tui-overview.png)
 
 ## Overview
 
@@ -380,6 +380,18 @@ tokenleak --format json --upload gist
 ### TUI dashboard (default)
 
 In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 8 views with keyboard and mouse navigation:
+
+Latest OpenTUI screenshots from the current dashboard build:
+
+| Overview | Matrix (page 4) |
+| --- | --- |
+| ![Overview view](./docs/tui-overview.png) | ![Matrix view](./docs/tui-matrix.png) |
+| Advisor | Focus |
+| ![Advisor view](./docs/tui-advisor.png) | ![Focus view](./docs/tui-focus.png) |
+| Explain | Compare |
+| ![Explain view](./docs/tui-explain.png) | ![Compare view](./docs/tui-compare.png) |
+| Export | Wrapped |
+| ![Export view](./docs/tui-export.png) | ![Wrapped view](./docs/tui-wrapped.png) |
 
 | Key | Action |
 | --- | --- |

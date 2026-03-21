@@ -6,6 +6,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "docs:screenshots": "bun scripts/generate-tui-screenshots.ts",
     "test": "turbo run test",
     "check": "turbo run check",
     "lint": "eslint .",
