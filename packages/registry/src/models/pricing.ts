@@ -1,3 +1,5 @@
+import { getRemotePricing } from './pricing-resolver';
+
 /**
  * Per-million-token pricing for supported models.
  *
@@ -203,10 +205,13 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
 
 /**
  * Look up pricing for a normalized model name.
- * Returns `undefined` if the model is not in the pricing table.
+ *
+ * Delegates to the pricing resolver which checks remote pricing (LiteLLM)
+ * first, then falls back to the hardcoded table. If `initPricing()` has not
+ * been called, this behaves identically to a direct `MODEL_PRICING` lookup.
  */
 export function getModelPricing(model: string): ModelPricing | undefined {
-  return MODEL_PRICING[model];
+  return getRemotePricing(model) ?? MODEL_PRICING[model];
 }
 
 export { TOKENS_PER_MILLION };

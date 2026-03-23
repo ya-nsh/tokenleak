@@ -27,6 +27,7 @@ import {
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
+  initPricing,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
 import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
@@ -1090,6 +1091,7 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
 }
 
 export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
+  await initPricing();
   const config = resolveFocusConfig(cliArgs);
 
   if (!FOCUS_FORMAT_VALUES.includes(config.format)) {
@@ -1138,6 +1140,7 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
 
 /** Main execution function, exported for testing. */
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
+  await initPricing();
   const config = resolveConfig(cliArgs);
   validateProviderSelection(config);
 
@@ -1572,6 +1575,7 @@ function resolveExplainFormat(cliArgs: Record<string, unknown>): 'json' | 'termi
 }
 
 async function runExplain(date: string, cliArgs: Record<string, unknown>): Promise<void> {
+  await initPricing();
   const config = resolveConfig(cliArgs);
   const format = resolveExplainFormat(cliArgs);
 

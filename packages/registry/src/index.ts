@@ -7,6 +7,8 @@ export {
   TOKENS_PER_MILLION,
   estimateCost,
   estimateCostBreakdown,
+  initPricing,
+  resetPricingState,
 } from './models';
 
 export type { ModelPricing, CostBreakdown } from './models';
