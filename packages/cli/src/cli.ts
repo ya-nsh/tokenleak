@@ -27,6 +27,7 @@ import {
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
+  initPricing,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
 import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
@@ -1898,6 +1899,7 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
+  await initPricing();
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   const argv = normalizedArgv;
 
