@@ -10,11 +10,15 @@ let remotePricing: Record<string, ModelPricing> | null = null;
 let initialized = false;
 
 /**
- * Initialize the pricing system by fetching remote pricing data.
+ * Initialize the pricing system.
+ *
+ * Strategy: use a valid cache immediately (zero network latency), then only
+ * hit the network when the cache is stale or missing. This means offline
+ * startups never wait on a fetch timeout.
  *
  * Fallback chain:
- * 1. Fetch from LiteLLM GitHub JSON
- * 2. Read valid disk cache (within 1hr TTL)
+ * 1. Read valid disk cache (within 1hr TTL) — instant, no network
+ * 2. Fetch from LiteLLM GitHub JSON (only when cache is stale/missing)
  * 3. Read stale disk cache (any age)
  * 4. Fall through to hardcoded MODEL_PRICING (handled by getModelPricing)
  *
@@ -23,6 +27,19 @@ let initialized = false;
 export async function initPricing(): Promise<void> {
   if (initialized) return;
 
+  // 1. Try valid cache first — avoids network entirely when fresh
+  try {
+    const cached = readPricingCache();
+    if (cached) {
+      remotePricing = cached.data;
+      initialized = true;
+      return;
+    }
+  } catch {
+    // cache read failure is non-fatal
+  }
+
+  // 2. Cache is stale or missing — try network
   try {
     const data = await fetchLiteLLMPricing();
     remotePricing = data;
@@ -34,17 +51,11 @@ export async function initPricing(): Promise<void> {
     initialized = true;
     return;
   } catch {
-    // fetch failed — try cache
+    // fetch failed — try stale cache
   }
 
+  // 3. Network failed — use stale cache if available
   try {
-    const cached = readPricingCache();
-    if (cached) {
-      remotePricing = cached.data;
-      initialized = true;
-      return;
-    }
-
     const stale = readStalePricingCache();
     if (stale) {
       remotePricing = stale;

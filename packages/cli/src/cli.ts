@@ -1091,7 +1091,6 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
 }
 
 export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
-  await initPricing();
   const config = resolveFocusConfig(cliArgs);
 
   if (!FOCUS_FORMAT_VALUES.includes(config.format)) {
@@ -1140,7 +1139,6 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
 
 /** Main execution function, exported for testing. */
 export async function run(cliArgs: Record<string, unknown>): Promise<void> {
-  await initPricing();
   const config = resolveConfig(cliArgs);
   validateProviderSelection(config);
 
@@ -1575,7 +1573,6 @@ function resolveExplainFormat(cliArgs: Record<string, unknown>): 'json' | 'termi
 }
 
 async function runExplain(date: string, cliArgs: Record<string, unknown>): Promise<void> {
-  await initPricing();
   const config = resolveConfig(cliArgs);
   const format = resolveExplainFormat(cliArgs);
 
@@ -1902,6 +1899,7 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
+  await initPricing();
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   const argv = normalizedArgv;
 
