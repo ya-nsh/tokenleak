@@ -18,6 +18,7 @@ import {
   ensureExplainReport,
   ensureCompareOutput,
   ensureMoreStats,
+  ensureReplayReport,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -34,6 +35,7 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
+import { createReplayPanel } from './panels/replay.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -97,6 +99,13 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       return createComparePanel(state, ensureCompareOutput(state));
     case 'export':
       return createExportPanel(state);
+    case 'replay':
+      return createReplayPanel(
+        ensureReplayReport(state),
+        state.replayDate,
+        state.replayExpandedBlocks,
+        state.replayScrollOffset,
+      );
     case 'wrapped': {
       const output = buildTokenleakOutput(state);
       const achievements = output ? computeAchievements(output) : [];
@@ -174,6 +183,9 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.focusScrollOffset = 0;
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
+  state.replayScrollOffset = 0;
+  state.replayExpandedBlocks = new Set();
+  state.replayDate = null;
   state.explainDate = null;
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
@@ -287,6 +299,8 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.focusScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
+    currentState.replayScrollOffset = 0;
+    currentState.replayExpandedBlocks = new Set();
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
       currentState.matrixPage = 0;
@@ -339,7 +353,9 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedFocusReport = null;
   state.cachedExplainReport = null;
   state.cachedMoreStats = null;
+  state.cachedReplayReport = null;
   state.explainDate = null; // re-derive from new window's peak day
+  state.replayDate = null;
 }
 
 /** Null all caches (used on refresh) */
@@ -349,6 +365,18 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedExplainReport = null;
   state.cachedCompareOutput = null;
   state.cachedMoreStats = null;
+  state.cachedReplayReport = null;
+}
+
+/** Navigate replay date forward or backward by one day */
+function shiftReplayDate(state: AppState, direction: number): void {
+  if (!state.replayDate) return;
+  const d = new Date(state.replayDate + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + direction);
+  state.replayDate = d.toISOString().slice(0, 10);
+  state.cachedReplayReport = null;
+  state.replayScrollOffset = 0;
+  state.replayExpandedBlocks = new Set();
 }
 
 /** Navigate explain date forward or backward by one day */
@@ -369,14 +397,15 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '6': 'compare',
   '7': 'export',
   '8': 'wrapped',
+  '9': 'replay',
 };
 
 const VIEW_ORDER: ViewMode[] = [
-  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped',
+  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay']);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
@@ -390,6 +419,8 @@ function getScrollableItemCount(state: AppState): number {
       return 6; // fixed metric rows
     case 'wrapped':
       return 30; // approximate content rows
+    case 'replay':
+      return ensureReplayReport(state)?.flowBlocks.length ?? 0;
     default:
       return 0;
   }
@@ -401,6 +432,7 @@ function getVisibleCount(view: ViewMode): number {
     case 'focus': return 12;
     case 'compare': return 6;
     case 'wrapped': return 20;
+    case 'replay': return 15;
     default: return 10;
   }
 }
@@ -411,6 +443,7 @@ function getScrollOffset(state: AppState): number {
     case 'focus': return state.focusScrollOffset;
     case 'compare': return state.compareScrollOffset;
     case 'wrapped': return state.wrappedScrollOffset;
+    case 'replay': return state.replayScrollOffset;
     default: return 0;
   }
 }
@@ -421,6 +454,7 @@ function setScrollOffset(state: AppState, value: number): void {
     case 'focus': state.focusScrollOffset = value; break;
     case 'compare': state.compareScrollOffset = value; break;
     case 'wrapped': state.wrappedScrollOffset = value; break;
+    case 'replay': state.replayScrollOffset = value; break;
   }
 }
 
@@ -642,16 +676,38 @@ export async function main(): Promise<void> {
         return false;
       }
 
-      // h: prev day (explain view)
+      // h: prev day (explain/replay view)
       if (sequence === 'h' && state.selectedView === 'explain') {
         shiftExplainDate(state, -1);
         render(state, renderer);
         return true;
       }
+      if (sequence === 'h' && state.selectedView === 'replay') {
+        shiftReplayDate(state, -1);
+        render(state, renderer);
+        return true;
+      }
 
-      // l: next day (explain view)
+      // l: next day (explain/replay view)
       if (sequence === 'l' && state.selectedView === 'explain') {
         shiftExplainDate(state, 1);
+        render(state, renderer);
+        return true;
+      }
+      if (sequence === 'l' && state.selectedView === 'replay') {
+        shiftReplayDate(state, 1);
+        render(state, renderer);
+        return true;
+      }
+
+      // Enter: expand/collapse flow blocks (replay view)
+      if (sequence === '\r' && state.selectedView === 'replay') {
+        const blockIndex = state.replayScrollOffset;
+        if (state.replayExpandedBlocks.has(blockIndex)) {
+          state.replayExpandedBlocks.delete(blockIndex);
+        } else {
+          state.replayExpandedBlocks.add(blockIndex);
+        }
         render(state, renderer);
         return true;
       }

@@ -49,6 +49,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Compare** — side-by-side period comparison with deltas
 - **Export** — save PNG, Wrapped PNG, or launch a live server
 - **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
+- **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
 
 Use `tokenleak --legacy` to open the classic interactive launcher instead.
 
@@ -110,6 +111,10 @@ tokenleak -o card.png
 tokenleak explain 2026-03-10
 tokenleak explain 2026-03-10 --format json
 
+# Replay a day's session timeline
+tokenleak replay
+tokenleak replay 2026-03-10 --format json
+
 # Rank deep-work sessions
 tokenleak focus
 tokenleak focus --provider codex --days 30
@@ -123,7 +128,7 @@ tokenleak --list-providers
 
 ### Analysis commands
 
-Tokenleak ships two dedicated investigation commands in addition to the main dashboard flow:
+Tokenleak ships three dedicated investigation commands in addition to the main dashboard flow:
 
 ```bash
 # Explain what drove a specific day
@@ -137,10 +142,17 @@ tokenleak focus --days 30
 
 # Focus report as JSON
 tokenleak focus --format json --provider pi --output focus.json
+
+# Replay today's session timeline
+tokenleak replay
+
+# Replay a specific day with JSON output
+tokenleak replay 2026-03-10 --format json --output replay.json
 ```
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
+- `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today.
 
 ### Cursor commands
 
@@ -438,8 +450,9 @@ Subcommands:
 
 - `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
 - `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
+- `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today.
 - `tokenleak cursor --help` prints the Cursor auth/cache command help text.
-- `tokenleak explain --help` and `tokenleak focus --help` print the subcommand-specific help text.
+- `tokenleak explain --help`, `tokenleak focus --help`, and `tokenleak replay --help` print the subcommand-specific help text.
 
 | Flag | Alias | Default | Description |
 | --- | --- | --- | --- |
@@ -609,10 +622,12 @@ The dedicated analysis commands also support JSON output:
 ```bash
 tokenleak explain 2026-03-10 --format json
 tokenleak focus --format json
+tokenleak replay 2026-03-10 --format json
 ```
 
-- `tokenleak explain ... --format json` returns an explain report with headline, summary bullets, evidence tables, and anomaly flags.
-- `tokenleak focus ... --format json` returns a ranked focus report with deep-work scores, durations, densities, streaks, and rationales per session.
+- An explain report (`tokenleak explain ... --format json`) includes a headline, summary bullets, evidence tables for providers/models/sessions, and anomaly flags.
+- `tokenleak focus ... --format json` produces a ranked focus report with deep-work scores, durations, token densities, project streaks, and per-session rationales.
+- Use `tokenleak replay ... --format json` to get a replay report containing flow blocks, a token velocity time series, model switch annotations, and a day summary with flow/think ratio.
 
 When `--compare` is used with `--format json`, the output is a compare payload with:
 

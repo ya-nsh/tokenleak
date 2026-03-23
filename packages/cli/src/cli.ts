@@ -9,6 +9,7 @@ import {
   analyzeEfficiency,
   buildExplainReport,
   buildFocusReport,
+  buildReplayReport,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
@@ -40,6 +41,7 @@ import { loadEnvOverrides } from './env.js';
 import { buildCursorHelpText, hasCursorUsageCache, isCursorLoggedIn, runCursorCommand, shouldSyncCursorForRun } from './cursor.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
+import { buildReplayHelpText, renderReplayTerminal } from './replay.js';
 import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
@@ -155,11 +157,13 @@ function buildHelpText(): string {
     '  tokenleak [flags]',
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
+    '  tokenleak replay [date] [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
+    '  replay [date]          Replay a day\'s session timeline (defaults to today)',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -209,6 +213,8 @@ function buildHelpText(): string {
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
+    '  tokenleak replay',
+    '  tokenleak replay 2026-03-10 --format json',
     '',
     'Version:',
     `  CLI ${VERSION}`,
@@ -1552,6 +1558,162 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
   return { date, cliArgs };
 }
 
+function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
+  let date: string | null = null;
+
+  if (argv.length > 0 && !argv[0]!.startsWith('-')) {
+    date = argv[0]!;
+    if (!isValidDateArgument(date)) {
+      throw new TokenleakError('tokenleak replay date must be in YYYY-MM-DD format');
+    }
+  }
+
+  if (date === null) {
+    date = new Date().toISOString().slice(0, 10);
+  }
+
+  const cliArgs: Record<string, unknown> = {};
+  let index = argv[0]?.startsWith('-') ? 0 : 1;
+
+  while (index < argv.length) {
+    const arg = argv[index]!;
+    switch (arg) {
+      case '--help':
+      case '-h':
+        cliArgs['help'] = true;
+        index += 1;
+        break;
+      case '--version':
+      case '-v':
+        cliArgs['version'] = true;
+        index += 1;
+        break;
+      case '--format':
+      case '-f':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['format'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--output':
+      case '-o':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['output'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--width':
+      case '-w':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['width'] = Number(argv[index + 1]!);
+        index += 2;
+        break;
+      case '--provider':
+      case '-p':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['provider'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--claude':
+        cliArgs['claude'] = true;
+        index += 1;
+        break;
+      case '--codex':
+        cliArgs['codex'] = true;
+        index += 1;
+        break;
+      case '--cursor':
+        cliArgs['cursor'] = true;
+        index += 1;
+        break;
+      case '--pi':
+        cliArgs['pi'] = true;
+        index += 1;
+        break;
+      case '--openCode':
+      case '--open-code':
+        cliArgs['openCode'] = true;
+        index += 1;
+        break;
+      case '--allProviders':
+      case '--all-providers':
+        cliArgs['allProviders'] = true;
+        index += 1;
+        break;
+      case '--noColor':
+      case '--no-color':
+        cliArgs['noColor'] = true;
+        index += 1;
+        break;
+      default:
+        throw new TokenleakError(`Unknown replay flag "${arg}"`);
+    }
+  }
+
+  return { date, cliArgs };
+}
+
+function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'terminal' {
+  if (typeof cliArgs['format'] === 'string') {
+    const format = cliArgs['format'];
+    if (format === 'json' || format === 'terminal') {
+      return format;
+    }
+
+    throw new TokenleakError('tokenleak replay only supports --format terminal or --format json');
+  }
+
+  if (typeof cliArgs['output'] === 'string') {
+    const inferred = inferFormatFromPath(cliArgs['output']);
+    if (inferred === 'json') {
+      return 'json';
+    }
+  }
+
+  return 'terminal';
+}
+
+async function runReplay(date: string, cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveReplayFormat(cliArgs);
+
+  if (config.allProviders && (
+    config.provider ||
+    config.claude ||
+    config.codex ||
+    config.cursor ||
+    config.pi ||
+    config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  const replayRange = computeDateRange({ since: date, until: date });
+  const available = await selectAvailableProviders(config);
+
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const replayOutput = await loadTokenleakData(available, replayRange);
+  const report = buildReplayReport(replayOutput.providers, date);
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderReplayTerminal(report, config.width);
+
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else {
+    process.stdout.write(rendered + '\n');
+  }
+}
+
 function resolveExplainFormat(cliArgs: Record<string, unknown>): 'json' | 'terminal' {
   if (typeof cliArgs['format'] === 'string') {
     const format = cliArgs['format'];
@@ -1918,6 +2080,26 @@ if (isDirectExecution) {
       }
 
       await runExplain(date, cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+  if (argv[0] === 'replay') {
+    try {
+      const { date, cliArgs } = parseReplayArgs(argv.slice(1));
+
+      if (cliArgs['help']) {
+        process.stdout.write(buildReplayHelpText());
+        process.exit(0);
+      }
+
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await runReplay(date, cliArgs);
       process.exit(0);
     } catch (error: unknown) {
       handleError(error);

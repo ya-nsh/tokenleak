@@ -319,6 +319,49 @@ export interface FocusReport {
   entries: FocusEntry[];
 }
 
+export type FlowBlockLabel = 'Deep Flow' | 'Quick Lookup' | 'Moderate Session';
+
+export interface FlowBlock {
+  blockIndex: number;
+  label: FlowBlockLabel;
+  start: string;
+  end: string;
+  durationMs: number;
+  eventCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  cost: number;
+  dominantModel: string;
+  events: UsageEvent[];
+  modelSwitches: number;
+  cacheHitRateTrend: number[];
+}
+
+export interface TokenVelocityPoint {
+  minute: string;
+  tokensPerMinute: number;
+}
+
+export interface ReplayDaySummary {
+  totalSessions: number;
+  totalEvents: number;
+  flowTimeMs: number;
+  thinkTimeMs: number;
+  flowThinkRatio: number;
+  peakMinute: TokenVelocityPoint | null;
+}
+
+export interface ReplayReport {
+  date: string;
+  events: UsageEvent[];
+  flowBlocks: FlowBlock[];
+  tokenVelocity: TokenVelocityPoint[];
+  summary: ReplayDaySummary;
+}
+
 export interface ModelMixShiftEntry {
   model: string;
   currentShare: number;

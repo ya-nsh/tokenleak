@@ -8,6 +8,7 @@ import type {
   FocusReport,
   MoreStats,
   ProviderData,
+  ReplayReport,
   TokenleakOutput,
 } from '@tokenleak/core';
 import {
@@ -16,6 +17,7 @@ import {
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
+  buildReplayReport,
   compareRanges,
   dayOfWeekBreakdown,
   mergeProviderData,
@@ -254,6 +256,25 @@ export function ensureMoreStats(state: AppState): MoreStats | null {
   const more = buildMoreStats(scoped.scopedProviders, scoped.windowRange);
   state.cachedMoreStats = more;
   return more;
+}
+
+/** Lazily compute and cache the ReplayReport (date- and window-dependent) */
+export function ensureReplayReport(state: AppState): ReplayReport | null {
+  if (!state.data) return null;
+  if (state.cachedReplayReport && state.cachedReplayReport.date === state.replayDate) {
+    return state.cachedReplayReport;
+  }
+
+  if (!state.replayDate) {
+    state.replayDate = todayStr();
+  }
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const report = buildReplayReport(scoped.scopedProviders, state.replayDate);
+  state.cachedReplayReport = report;
+  return report;
 }
 
 /** Get day-of-week breakdown for the current window's daily data */

@@ -32,6 +32,11 @@ export type {
   ExplainReport,
   FocusEntry,
   FocusReport,
+  FlowBlockLabel,
+  FlowBlock,
+  TokenVelocityPoint,
+  ReplayDaySummary,
+  ReplayReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -69,6 +74,7 @@ export {
   buildFocusReport,
   computeModelMixShift,
   buildExplainReport,
+  buildReplayReport,
 } from './aggregation';
 
 export {
