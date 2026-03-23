@@ -156,11 +156,13 @@ function buildHelpText(): string {
     '  tokenleak [flags]',
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
+    '  tokenleak replay [date] [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
+    '  replay [date]          Replay a day\'s session timeline (defaults to today)',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -210,6 +212,8 @@ function buildHelpText(): string {
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
+    '  tokenleak replay',
+    '  tokenleak replay 2026-03-10 --format json',
     '',
     'Version:',
     `  CLI ${VERSION}`,
@@ -1564,8 +1568,7 @@ function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string
   }
 
   if (date === null) {
-    const now = new Date();
-    date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    date = new Date().toISOString().slice(0, 10);
   }
 
   const cliArgs: Record<string, unknown> = {};
@@ -1690,7 +1693,7 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 
-  const replayRange = computeDateRange({ until: date, days: 1 });
+  const replayRange = computeDateRange({ since: date, until: date });
   const available = await selectAvailableProviders(config);
 
   if (available.length === 0) {

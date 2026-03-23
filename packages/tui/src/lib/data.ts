@@ -258,7 +258,7 @@ export function ensureMoreStats(state: AppState): MoreStats | null {
   return more;
 }
 
-/** Lazily compute and cache the ReplayReport (date-dependent) */
+/** Lazily compute and cache the ReplayReport (date- and window-dependent) */
 export function ensureReplayReport(state: AppState): ReplayReport | null {
   if (!state.data) return null;
   if (state.cachedReplayReport && state.cachedReplayReport.date === state.replayDate) {
@@ -269,7 +269,10 @@ export function ensureReplayReport(state: AppState): ReplayReport | null {
     state.replayDate = todayStr();
   }
 
-  const report = buildReplayReport(state.data.providers, state.replayDate);
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const report = buildReplayReport(scoped.scopedProviders, state.replayDate);
   state.cachedReplayReport = report;
   return report;
 }

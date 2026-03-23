@@ -607,9 +607,9 @@ tokenleak focus --format json
 tokenleak replay 2026-03-10 --format json
 ```
 
-- `tokenleak explain ... --format json` returns an explain report with headline, summary bullets, evidence tables, and anomaly flags.
-- `tokenleak focus ... --format json` returns a ranked focus report with deep-work scores, durations, densities, streaks, and rationales per session.
-- `tokenleak replay ... --format json` returns a replay report with flow blocks, token velocity time series, and a day summary with flow/think ratio.
+- An explain report (`tokenleak explain ... --format json`) includes a headline, summary bullets, evidence tables for providers/models/sessions, and anomaly flags.
+- `tokenleak focus ... --format json` produces a ranked focus report with deep-work scores, durations, token densities, project streaks, and per-session rationales.
+- Use `tokenleak replay ... --format json` to get a replay report containing flow blocks, a token velocity time series, model switch annotations, and a day summary with flow/think ratio.
 
 When `--compare` is used with `--format json`, the output is a compare payload with:
 
