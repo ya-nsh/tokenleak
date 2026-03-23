@@ -25,6 +25,7 @@ const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
   { key: '6', label: 'Compare', mode: 'compare' },
   { key: '7', label: 'Export', mode: 'export' },
   { key: '8', label: 'Wrapped', mode: 'wrapped' },
+  { key: '9', label: 'Replay', mode: 'replay' },
 ];
 
 export function buildHeader(

@@ -1,8 +1,8 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats } from '@tokenleak/core';
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped';
+export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay';
 export type SortMode = 'cost' | 'tokens';
 export type CursorSetupField = 'label' | 'token';
 
@@ -41,12 +41,18 @@ export interface AppState {
   cursorSetupSubmitting: boolean;
   cursorSetupStatusOverride: CursorSetupStatus | null;
 
+  // replay view state
+  replayDate: string | null;
+  replayScrollOffset: number;
+  replayExpandedBlocks: Set<number>;
+
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
   cachedFocusReport: FocusReport | null;
   cachedExplainReport: ExplainReport | null;
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
+  cachedReplayReport: ReplayReport | null;
 }
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
@@ -75,10 +81,14 @@ export function createInitialState(): AppState {
     cursorSetupMessage: null,
     cursorSetupSubmitting: false,
     cursorSetupStatusOverride: null,
+    replayDate: null,
+    replayScrollOffset: 0,
+    replayExpandedBlocks: new Set(),
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
     cachedCompareOutput: null,
     cachedMoreStats: null,
+    cachedReplayReport: null,
   };
 }

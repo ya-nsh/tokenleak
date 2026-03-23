@@ -77,15 +77,9 @@ function renderFlowBlockCard(block: FlowBlock, expanded: boolean) {
     const cacheRate = (event.inputTokens + event.cacheReadTokens) > 0
       ? event.cacheReadTokens / (event.inputTokens + event.cacheReadTokens)
       : 0;
+    const line = `    ${padRight(time, 7)} ${padRight(truncate(event.model, 18), 19)} ${padLeft(formatTokens(event.totalTokens), 8)}  cache:${formatPercent(cacheRate).padStart(4)}  ${formatCost(event.cost).padStart(8)}`;
     children.push(
-      Box(
-        { flexDirection: 'row', width: '100%', paddingLeft: 4 },
-        Text({ content: padRight(time, 7), fg: COLORS.dimWhite }),
-        Text({ content: padRight(truncate(event.model, 18), 19), fg: COLORS.cyan }),
-        Text({ content: padLeft(formatTokens(event.totalTokens), 8), fg: COLORS.green }),
-        Text({ content: padLeft(`cache:${formatPercent(cacheRate)}`, 12), fg: cacheRate > 0.5 ? COLORS.green : COLORS.amber }),
-        Text({ content: padLeft(formatCost(event.cost), 10), fg: COLORS.amber }),
-      ),
+      Text({ content: line, fg: COLORS.white }),
     );
   }
 
