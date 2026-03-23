@@ -196,6 +196,61 @@ describe('buildReplayReport', () => {
     expect(report.flowBlocks[0].dominantModel).toBe('claude-opus-4');
   });
 
+  it('handles single-event session with zero duration', () => {
+    const event = makeEvent({ timestamp: `${TARGET_DATE}T14:30:00Z`, sessionId: 'solo' });
+    const report = buildReplayReport([makeProvider([event])], TARGET_DATE);
+
+    expect(report.flowBlocks[0].durationMs).toBe(0);
+    expect(report.flowBlocks[0].modelSwitches).toBe(0);
+    expect(report.summary.flowTimeMs).toBe(0);
+    expect(report.summary.thinkTimeMs).toBe(0);
+    expect(report.summary.flowThinkRatio).toBe(0);
+  });
+
+  it('handles events at month boundary correctly', () => {
+    const monthEnd = '2026-03-31';
+    const events = [
+      makeEvent({ timestamp: `${monthEnd}T23:50:00Z`, date: monthEnd }),
+      makeEvent({ timestamp: `${monthEnd}T23:55:00Z`, date: monthEnd }),
+    ];
+    const report = buildReplayReport([makeProvider(events)], monthEnd);
+
+    expect(report.events).toHaveLength(2);
+    expect(report.flowBlocks).toHaveLength(1);
+    expect(report.date).toBe(monthEnd);
+  });
+
+  it('handles many events without error', () => {
+    const events: UsageEvent[] = [];
+    for (let i = 0; i < 120; i++) {
+      const hour = Math.floor(i / 12) + 8;
+      const minute = (i % 12) * 5;
+      events.push(makeEvent({
+        timestamp: `${TARGET_DATE}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`,
+        sessionId: `s${Math.floor(i / 10)}`,
+      }));
+    }
+    const report = buildReplayReport([makeProvider(events)], TARGET_DATE);
+
+    expect(report.events).toHaveLength(120);
+    expect(report.flowBlocks.length).toBeGreaterThan(0);
+    expect(report.summary.totalEvents).toBe(120);
+    expect(report.summary.totalSessions).toBe(12);
+  });
+
+  it('sorts events chronologically regardless of input order', () => {
+    const events = [
+      makeEvent({ timestamp: `${TARGET_DATE}T15:00:00Z` }),
+      makeEvent({ timestamp: `${TARGET_DATE}T09:00:00Z` }),
+      makeEvent({ timestamp: `${TARGET_DATE}T12:00:00Z` }),
+    ];
+    const report = buildReplayReport([makeProvider(events)], TARGET_DATE);
+
+    expect(report.events[0].timestamp).toBe(`${TARGET_DATE}T09:00:00Z`);
+    expect(report.events[1].timestamp).toBe(`${TARGET_DATE}T12:00:00Z`);
+    expect(report.events[2].timestamp).toBe(`${TARGET_DATE}T15:00:00Z`);
+  });
+
   it('merges events from multiple providers', () => {
     const provider1 = makeProvider([
       makeEvent({ timestamp: `${TARGET_DATE}T10:00:00Z`, provider: 'claude-code', sessionId: 's1' }),
