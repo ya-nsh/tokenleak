@@ -9,7 +9,9 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 import {
+  extractClaudeQuotaSnapshot,
   extractCodexQuotaSnapshot,
+  type ClaudeQuotaSnapshot,
   type CodexQuotaSnapshot,
   type QuotaWindowSnapshot,
 } from '@tokenleak/registry';
@@ -20,14 +22,15 @@ import type {
   MenubarProviderSnapshot,
   MenubarSnapshot,
   MenubarWindowSnapshot,
-  StoredQuotaWindow,
 } from './types.js';
 import {
   CLAUDE_STATUSLINE_SETUP_MESSAGE,
+  CURRENT_BRIDGE_VERSION,
   DEFAULT_MENUBAR_POLL_INTERVAL_SECONDS,
   MENUBAR_SCHEMA_VERSION,
 } from './types.js';
 import { toRemainingPercent } from './format.js';
+import { buildClaudeStatuslineBridge, buildOriginalClaudeStatuslineCommandScript } from './launchd.js';
 
 const WINDOW_STALE_GRACE_MS = 5 * 60 * 1000;
 
@@ -43,7 +46,7 @@ function createEmptyWindow(label: string, windowMinutes: number): MenubarWindowS
 
 function toMenubarWindow(
   label: string,
-  value: QuotaWindowSnapshot | StoredQuotaWindow | null,
+  value: QuotaWindowSnapshot | null,
   nowMs: number,
   fallbackMinutes: number,
 ): MenubarWindowSnapshot {
@@ -134,7 +137,7 @@ function buildCodexSnapshot(
 }
 
 function buildClaudeSnapshot(
-  snapshot: ClaudeBridgeSnapshot | null,
+  snapshot: ClaudeQuotaSnapshot | null,
   error: string | null,
   config: MenubarConfig,
   nowMs: number,
@@ -233,6 +236,7 @@ export function readMenubarConfig(paths: MenubarPaths): MenubarConfig {
         : DEFAULT_MENUBAR_POLL_INTERVAL_SECONDS,
     claudeStatusLineManaged: raw.claudeStatusLineManaged === true,
     claudeStatusLineBackup: raw.claudeStatusLineBackup ?? null,
+    claudeBridgeVersion: typeof raw.claudeBridgeVersion === 'number' ? raw.claudeBridgeVersion : 0,
   };
 }
 
@@ -242,6 +246,7 @@ export function createDefaultMenubarConfig(): MenubarConfig {
     pollIntervalSeconds: DEFAULT_MENUBAR_POLL_INTERVAL_SECONDS,
     claudeStatusLineManaged: false,
     claudeStatusLineBackup: null,
+    claudeBridgeVersion: 0,
   };
 }
 
@@ -261,18 +266,7 @@ export function readSnapshot(paths: MenubarPaths): MenubarSnapshot | null {
   }
 }
 
-export function readClaudeBridgeSnapshot(paths: MenubarPaths): ClaudeBridgeSnapshot | null {
-  if (!existsSync(paths.claudeSnapshotPath)) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(readFileSync(paths.claudeSnapshotPath, 'utf8')) as ClaudeBridgeSnapshot;
-  } catch {
-    return null;
-  }
-}
-
+// Keep for backward compatibility with tests that write bridge snapshots directly
 export function writeClaudeBridgeSnapshot(
   paths: MenubarPaths,
   snapshot: ClaudeBridgeSnapshot,
@@ -283,6 +277,97 @@ export function writeClaudeBridgeSnapshot(
 export function writeSnapshot(paths: MenubarPaths, snapshot: MenubarSnapshot): void {
   writeJsonAtomic(paths.snapshotPath, snapshot);
 }
+
+// ---------------------------------------------------------------------------
+// Self-healing: detect when ~/.claude/settings.json statusLine was overwritten
+// and auto-repair it to point back to the tokenleak bridge script.
+// ---------------------------------------------------------------------------
+
+interface CommandStatusLine {
+  type: 'command';
+  command: string;
+}
+
+function readClaudeSettings(paths: MenubarPaths): Record<string, unknown> {
+  if (!existsSync(paths.claudeSettingsPath)) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(readFileSync(paths.claudeSettingsPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function writeClaudeSettings(paths: MenubarPaths, settings: Record<string, unknown>): void {
+  ensureMenubarDir(dirname(paths.claudeSettingsPath));
+  writeFileSync(paths.claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
+function parseCommandStatusLine(setting: unknown): CommandStatusLine | null {
+  if (typeof setting !== 'object' || setting === null) {
+    return null;
+  }
+
+  const record = setting as Record<string, unknown>;
+  if (record['type'] !== 'command' || typeof record['command'] !== 'string') {
+    return null;
+  }
+
+  return { type: 'command', command: record['command'] };
+}
+
+function isManagedStatusLine(paths: MenubarPaths, value: unknown): boolean {
+  const parsed = parseCommandStatusLine(value);
+  return parsed?.command === paths.claudeStatuslineWrapperPath;
+}
+
+function managedStatusLineSetting(paths: MenubarPaths): CommandStatusLine {
+  return { type: 'command', command: paths.claudeStatuslineWrapperPath };
+}
+
+export function ensureClaudeStatusLineConfig(
+  paths: MenubarPaths,
+  config: MenubarConfig,
+): MenubarConfig {
+  if (!config.claudeStatusLineManaged) {
+    return config;
+  }
+
+  const settings = readClaudeSettings(paths);
+  const needsSettingsRepair = !isManagedStatusLine(paths, settings['statusLine']);
+  const needsBridgeUpgrade = config.claudeBridgeVersion < CURRENT_BRIDGE_VERSION;
+
+  if (!needsSettingsRepair && !needsBridgeUpgrade) {
+    return config;
+  }
+
+  // If settings were overwritten, capture the new command as the "original"
+  if (needsSettingsRepair) {
+    const current = parseCommandStatusLine(settings['statusLine']);
+    if (current) {
+      config.claudeStatusLineBackup = settings['statusLine'];
+      writeExecutableScript(
+        paths.previousClaudeStatuslineCommandPath,
+        buildOriginalClaudeStatuslineCommandScript(current.command),
+      );
+    }
+
+    settings['statusLine'] = managedStatusLineSetting(paths);
+    writeClaudeSettings(paths, settings);
+  }
+
+  // Regenerate the bridge script (handles both repair and upgrade)
+  writeExecutableScript(paths.claudeStatuslineWrapperPath, buildClaudeStatuslineBridge(paths));
+  config.claudeBridgeVersion = CURRENT_BRIDGE_VERSION;
+  writeMenubarConfig(paths, config);
+
+  return config;
+}
+
+// Re-export for install.ts
+export { isManagedStatusLine as isManagedClaudeStatusLineSetting };
 
 export async function refreshMenubarSnapshot(paths: MenubarPaths): Promise<MenubarSnapshot> {
   const config = readMenubarConfig(paths);
@@ -297,10 +382,10 @@ export async function refreshMenubarSnapshot(paths: MenubarPaths): Promise<Menub
     codexError = error instanceof Error ? error.message : String(error);
   }
 
-  let claudeSnapshot: ClaudeBridgeSnapshot | null = null;
+  let claudeSnapshot: ClaudeQuotaSnapshot | null = null;
   let claudeError: string | null = null;
   try {
-    claudeSnapshot = readClaudeBridgeSnapshot(paths);
+    claudeSnapshot = extractClaudeQuotaSnapshot(paths.claudeSnapshotPath);
   } catch (error: unknown) {
     claudeError = error instanceof Error ? error.message : String(error);
   }

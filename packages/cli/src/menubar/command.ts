@@ -14,6 +14,7 @@ import {
 import { resolveMenubarPaths } from './paths.js';
 import {
   createDefaultMenubarConfig,
+  ensureClaudeStatusLineConfig,
   readMenubarConfig,
   refreshMenubarSnapshot,
   writeMenubarConfig,
@@ -106,6 +107,8 @@ async function runDaemon(parsed: ParsedMenubarArgs): Promise<void> {
   const { paths, config } = resolveCommandConfig(parsed);
 
   const tick = async () => {
+    // Self-healing: repair statusline settings if overwritten
+    ensureClaudeStatusLineConfig(paths, readMenubarConfig(paths));
     const snapshot = await refreshMenubarSnapshot(paths);
     process.stdout.write(`[menubar] ${formatTimestamp(snapshot.generatedAt)} ${snapshot.title}\n`);
   };

@@ -57,11 +57,14 @@ export interface MenubarSnapshot {
   };
 }
 
+export const CURRENT_BRIDGE_VERSION = 2;
+
 export interface MenubarConfig {
   schemaVersion: number;
   pollIntervalSeconds: number;
   claudeStatusLineManaged: boolean;
   claudeStatusLineBackup: unknown | null;
+  claudeBridgeVersion: number;
 }
 
 export interface MenubarPaths {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildAppPlist, buildClaudeStatuslineWrapper, buildDashboardWrapper } from './launchd';
+import { buildAppPlist, buildClaudeStatuslineBridge, buildDashboardWrapper } from './launchd';
 import { resolveMenubarPaths } from './paths';
 
 describe('menubar launchd and wrapper generation', () => {
@@ -17,9 +17,28 @@ describe('menubar launchd and wrapper generation', () => {
     expect(wrapper).toContain('--provider codex,claude-code');
   });
 
-  it('builds a Claude statusline wrapper that records bridge snapshots', () => {
-    const wrapper = buildClaudeStatuslineWrapper(paths);
-    expect(wrapper).toContain('menubar claude-statusline');
-    expect(wrapper).toContain('claude-statusline-original');
+  it('builds a self-contained Claude statusline bridge using python3', () => {
+    const bridge = buildClaudeStatuslineBridge(paths);
+    expect(bridge).toContain('/usr/bin/python3');
+    expect(bridge).toContain('claude-rate-limits.json');
+    expect(bridge).toContain('claude-statusline-original');
+    // Must NOT spawn the tokenleak CLI binary
+    expect(bridge).not.toContain('menubar claude-statusline');
+    expect(bridge).not.toContain('tokenleak-menubar-cli');
+  });
+
+  it('bridge script extracts rate_limits fields', () => {
+    const bridge = buildClaudeStatuslineBridge(paths);
+    expect(bridge).toContain('rate_limits');
+    expect(bridge).toContain('five_hour');
+    expect(bridge).toContain('seven_day');
+    expect(bridge).toContain('used_percentage');
+    expect(bridge).toContain('resets_at');
+  });
+
+  it('bridge script performs atomic write', () => {
+    const bridge = buildClaudeStatuslineBridge(paths);
+    expect(bridge).toContain('os.rename');
+    expect(bridge).toContain('mkstemp');
   });
 });

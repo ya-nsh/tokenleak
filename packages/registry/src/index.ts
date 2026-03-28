@@ -14,7 +14,7 @@ export {
 export type { ModelPricing, CostBreakdown } from './models';
 
 export type { IProvider } from './provider';
-export type { CodexQuotaSnapshot, QuotaWindowSnapshot } from './providers/index';
+export type { ClaudeQuotaSnapshot, CodexQuotaSnapshot, QuotaWindowSnapshot } from './providers/index';
 export { ProviderRegistry } from './registry';
 export { splitJsonlRecords } from './parsers/index';
 export {
@@ -23,6 +23,7 @@ export {
   CursorProvider,
   OpenCodeProvider,
   PiProvider,
+  extractClaudeQuotaSnapshot,
   extractCodexQuotaSnapshot,
 } from './providers/index';
 export {

@@ -1,4 +1,6 @@
 export { ClaudeCodeProvider } from './claude-code';
+export { extractClaudeQuotaSnapshot } from './claude-rate-limits';
+export type { ClaudeQuotaSnapshot } from './claude-rate-limits';
 export { CodexProvider } from './codex';
 export { extractCodexQuotaSnapshot } from './codex-rate-limits';
 export type { CodexQuotaSnapshot, QuotaWindowSnapshot } from './codex-rate-limits';

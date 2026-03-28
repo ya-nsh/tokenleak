@@ -13,7 +13,7 @@ import { formatPercentLeft, formatTimestamp } from './format.js';
 import {
   buildAppPlist,
   buildCliWrapper,
-  buildClaudeStatuslineWrapper,
+  buildClaudeStatuslineBridge,
   buildDashboardWrapper,
   buildOriginalClaudeStatuslineCommandScript,
 } from './launchd.js';
@@ -22,17 +22,14 @@ import {
   clearMenubarState,
   createDefaultMenubarConfig,
   ensureMenubarDir,
+  isManagedClaudeStatusLineSetting,
   readMenubarConfig,
   readSnapshot,
   writeExecutableScript,
   writeMenubarConfig,
 } from './state.js';
+import { CURRENT_BRIDGE_VERSION } from './types.js';
 import type { MenubarConfig, MenubarPaths } from './types.js';
-
-interface CommandStatusLine {
-  type: 'command';
-  command: string;
-}
 
 const LEGACY_APP_LABEL = 'com.tokenleak.menubar.app';
 const LEGACY_SERVICE_LABEL = 'com.tokenleak.menubar.service';
@@ -99,14 +96,7 @@ function writeClaudeSettings(paths: MenubarPaths, settings: Record<string, unkno
   writeFileSync(paths.claudeSettingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
-function managedStatusLineSetting(paths: MenubarPaths): CommandStatusLine {
-  return {
-    type: 'command',
-    command: paths.claudeStatuslineWrapperPath,
-  };
-}
-
-function parseCommandStatusLine(setting: unknown): CommandStatusLine | null {
+function parseCommandStatusLine(setting: unknown): { type: 'command'; command: string } | null {
   if (typeof setting !== 'object' || setting === null) {
     return null;
   }
@@ -116,15 +106,7 @@ function parseCommandStatusLine(setting: unknown): CommandStatusLine | null {
     return null;
   }
 
-  return {
-    type: 'command',
-    command: record['command'],
-  };
-}
-
-export function isManagedClaudeStatusLineSetting(paths: MenubarPaths, value: unknown): boolean {
-  const parsed = parseCommandStatusLine(value);
-  return parsed?.command === paths.claudeStatuslineWrapperPath;
+  return { type: 'command', command: record['command'] };
 }
 
 function writeInstallArtifacts(
@@ -134,7 +116,7 @@ function writeInstallArtifacts(
 ): void {
   writeExecutableScript(paths.cliWrapperPath, buildCliWrapper(process.execPath, cliEntrypoint));
   writeExecutableScript(paths.dashboardWrapperPath, buildDashboardWrapper(paths));
-  writeExecutableScript(paths.claudeStatuslineWrapperPath, buildClaudeStatuslineWrapper(paths));
+  writeExecutableScript(paths.claudeStatuslineWrapperPath, buildClaudeStatuslineBridge(paths));
 
   const previous = parseCommandStatusLine(config.claudeStatusLineBackup);
   if (previous) {
@@ -158,8 +140,9 @@ function configureClaudeStatusLine(paths: MenubarPaths, config: MenubarConfig): 
     config.claudeStatusLineBackup = current ?? null;
   }
 
-  settings['statusLine'] = managedStatusLineSetting(paths);
+  settings['statusLine'] = { type: 'command', command: paths.claudeStatuslineWrapperPath };
   config.claudeStatusLineManaged = true;
+  config.claudeBridgeVersion = CURRENT_BRIDGE_VERSION;
   writeClaudeSettings(paths, settings);
   return config;
 }
