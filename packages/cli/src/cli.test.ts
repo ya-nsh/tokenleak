@@ -346,7 +346,7 @@ describe('interactive helpers', () => {
   test('buildLauncherBody keeps the full two-column launcher in a large terminal', () => {
     const output = stripAnsi(
       buildLauncherBody(
-        { version: '2.0.0', helpText: 'help' },
+        { version: '2.1.0', helpText: 'help' },
         createMenuOptions(),
         0,
         140,
@@ -361,7 +361,7 @@ describe('interactive helpers', () => {
   test('buildLauncherBody switches to a compact menu when the stacked launcher would overflow', () => {
     const output = stripAnsi(
       buildLauncherBody(
-        { version: '2.0.0', helpText: 'help' },
+        { version: '2.1.0', helpText: 'help' },
         createMenuOptions(),
         0,
         88,
@@ -377,7 +377,7 @@ describe('interactive helpers', () => {
   test('buildLauncherBody keeps the selected action visible in compact mode', () => {
     const output = stripAnsi(
       buildLauncherBody(
-        { version: '2.0.0', helpText: 'help' },
+        { version: '2.1.0', helpText: 'help' },
         createMenuOptions(),
         9,
         88,
@@ -807,7 +807,7 @@ describe('CLI invocation', () => {
     const exitCode = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('2.0.0');
+    expect(stdout).toContain('2.1.0');
     expect(stdout).toContain('schema');
   });
 
