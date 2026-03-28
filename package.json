@@ -12,6 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "bundle": "bun scripts/build-npm.ts",
+    "build:menubar": "bun scripts/build-menubar-app.ts",
+    "package:menubar": "bun scripts/package-menubar-app.ts",
     "prepublish": "bun run build && bun run bundle && bun scripts/prepare-publish.ts",
     "publish:npm": "bun run prepublish && cd dist && npm publish"
   },
