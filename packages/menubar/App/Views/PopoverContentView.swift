@@ -34,9 +34,8 @@ struct PopoverContentView: View {
         }
         .frame(width: 360)
         .opacity(didAppear ? 1 : 0)
-        .scaleEffect(didAppear ? 1 : 0.92, anchor: .topTrailing)
         .onAppear {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            withAnimation(.easeOut(duration: 0.15)) {
                 didAppear = true
             }
         }

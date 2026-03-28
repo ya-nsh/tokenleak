@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    private var daemonCheckCounter = 0
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
@@ -50,8 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.reloadSnapshot(animated: false)
 
         refreshTimer.start(every: 5, fireImmediately: false) { [weak self] in
-            self?.startDaemonIfNeeded()
-            self?.viewModel.reloadSnapshot(animated: false)
+            guard let self else { return }
+            // Only check daemon every 6th tick (30s) instead of every 5s
+            self.daemonCheckCounter += 1
+            if self.daemonCheckCounter % 6 == 0 {
+                self.startDaemonIfNeeded()
+            }
+            self.viewModel.reloadSnapshot(animated: false)
         }
     }
 
@@ -109,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configurePopover() {
         popover.behavior = .transient
-        popover.animates = true
+        popover.animates = false
         popover.contentSize = NSSize(width: 360, height: 400)
         popover.contentViewController = NSHostingController(
             rootView: PopoverContentView(viewModel: viewModel, onOpenSettings: { [weak self] in
