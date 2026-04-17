@@ -7,13 +7,15 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.config', 'tokenleak', 'git-cache');
 const SHIP_WINDOW_MS = 24 * 60 * 60 * 1_000;
 const CACHE_KEY_LENGTH = 16;
 const GIT_LOG_MAX_BUFFER = 64 * 1024 * 1024;
+const GIT_TIMEOUT_MS = 30_000;
+const GIT_QUICK_TIMEOUT_MS = 5_000;
 
 export interface GitCommit {
   sha: string;
@@ -165,9 +167,33 @@ function isGitRepo(repoRoot: string): boolean {
   return existsSync(join(repoRoot, '.git'));
 }
 
+/**
+ * Resolves a path inside the repo's real gitdir. `.git` may be a file (worktrees,
+ * submodules) rather than a directory, so `join(repoRoot, '.git', ...)` is wrong
+ * in the general case. `git rev-parse --git-path` handles both.
+ */
+function resolveGitPath(repoRoot: string, relative: string): string | null {
+  try {
+    const out = execFileSync(
+      'git',
+      ['-C', repoRoot, 'rev-parse', '--git-path', relative],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: GIT_QUICK_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+      },
+    ).trim();
+    if (!out) return null;
+    return isAbsolute(out) ? out : join(repoRoot, out);
+  } catch {
+    return null;
+  }
+}
+
 function headLogMtime(repoRoot: string): number | null {
-  const headPath = join(repoRoot, '.git', 'logs', 'HEAD');
-  if (!existsSync(headPath)) return null;
+  const headPath = resolveGitPath(repoRoot, 'logs/HEAD');
+  if (!headPath || !existsSync(headPath)) return null;
   try {
     return statSync(headPath).mtimeMs;
   } catch {
@@ -177,12 +203,17 @@ function headLogMtime(repoRoot: string): number | null {
 
 function loadCommitsFromGit(repoRoot: string): GitCommit[] {
   try {
+    // `--branches` covers local branches only. Using `--all` would include
+    // remote-tracking refs, which change on `git fetch` without touching
+    // `logs/HEAD` — so cache invalidation would lag behind the query scope.
+    // Local branches are also the right semantic scope for "did this session
+    // ship?" attribution: remote commits the user didn't author don't count.
     const raw = execFileSync(
       'git',
       [
         '-C', repoRoot,
         'log',
-        '--all',
+        '--branches',
         '--no-merges',
         '--format=%x00%H%x01%ct%x01%s',
         '--shortstat',
@@ -191,6 +222,8 @@ function loadCommitsFromGit(repoRoot: string): GitCommit[] {
         encoding: 'utf8',
         maxBuffer: GIT_LOG_MAX_BUFFER,
         stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: GIT_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
       },
     );
     return parseGitLog(raw);

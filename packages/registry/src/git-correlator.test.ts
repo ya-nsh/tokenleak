@@ -222,4 +222,22 @@ describe('GitCorrelator', () => {
     const commits = second.getCommits(repo);
     expect(commits).toHaveLength(3);
   });
+
+  it('supports linked worktrees where .git is a file', () => {
+    const worktreePath = join(tmpRoot, 'worktree');
+    execFileSync(
+      'git',
+      ['worktree', 'add', '-b', 'side', worktreePath],
+      { cwd: repo, stdio: 'ignore' },
+    );
+
+    const worktreeCacheDir = join(tmpRoot, 'worktree-cache');
+    const correlator = new GitCorrelator({ cacheDir: worktreeCacheDir });
+    const commits = correlator.getCommits(worktreePath);
+    expect(commits).toHaveLength(3);
+
+    // Disk cache should have been written: second fresh correlator reads it back.
+    const second = new GitCorrelator({ cacheDir: worktreeCacheDir });
+    expect(second.getCommits(worktreePath)).toHaveLength(3);
+  });
 });
