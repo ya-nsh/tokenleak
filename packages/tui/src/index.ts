@@ -19,6 +19,7 @@ import {
   ensureCompareOutput,
   ensureMoreStats,
   ensureReplayReport,
+  ensureReceipt,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -36,6 +37,7 @@ import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel } from './panels/replay.js';
+import { createReceiptsPanel } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -116,6 +118,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       })) ?? [];
       return createWrappedPanel(windowStats, achievements, providers, state.wrappedScrollOffset, ensureMoreStats(state));
     }
+    case 'receipts':
+      return createReceiptsPanel(state, ensureReceipt(state));
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -187,6 +191,7 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.replayExpandedBlocks = new Set();
   state.replayDate = null;
   state.explainDate = null;
+  state.receiptsScrollOffset = 0;
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
@@ -354,6 +359,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedExplainReport = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedReceipt = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -366,6 +372,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedCompareOutput = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedReceipt = null;
 }
 
 /** Navigate replay date forward or backward by one day */
@@ -398,14 +405,15 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '7': 'export',
   '8': 'wrapped',
   '9': 'replay',
+  'r': 'receipts',
 };
 
 const VIEW_ORDER: ViewMode[] = [
-  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay',
+  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay', 'receipts',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay', 'receipts']);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
@@ -421,6 +429,8 @@ function getScrollableItemCount(state: AppState): number {
       return 30; // approximate content rows
     case 'replay':
       return ensureReplayReport(state)?.flowBlocks.length ?? 0;
+    case 'receipts':
+      return ensureReceipt(state)?.lines.length ?? 0;
     default:
       return 0;
   }
@@ -433,6 +443,7 @@ function getVisibleCount(view: ViewMode): number {
     case 'compare': return 6;
     case 'wrapped': return 20;
     case 'replay': return 15;
+    case 'receipts': return 12;
     default: return 10;
   }
 }
@@ -444,6 +455,7 @@ function getScrollOffset(state: AppState): number {
     case 'compare': return state.compareScrollOffset;
     case 'wrapped': return state.wrappedScrollOffset;
     case 'replay': return state.replayScrollOffset;
+    case 'receipts': return state.receiptsScrollOffset;
     default: return 0;
   }
 }
@@ -455,6 +467,7 @@ function setScrollOffset(state: AppState, value: number): void {
     case 'compare': state.compareScrollOffset = value; break;
     case 'wrapped': state.wrappedScrollOffset = value; break;
     case 'replay': state.replayScrollOffset = value; break;
+    case 'receipts': state.receiptsScrollOffset = value; break;
   }
 }
 

@@ -10,6 +10,7 @@ import {
   buildExplainReport,
   buildFocusReport,
   buildReplayReport,
+  buildReceipt,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
@@ -31,7 +32,7 @@ import {
   initPricing,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
+import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderReceiptSvg, renderReceiptPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
@@ -42,6 +43,7 @@ import { buildCursorHelpText, hasCursorUsageCache, isCursorLoggedIn, runCursorCo
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildReplayHelpText, renderReplayTerminal } from './replay.js';
+import { buildReceiptsHelpText, collectEventsForReceipt, renderReceiptTerminal } from './receipts.js';
 import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
@@ -158,12 +160,14 @@ function buildHelpText(): string {
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
     '  tokenleak replay [date] [flags]',
+    '  tokenleak receipts [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
     '  replay [date]          Replay a day\'s session timeline (defaults to today)',
+    '  receipts               Itemized receipt of spend by prompt behavior',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -1769,6 +1773,179 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 }
 
+function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
+  const cliArgs: Record<string, unknown> = {};
+  let index = 0;
+
+  while (index < argv.length) {
+    const arg = argv[index]!;
+    switch (arg) {
+      case '--help':
+      case '-h':
+        cliArgs['help'] = true;
+        index += 1;
+        break;
+      case '--version':
+      case '-v':
+        cliArgs['version'] = true;
+        index += 1;
+        break;
+      case '--format':
+      case '-f':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['format'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--output':
+      case '-o':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['output'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--since':
+      case '-s':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['since'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--until':
+      case '-u':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['until'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--days':
+      case '-d':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['days'] = Number(argv[index + 1]!);
+        index += 2;
+        break;
+      case '--theme':
+      case '-t':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['theme'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--provider':
+      case '-p':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['provider'] = argv[index + 1]!;
+        index += 2;
+        break;
+      case '--top':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['top'] = Number(argv[index + 1]!);
+        index += 2;
+        break;
+      case '--claude':
+        cliArgs['claude'] = true;
+        index += 1;
+        break;
+      case '--codex':
+        cliArgs['codex'] = true;
+        index += 1;
+        break;
+      case '--cursor':
+        cliArgs['cursor'] = true;
+        index += 1;
+        break;
+      case '--pi':
+        cliArgs['pi'] = true;
+        index += 1;
+        break;
+      case '--openCode':
+      case '--open-code':
+        cliArgs['openCode'] = true;
+        index += 1;
+        break;
+      case '--allProviders':
+      case '--all-providers':
+        cliArgs['allProviders'] = true;
+        index += 1;
+        break;
+      case '--noColor':
+      case '--no-color':
+        cliArgs['noColor'] = true;
+        index += 1;
+        break;
+      default:
+        throw new TokenleakError(`Unknown receipts flag "${arg}"`);
+    }
+  }
+
+  return cliArgs;
+}
+
+function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'svg' | 'png' | 'json' {
+  const explicit = cliArgs['format'];
+  if (typeof explicit === 'string') {
+    if (explicit === 'terminal' || explicit === 'svg' || explicit === 'png' || explicit === 'json') {
+      return explicit;
+    }
+    throw new TokenleakError(`Unknown receipts format "${explicit}" (use terminal, svg, png, or json)`);
+  }
+  const output = cliArgs['output'];
+  if (typeof output === 'string') {
+    if (output.endsWith('.svg')) return 'svg';
+    if (output.endsWith('.png')) return 'png';
+    if (output.endsWith('.json')) return 'json';
+  }
+  return 'terminal';
+}
+
+async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  if (config.allProviders && (
+    config.provider || config.claude || config.codex || config.cursor || config.pi || config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  const format = inferReceiptsFormat(cliArgs);
+  const theme: 'dark' | 'light' = config.theme === 'light' ? 'light' : 'dark';
+  const topLines = typeof cliArgs['top'] === 'number' && Number.isFinite(cliArgs['top'] as number)
+    ? (cliArgs['top'] as number)
+    : undefined;
+
+  const range = computeDateRange({ since: config.since, until: config.until, days: config.days });
+  const available = await selectAvailableProviders(config);
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const data = await loadTokenleakData(available, range);
+  const events = collectEventsForReceipt(data.providers);
+  const receipt = buildReceipt(events, range, topLines !== undefined ? { topLines } : {});
+
+  if (format === 'json') {
+    const json = JSON.stringify(receipt, null, 2);
+    if (config.output) writeFileSync(config.output, json);
+    else process.stdout.write(json + '\n');
+    return;
+  }
+
+  if (format === 'svg') {
+    const svg = renderReceiptSvg(receipt, { theme });
+    if (config.output) writeFileSync(config.output, svg);
+    else process.stdout.write(svg + '\n');
+    return;
+  }
+
+  if (format === 'png') {
+    const png = await renderReceiptPng(receipt, { theme });
+    if (!config.output) {
+      throw new TokenleakError('--output <path> is required for --format png');
+    }
+    writeFileSync(config.output, png);
+    return;
+  }
+
+  const terminalWidth = config.width;
+  const rendered = renderReceiptTerminal(receipt, terminalWidth);
+  if (config.output) writeFileSync(config.output, rendered);
+  else process.stdout.write(rendered + '\n');
+}
+
 const main = defineCommand({
   meta: {
     name: 'tokenleak',
@@ -2135,6 +2312,27 @@ if (isDirectExecution) {
       }
 
       await runCursorCommand(argv.slice(1));
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+
+  if (argv[0] === 'receipts') {
+    try {
+      const cliArgs = parseReceiptsArgs(argv.slice(1));
+
+      if (cliArgs['help']) {
+        process.stdout.write(buildReceiptsHelpText());
+        process.exit(0);
+      }
+
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await runReceipts(cliArgs);
       process.exit(0);
     } catch (error: unknown) {
       handleError(error);

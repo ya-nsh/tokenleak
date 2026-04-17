@@ -8,6 +8,7 @@ import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 export const INTERACTIVE_FLAG_LINES = [
   '    explain <date>       explain one day of usage',
   '    focus                rank deep-work sessions',
+  '    receipts             itemized receipt of spend by prompt behavior',
   '-f, --format <format>   terminal | png | svg | json | wrapped',
   '-t, --theme <theme>     dark | light',
   '-s, --since <date>      YYYY-MM-DD start date',

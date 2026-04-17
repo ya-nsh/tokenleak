@@ -34,7 +34,10 @@ interface UsageRecord {
   messageId?: string;
   sessionId?: string;
   projectId?: string;
+  prompt?: string;
 }
+
+const MAX_PROMPT_CHARS = 2_000;
 
 function resolveBaseDir(baseDir?: string): string {
   if (baseDir) {
@@ -133,6 +136,56 @@ function extractUsage(record: unknown): UsageRecord | null {
     cacheWriteTokens,
     messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
   };
+}
+
+/**
+ * Extracts a human-authored user prompt from a JSONL record. Returns null for
+ * non-user records, tool results, and internal (non-external) user messages.
+ *
+ * Handles both the legacy `type: "human"` fixture schema and the current
+ * `type: "user"` live schema. Content may be either a plain string or an array
+ * of content blocks ([{type: "text", text: "..."}, ...]).
+ */
+export function extractUserPrompt(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) return null;
+  const rec = record as Record<string, unknown>;
+
+  const type = rec['type'];
+  if (type !== 'user' && type !== 'human') return null;
+
+  // Filter out synthetic / internal user messages. If userType is present, it
+  // must be 'external'; if absent (older schema), we treat as external.
+  const userType = rec['userType'];
+  if (userType !== undefined && userType !== 'external') return null;
+
+  const message = rec['message'];
+  if (typeof message !== 'object' || message === null) return null;
+  const msg = message as Record<string, unknown>;
+
+  const content = msg['content'];
+  let text: string | null = null;
+
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+      const b = block as Record<string, unknown>;
+      if (b['type'] === 'text' && typeof b['text'] === 'string') {
+        parts.push(b['text']);
+      }
+    }
+    if (parts.length > 0) text = parts.join('\n');
+  }
+
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+
+  return trimmed.length > MAX_PROMPT_CHARS
+    ? trimmed.slice(0, MAX_PROMPT_CHARS)
+    : trimmed;
 }
 
 function toCachePricing(
@@ -265,11 +318,20 @@ export class ClaudeCodeProvider implements IProvider {
       const projectId = relative(this.baseDir, dirname(file)).split(sep).join('/');
 
       try {
+        let lastPrompt: string | null = null;
         for await (const record of splitJsonlRecords(file)) {
+          const userPrompt = extractUserPrompt(record);
+          if (userPrompt !== null) {
+            lastPrompt = userPrompt;
+            continue;
+          }
           const usage = extractUsage(record);
           if (usage !== null && isInRange(usage.date, range)) {
             usage.sessionId = relativeFile;
             usage.projectId = projectId;
+            if (lastPrompt !== null) {
+              usage.prompt = lastPrompt;
+            }
             if (usage.messageId) {
               latestRecordsByMessageId.set(usage.messageId, usage);
             } else {
@@ -314,6 +376,7 @@ export class ClaudeCodeProvider implements IProvider {
         pricing: toCachePricing(costBreakdown.pricing),
         sessionId: record.sessionId,
         projectId: record.projectId,
+        prompt: record.prompt,
       });
     }
     const totalTokens = daily.reduce((sum, d) => sum + d.totalTokens, 0);

@@ -75,6 +75,19 @@ export {
   computeModelMixShift,
   buildExplainReport,
   buildReplayReport,
+  clusterPrompts,
+  tokenBigrams,
+  buildReceipt,
+} from './aggregation';
+
+export type {
+  PromptCluster,
+  ClusterOptions,
+  Receipt,
+  ReceiptLine,
+  ReceiptSummary,
+  ReceiptCategory,
+  BuildReceiptOptions,
 } from './aggregation';
 
 export {
