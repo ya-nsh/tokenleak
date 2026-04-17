@@ -15,6 +15,13 @@ export type { ModelPricing, CostBreakdown } from './models';
 
 export type { IProvider } from './provider';
 export { ProviderRegistry } from './registry';
+export { GitCorrelator, parseGitLog } from './git-correlator';
+export type {
+  GitCommit,
+  GitCorrelatorOptions,
+  SessionLike,
+  ShipStatus,
+} from './git-correlator';
 export { splitJsonlRecords } from './parsers/index';
 export { ClaudeCodeProvider, CodexProvider, CursorProvider, OpenCodeProvider, PiProvider } from './providers/index';
 export {
