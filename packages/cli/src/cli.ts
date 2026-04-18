@@ -1832,11 +1832,16 @@ function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
         cliArgs['provider'] = argv[index + 1]!;
         index += 2;
         break;
-      case '--top':
+      case '--top': {
         if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
-        cliArgs['top'] = Number(argv[index + 1]!);
+        const parsed = Number(argv[index + 1]!);
+        if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+          throw new TokenleakError('--top must be a positive integer');
+        }
+        cliArgs['top'] = parsed;
         index += 2;
         break;
+      }
       case '--claude':
         cliArgs['claude'] = true;
         index += 1;
@@ -1886,9 +1891,10 @@ function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'sv
   }
   const output = cliArgs['output'];
   if (typeof output === 'string') {
-    if (output.endsWith('.svg')) return 'svg';
-    if (output.endsWith('.png')) return 'png';
-    if (output.endsWith('.json')) return 'json';
+    const inferred = inferFormatFromPath(output);
+    if (inferred === 'svg' || inferred === 'png' || inferred === 'json') {
+      return inferred;
+    }
   }
   return 'terminal';
 }
@@ -1932,10 +1938,10 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   }
 
   if (format === 'png') {
-    const png = await renderReceiptPng(receipt, { theme });
     if (!config.output) {
       throw new TokenleakError('--output <path> is required for --format png');
     }
+    const png = await renderReceiptPng(receipt, { theme });
     writeFileSync(config.output, png);
     return;
   }

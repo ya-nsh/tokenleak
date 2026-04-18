@@ -8,10 +8,10 @@ const VISIBLE_ROWS = 12;
 const CATEGORY_LABELS: Record<string, string> = {
   debugging: 'DEBUG',
   styling: 'STYLE',
-  explaining: 'EXPLAIN',
+  'explain-again': 'EXPLAIN',
   refactoring: 'REFACTOR',
   testing: 'TEST',
-  'writing-code': 'NEW CODE',
+  'new-code': 'NEW CODE',
   opinion: 'OPINION',
   typo: 'TYPO',
   misc: 'MISC',

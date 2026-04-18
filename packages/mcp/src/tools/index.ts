@@ -96,7 +96,13 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
       until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
       provider: z.string().optional().describe('Filter to a specific provider by name'),
-      topLines: z.number().optional().describe('Maximum number of line items to return (default: 12)'),
+      topLines: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Maximum number of line items to return (default: 12, max: 100)'),
     },
     async (args) => handleGetReceiptLines(args, registry),
   );

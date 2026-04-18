@@ -57,10 +57,10 @@ describe('buildReceipt', () => {
     const categories = receipt.lines.map((l) => l.category);
     expect(categories).toContain('debugging');
     expect(categories).toContain('styling');
-    expect(categories).toContain('explaining');
+    expect(categories).toContain('explain-again');
     expect(categories).toContain('refactoring');
     expect(categories).toContain('testing');
-    expect(categories).toContain('writing-code');
+    expect(categories).toContain('new-code');
     expect(categories).toContain('opinion');
     expect(categories).toContain('typo');
     expect(categories).toContain('misc');

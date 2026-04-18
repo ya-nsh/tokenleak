@@ -7,10 +7,10 @@ const DESCRIPTION_MAX_CHARS = 80;
 export type ReceiptCategory =
   | 'debugging'
   | 'styling'
-  | 'explaining'
+  | 'explain-again'
   | 'refactoring'
   | 'testing'
-  | 'writing-code'
+  | 'new-code'
   | 'opinion'
   | 'typo'
   | 'misc';
@@ -64,7 +64,7 @@ export function buildReceipt(
   let unlabeledEvents = 0;
   let serviceFees = 0;
   for (const e of events) {
-    if (typeof e.prompt === 'string' && e.prompt.length > 0) {
+    if (typeof e.prompt === 'string' && e.prompt.trim().length > 0) {
       withPrompts.push(e);
     } else {
       unlabeledEvents += 1;
@@ -76,7 +76,9 @@ export function buildReceipt(
     similarityThreshold: options.similarityThreshold,
   });
 
-  const ranked = clusters.slice(0, topLines);
+  const maxLines = Math.max(1, Math.floor(topLines));
+  const hasOverflow = clusters.length > maxLines;
+  const ranked = clusters.slice(0, hasOverflow ? maxLines - 1 : maxLines);
   const lines: ReceiptLine[] = ranked.map((c) => ({
     description: formatDescription(c.canonicalPrompt),
     category: classify(c.canonicalPrompt),
@@ -84,6 +86,17 @@ export function buildReceipt(
     totalCost: c.totalCost,
     totalTokens: c.totalTokens,
   }));
+
+  const overflow = clusters.slice(ranked.length);
+  if (overflow.length > 0) {
+    lines.push({
+      description: `Other prompt clusters (${overflow.length})`,
+      category: 'misc',
+      quantity: overflow.reduce((sum, c) => sum + c.count, 0),
+      totalCost: overflow.reduce((sum, c) => sum + c.totalCost, 0),
+      totalTokens: overflow.reduce((sum, c) => sum + c.totalTokens, 0),
+    });
+  }
 
   const subtotal = lines.reduce((sum, l) => sum + l.totalCost, 0);
   const accountedPrompts = lines.reduce((sum, l) => sum + l.quantity, 0);
@@ -123,13 +136,13 @@ const CATEGORY_RULES: CategoryRule[] = [
     pattern: /\b(center|centre|padding|margin|flex|grid|css|tailwind|style|color|colou?r|font|align|div|layout)\b/i,
   },
   {
-    category: 'explaining',
+    category: 'explain-again',
     pattern: /\b(explain|what does|what is|how does|why is|walk me through|can you describe|tell me about)\b/i,
   },
   { category: 'refactoring', pattern: /\b(refactor|rename|extract|simplif(y|ies)|clean ?up|deduplic|inline)\b/i },
   { category: 'testing', pattern: /\b(test|spec|assert|mock|stub|coverage|jest|vitest|bun test)\b/i },
   {
-    category: 'writing-code',
+    category: 'new-code',
     pattern: /\b(implement|add (a|an|the)?|create (a|an|the)?|build (a|an|the)?|write (a|an|the)?|generate|scaffold)\b/i,
   },
   {

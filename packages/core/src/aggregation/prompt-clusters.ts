@@ -32,7 +32,7 @@ export function clusterPrompts(
   options: ClusterOptions = {},
 ): PromptCluster[] {
   const threshold = options.similarityThreshold ?? DEFAULT_SIMILARITY_THRESHOLD;
-  const withPrompts = events.filter((e) => typeof e.prompt === 'string' && e.prompt.length > 0);
+  const withPrompts = events.filter((e) => typeof e.prompt === 'string' && e.prompt.trim().length > 0);
   if (withPrompts.length === 0) return [];
 
   interface WorkingCluster {
@@ -47,9 +47,14 @@ export function clusterPrompts(
   const clusters: WorkingCluster[] = [];
 
   for (const event of withPrompts) {
-    const prompt = event.prompt!;
+    const prompt = event.prompt!.trim();
     const signature = tokenBigrams(prompt);
-    if (signature.size === 0) continue;
+    if (signature.size === 0) {
+      // Prompts made only of short tokens (e.g. "go", "ok") produce no bigrams.
+      // Fall back to a unique exact-match singleton so the billed event still
+      // lands in clustering and never disappears from the receipt total.
+      signature.add(`\u0000exact\u0001${normalize(prompt) || prompt.toLowerCase()}`);
+    }
 
     let best: { cluster: WorkingCluster; sim: number } | null = null;
     for (const cluster of clusters) {

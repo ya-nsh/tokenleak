@@ -103,9 +103,21 @@ describe('clusterPrompts', () => {
     ]);
   });
 
-  it('skips events whose prompts normalize to empty', () => {
+  it('keeps prompts that normalize to empty as singleton clusters so their cost is counted', () => {
     const events = [
       makeEvent({ prompt: '!!!???', cost: 0.01 }),
+      makeEvent({ prompt: 'go', cost: 0.02 }),
+      makeEvent({ prompt: 'real prompt content here', cost: 0.05 }),
+    ];
+    const clusters = clusterPrompts(events);
+    expect(clusters).toHaveLength(3);
+    const totalCost = clusters.reduce((sum, c) => sum + c.totalCost, 0);
+    expect(totalCost).toBeCloseTo(0.08, 10);
+  });
+
+  it('skips events with whitespace-only prompts', () => {
+    const events = [
+      makeEvent({ prompt: '   ', cost: 0.01 }),
       makeEvent({ prompt: 'real prompt content here', cost: 0.05 }),
     ];
     const clusters = clusterPrompts(events);

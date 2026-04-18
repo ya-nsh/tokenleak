@@ -305,6 +305,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
     currentState.replayScrollOffset = 0;
+    currentState.receiptsScrollOffset = 0;
     currentState.replayExpandedBlocks = new Set();
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
@@ -360,6 +361,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
   state.cachedReceipt = null;
+  state.receiptsScrollOffset = 0;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -405,7 +407,7 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '7': 'export',
   '8': 'wrapped',
   '9': 'replay',
-  'r': 'receipts',
+  'R': 'receipts',
 };
 
 const VIEW_ORDER: ViewMode[] = [

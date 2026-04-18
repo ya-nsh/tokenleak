@@ -39,19 +39,19 @@ const LIGHT: ReceiptTheme = {
 const CATEGORY_LABELS: Record<string, string> = {
   debugging: 'DEBUGGING',
   styling: 'STYLING',
-  explaining: 'EXPLAIN AGAIN',
+  'explain-again': 'EXPLAIN AGAIN',
   refactoring: 'REFACTOR',
   testing: 'TESTING',
-  'writing-code': 'NEW CODE',
+  'new-code': 'NEW CODE',
   opinion: 'OPINION POLL',
   typo: 'TYPO FIX',
   misc: 'MISC',
 };
 
+const EMPTY_STATE_HEIGHT = 80;
+
 function formatDollars(cost: number): string {
-  if (cost >= 100) return `$${cost.toFixed(0)}`;
-  if (cost >= 10) return `$${cost.toFixed(2)}`;
-  return `$${cost.toFixed(cost >= 1 ? 2 : 3)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 function formatDate(iso: string): string {
@@ -86,7 +86,9 @@ export function renderReceiptSvg(
 ): string {
   const theme = options.theme === 'light' ? LIGHT : DARK;
 
-  const linesHeight = receipt.lines.length * LINE_HEIGHT + SECTION_GAP * 2;
+  const bodyHeight =
+    receipt.lines.length === 0 ? EMPTY_STATE_HEIGHT : receipt.lines.length * LINE_HEIGHT;
+  const linesHeight = bodyHeight + SECTION_GAP * 2;
   const totalsHeight = 180;
   const height =
     HEADER_HEIGHT + linesHeight + totalsHeight + FOOTER_HEIGHT;
@@ -126,7 +128,7 @@ export function renderReceiptSvg(
     parts.push(
       `<text x="${WIDTH / 2}" y="${y + 40}" font-family="${MONO}" font-size="14" fill="${theme.inkDim}" text-anchor="middle">No itemized prompts captured in this period.</text>`,
     );
-    y += 80;
+    y += EMPTY_STATE_HEIGHT;
   } else {
     for (const line of receipt.lines) {
       parts.push(lineItemRow(line, y, theme));

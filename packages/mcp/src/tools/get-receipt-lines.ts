@@ -24,6 +24,13 @@ export async function handleGetReceiptLines(
       if (provider.events) events.push(...provider.events);
     }
 
+    if (
+      args.topLines !== undefined &&
+      (!Number.isInteger(args.topLines) || args.topLines <= 0)
+    ) {
+      throw new Error('topLines must be a positive integer');
+    }
+
     const receipt = buildReceipt(
       events,
       range,

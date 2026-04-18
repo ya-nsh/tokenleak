@@ -3,20 +3,19 @@ import type { Receipt, ReceiptLine, UsageEvent } from '@tokenleak/core';
 const CATEGORY_LABELS: Record<string, string> = {
   debugging: 'DEBUGGING',
   styling: 'STYLING',
-  explaining: 'EXPLAIN AGAIN',
+  'explain-again': 'EXPLAIN AGAIN',
   refactoring: 'REFACTOR',
   testing: 'TESTING',
-  'writing-code': 'NEW CODE',
+  'new-code': 'NEW CODE',
   opinion: 'OPINION POLL',
   typo: 'TYPO FIX',
   misc: 'MISC',
 };
 
+const MIN_DOT_PADDING = 2;
+
 function formatDollars(cost: number): string {
-  if (cost >= 100) return `$${cost.toFixed(0)}`;
-  if (cost >= 10) return `$${cost.toFixed(2)}`;
-  if (cost >= 1) return `$${cost.toFixed(2)}`;
-  return `$${cost.toFixed(3)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 function dots(n: number): string {
@@ -79,7 +78,7 @@ function renderLineItem(line: ReceiptLine, width: number): string[] {
   const qtyStr = `${line.quantity}×`;
   const costStr = formatDollars(line.totalCost);
 
-  const descriptionSpace = width - costStr.length - 1;
+  const descriptionSpace = width - costStr.length - MIN_DOT_PADDING;
   const description = truncate(`${qtyStr} ${line.description}`, descriptionSpace);
   const padding = dots(width - description.length - costStr.length);
 
