@@ -82,6 +82,9 @@ export function createHelpPanel() {
           ['h', 'Previous day'],
           ['l', 'Next day'],
         ]),
+        ...helpSection('RECEIPTS VIEW', [
+          ['j / k', 'Scroll line items'],
+        ]),
       ),
     ),
 
