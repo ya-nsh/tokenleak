@@ -1,4 +1,16 @@
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { MAX_JSONL_RECORD_BYTES } from '@tokenleak/core';
+
+export interface JsonlRecordWarning {
+  kind: 'parse' | 'oversize';
+  file: string;
+  line: number;
+}
+
+export interface SplitJsonlOptions {
+  onWarning?: (warning: JsonlRecordWarning) => void;
+}
 
 /**
  * Returns the maximum allowed record size in bytes.
@@ -26,36 +38,40 @@ function getMaxRecordBytes(): number {
  */
 export async function* splitJsonlRecords(
   filePath: string,
+  options: SplitJsonlOptions = {},
 ): AsyncGenerator<unknown> {
   const maxBytes = getMaxRecordBytes();
-
-  const file = Bun.file(filePath);
-  const text = await file.text();
-  const lines = text.split('\n');
+  const input = createReadStream(filePath, { encoding: 'utf8' });
+  const lines = createInterface({
+    input,
+    crlfDelay: Infinity,
+  });
 
   let lineNumber = 0;
 
-  for (const line of lines) {
-    lineNumber++;
+  try {
+    for await (const line of lines) {
+      lineNumber += 1;
 
-    // Skip blank lines and lines that are only whitespace/null bytes
-    if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
-      continue;
-    }
+      // Skip blank lines and lines that are only whitespace/null bytes
+      if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
+        continue;
+      }
 
-    const byteLength = new TextEncoder().encode(line).byteLength;
-    if (byteLength > maxBytes) {
-      // Skip oversized records instead of crashing — real-world JSONL files
-      // can have corrupted entries
-      continue;
-    }
+      const byteLength = new TextEncoder().encode(line).byteLength;
+      if (byteLength > maxBytes) {
+        options.onWarning?.({ kind: 'oversize', file: filePath, line: lineNumber });
+        continue;
+      }
 
-    try {
-      yield JSON.parse(line) as unknown;
-    } catch {
-      // Skip malformed JSON lines — real-world log files can have corrupted
-      // entries (null bytes, partial writes, etc.)
-      continue;
+      try {
+        yield JSON.parse(line) as unknown;
+      } catch {
+        options.onWarning?.({ kind: 'parse', file: filePath, line: lineNumber });
+      }
     }
+  } finally {
+    lines.close();
+    input.close();
   }
 }

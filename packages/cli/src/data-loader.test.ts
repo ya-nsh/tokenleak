@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { DateRange, ProviderData, ProviderColors } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
-import { loadTokenleakData } from './data-loader';
+import { loadCompareTokenleakData, loadTokenleakData } from './data-loader';
 import { TokenleakError } from './errors';
 
 const COLORS: ProviderColors = {
@@ -69,5 +69,38 @@ describe('loadTokenleakData', () => {
     expect(output.providers[0]?.provider).toBe('claude-code');
     expect(output.dateRange).toEqual(RANGE);
     expect(output.more?.cacheRoi).toBeDefined();
+  });
+
+  it('builds compare output with previous in periodA and current in periodB', async () => {
+    const result = await loadCompareTokenleakData([
+      createProvider('claude-code', async (range) => ({
+        ...createProviderData('claude-code'),
+        daily: [{
+          date: range.until,
+          inputTokens: range.since.startsWith('2026-02') ? 200 : 400,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: range.since.startsWith('2026-02') ? 200 : 400,
+          cost: range.since.startsWith('2026-02') ? 0.2 : 0.4,
+          models: [{
+            model: 'claude-sonnet-4',
+            inputTokens: range.since.startsWith('2026-02') ? 200 : 400,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: range.since.startsWith('2026-02') ? 200 : 400,
+            cost: range.since.startsWith('2026-02') ? 0.2 : 0.4,
+          }],
+        }],
+        totalTokens: range.since.startsWith('2026-02') ? 200 : 400,
+        totalCost: range.since.startsWith('2026-02') ? 0.2 : 0.4,
+      })),
+    ], RANGE, 'auto');
+
+    expect(result.compareOutput.periodA.range.until).toBe('2026-02-28');
+    expect(result.compareOutput.periodB.range.until).toBe('2026-03-14');
+    expect(result.compareOutput.deltas.tokens).toBe(200);
+    expect(result.output.more?.compare?.previousStats.totalTokens).toBe(200);
   });
 });

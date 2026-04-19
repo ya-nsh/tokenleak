@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import { dirname, basename, relative } from 'node:path';
+import { join } from 'node:path';
 import type {
   AttributionCluster,
   AttributionTaskStyle,
@@ -71,6 +73,19 @@ export function inferRepoRoot(projectId?: string | null): string | null {
   const normalized = normalizePathLike(projectId.trim());
   if (!isAbsoluteProjectPath(normalized)) {
     return normalized;
+  }
+
+  let current = normalized;
+  while (true) {
+    if (existsSync(join(current, '.git'))) {
+      return current;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
   }
 
   const parts = normalized.split('/').filter(Boolean);
@@ -456,7 +471,10 @@ export function buildProjectRollups(
           cost: 0,
           models: [],
         }));
-      const streak = calculateStreaks(streakDaily).longest;
+      const streak = calculateStreaks(
+        streakDaily,
+        streakDaily[streakDaily.length - 1]?.date ?? '1970-01-01',
+      ).longest;
       return {
         projectId: project.projectId,
         repoRoot: project.repoRoot,

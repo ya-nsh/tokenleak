@@ -452,13 +452,13 @@ describe('computeDateRange', () => {
 
   test('computes since from days when --since not provided', () => {
     const range = computeDateRange({ until: '2025-06-15', days: 30 });
-    expect(range.since).toBe('2025-05-16');
+    expect(range.since).toBe('2025-05-17');
     expect(range.until).toBe('2025-06-15');
   });
 
   test('defaults to 90 days when neither --since nor --days provided', () => {
     const range = computeDateRange({ until: '2025-06-15' });
-    expect(range.since).toBe('2025-03-17');
+    expect(range.since).toBe('2025-03-18');
     expect(range.until).toBe('2025-06-15');
   });
 

@@ -1,4 +1,5 @@
 import { Box, Text } from '@opentui/core';
+import { getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_DAYS } from '../lib/state.js';
 import { COLORS, BOLD } from '../lib/theme.js';
@@ -104,11 +105,8 @@ function createProvidersPanel(state: AppState) {
       let provCost = p.totalCost;
 
       if (days && days > 0 && p.daily) {
-        const now = new Date();
-        const since = new Date(now);
-        since.setDate(since.getDate() - days);
-        const sinceStr = since.toISOString().slice(0, 10);
-        const todayStr = now.toISOString().slice(0, 10);
+        const todayStr = getTodayLocal();
+        const sinceStr = shiftDateStringLocal(todayStr, -(days - 1));
         const filtered = p.daily.filter((d) => d.date >= sinceStr && d.date <= todayStr);
         provTokens = filtered.reduce((s, d) => s + d.totalTokens, 0);
         provCost = filtered.reduce((s, d) => s + d.cost, 0);

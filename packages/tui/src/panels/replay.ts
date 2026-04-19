@@ -8,7 +8,7 @@ const HEATMAP_SLOTS = 48;
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
-  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function formatDuration(ms: number): string {
@@ -27,7 +27,7 @@ function renderActivityBar(report: ReplayReport) {
   const slotTokens = new Array<number>(HEATMAP_SLOTS).fill(0);
   for (const event of report.events) {
     const date = new Date(event.timestamp);
-    const slot = Math.min(date.getUTCHours() * 2 + Math.floor(date.getUTCMinutes() / 30), HEATMAP_SLOTS - 1);
+    const slot = Math.min(date.getHours() * 2 + Math.floor(date.getMinutes() / 30), HEATMAP_SLOTS - 1);
     slotTokens[slot] += event.totalTokens;
   }
 

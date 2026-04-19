@@ -6,7 +6,10 @@ import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
  * Days must be sorted by date. A gap of 1+ days resets the streak.
  * Current streak counts back from the most recent day.
  */
-export function calculateStreaks(daily: DailyUsage[]): {
+export function calculateStreaks(
+  daily: DailyUsage[],
+  referenceDate: string,
+): {
   current: number;
   longest: number;
 } {
@@ -37,7 +40,13 @@ export function calculateStreaks(daily: DailyUsage[]): {
     }
   }
 
-  // Current streak: count back from the last day
+  const referenceMs = dateToUtcMs(referenceDate);
+  const lastActiveMs = dateToUtcMs(sorted[sorted.length - 1]!.date);
+  if (lastActiveMs !== referenceMs) {
+    return { current: 0, longest };
+  }
+
+  // Current streak: count back from the reference date
   let current = 1;
   for (let i = sorted.length - 1; i > 0; i--) {
     const curr = dateToUtcMs(sorted[i]!.date);

@@ -1,4 +1,4 @@
-import { DEFAULT_DAYS } from '@tokenleak/core';
+import { DEFAULT_DAYS, getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
 import type { DateRange } from '@tokenleak/core';
 import { TokenleakError } from './errors.js';
 
@@ -17,7 +17,7 @@ export function computeDateRange(args: {
   until?: string;
   days?: number;
 }): DateRange {
-  const until = args.until ?? new Date().toISOString().slice(0, 10);
+  const until = args.until ?? getTodayLocal();
 
   if (args.until && !isValidDate(args.until)) {
     throw new TokenleakError(
@@ -37,9 +37,7 @@ export function computeDateRange(args: {
     since = args.since;
   } else {
     const daysBack = args.days ?? DEFAULT_DAYS;
-    const d = new Date(until);
-    d.setDate(d.getDate() - daysBack);
-    since = d.toISOString().slice(0, 10);
+    since = shiftDateStringLocal(until, -(daysBack - 1));
   }
 
   if (since > until) {

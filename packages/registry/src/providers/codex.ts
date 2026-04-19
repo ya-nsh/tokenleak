@@ -7,6 +7,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
@@ -147,6 +148,21 @@ function toCachePricing(
     cacheRead: pricing.cacheRead,
     cacheWrite: pricing.cacheWrite,
   };
+}
+
+function incrementWarningCount(
+  warnings: Map<string, ProviderWarning>,
+  kind: ProviderWarning['kind'],
+  file: string,
+): void {
+  const key = `${kind}:${file}`;
+  const existing = warnings.get(key);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+
+  warnings.set(key, { kind, file, count: 1 });
 }
 
 function collectJsonlFiles(dir: string): string[] {
@@ -385,6 +401,7 @@ export class CodexProvider implements IProvider {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
     const files = collectJsonlFiles(this.sessionsDir);
     const events: UsageEvent[] = [];
+    const warnings = new Map<string, ProviderWarning>();
 
     for (const file of files) {
       const context: SessionContext = {
@@ -395,7 +412,9 @@ export class CodexProvider implements IProvider {
       const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
 
       try {
-        for await (const record of splitJsonlRecords(file)) {
+        for await (const record of splitJsonlRecords(file, {
+          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
+        })) {
           const usage = parseUsageRecord(record, context);
           if (!usage) {
             continue;
@@ -468,6 +487,7 @@ export class CodexProvider implements IProvider {
         }
       } catch {
         // Skip files that fail to parse
+        incrementWarningCount(warnings, 'read', file);
         continue;
       }
     }
@@ -518,6 +538,7 @@ export class CodexProvider implements IProvider {
       totalCost,
       colors: this.colors,
       events,
+      warnings: [...warnings.values()].sort((a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind)),
     };
   }
 }

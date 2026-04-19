@@ -24,8 +24,10 @@ import {
   buildReplayReport,
   compareRanges,
   dayOfWeekBreakdown,
+  getTodayLocal,
   mergeProviderData,
   SCHEMA_VERSION,
+  shiftDateStringLocal,
 } from '@tokenleak/core';
 import {
   ProviderRegistry,
@@ -57,14 +59,11 @@ export interface TuiData {
 }
 
 function todayStr(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return getTodayLocal();
 }
 
 function daysAgoStr(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return shiftDateStringLocal(todayStr(), -days);
 }
 
 /** Create and populate the provider registry with all known providers */
