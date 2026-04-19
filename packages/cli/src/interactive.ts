@@ -8,6 +8,7 @@ import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 export const INTERACTIVE_FLAG_LINES = [
   '    explain <date>       explain one day of usage',
   '    focus                rank deep-work sessions',
+  '    receipts             itemized receipt of spend by prompt behavior',
   '-f, --format <format>   terminal | png | svg | json | wrapped',
   '-t, --theme <theme>     dark | light',
   '-s, --since <date>      YYYY-MM-DD start date',
@@ -1233,6 +1234,41 @@ async function buildComparePreset(): Promise<InteractiveCommand> {
   return createRunCommand(args);
 }
 
+async function buildReceiptsPreset(): Promise<InteractiveCommand> {
+  const format = await promptSingleChoice(
+    'Receipts Format',
+    'Choose how the itemized receipt should be rendered.',
+    [
+      {
+        value: 'terminal',
+        label: 'Terminal',
+        description: 'Stripe-style thermal receipt in the current terminal',
+      },
+      { value: 'json', label: 'JSON', description: 'Structured receipt payload' },
+      { value: 'svg', label: 'SVG', description: 'Vector receipt image' },
+      { value: 'png', label: 'PNG', description: 'Raster receipt image for sharing' },
+    ],
+  );
+  const theme = format === 'terminal' || format === 'json' ? null : await promptTheme();
+  const rangeArgs = await promptDateWindow();
+  const providers = await promptProviderSelection();
+  const output =
+    format === 'png' || format === 'svg'
+      ? await promptOutputPath(`tokenleak-receipt.${format}`)
+      : await ask('Output file (blank keeps stdout)');
+
+  const args: CliArgs = { format, ...rangeArgs };
+  if (theme) args['theme'] = theme;
+  if (output) args['output'] = output;
+  applySelectedProviders(args, providers);
+
+  return createSubcommandRunCommand('receipts', args, [], {
+    title: 'Receipts',
+    loadingTitle: 'Building itemized receipt',
+    loadingDetail: 'Clustering prompts and pricing each line item.',
+  });
+}
+
 async function buildExplainPreset(): Promise<InteractiveCommand> {
   const date = await ask('Date to explain (YYYY-MM-DD)');
   const format = await promptSingleChoice(
@@ -1529,6 +1565,13 @@ export function createMenuOptions(): MenuOption[] {
       select: buildFocusPreset,
     },
     {
+      shortcut: 'R',
+      title: 'Receipts',
+      description: 'itemized receipt of spend by prompt behavior',
+      preview: 'tokenleak receipts --days 30',
+      select: buildReceiptsPreset,
+    },
+    {
       shortcut: '0',
       title: 'Build Custom Command',
       description: 'configure flags interactively',
@@ -1601,9 +1644,9 @@ async function promptForMenuCommand(
         return;
       }
 
-      const digit = key.sequence?.match(/^[0-9]$/)?.[0];
-      if (digit) {
-        const nextIndex = options.findIndex((option) => option.shortcut === digit);
+      const shortcutKey = key.sequence?.match(/^[0-9R]$/)?.[0];
+      if (shortcutKey) {
+        const nextIndex = options.findIndex((option) => option.shortcut === shortcutKey);
         if (nextIndex >= 0) {
           state.selectedIndex = nextIndex;
           resolving = true;
