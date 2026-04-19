@@ -116,8 +116,25 @@ function insertTopMember(
   prompt: string,
   cost: number,
 ): void {
-  // Keep topMembers sorted by cost descending, capped at SAMPLE_PROMPT_COUNT.
-  // At these sizes (max 3 entries) a linear insert is cheaper than a heap.
+  // Keep topMembers sorted by cost descending, deduped by the compacted prompt
+  // key, and capped at SAMPLE_PROMPT_COUNT unique prompts. Dedup happens
+  // before the cap so a burst of identical high-cost prompts cannot crowd out
+  // unique lower-cost samples — e.g. ["fix lint"(10), "fix lint"(9),
+  // "fix lint again"(8), "fix lint later"(7)] yields three distinct samples,
+  // not two.
+  //
+  // At these sizes (max 3 entries) a linear scan is cheaper than a heap.
+  const key = sampleKey(prompt);
+  for (let i = 0; i < topMembers.length; i++) {
+    if (sampleKey(topMembers[i]!.prompt) === key) {
+      if (cost > topMembers[i]!.cost) {
+        // Swap in the higher-cost duplicate and re-sort this one entry.
+        topMembers.splice(i, 1);
+        break;
+      }
+      return; // existing duplicate already dominates; drop the new one
+    }
+  }
   for (let i = 0; i < topMembers.length; i++) {
     if (cost > topMembers[i]!.cost) {
       topMembers.splice(i, 0, { prompt, cost });
@@ -128,6 +145,10 @@ function insertTopMember(
   if (topMembers.length < SAMPLE_PROMPT_COUNT) {
     topMembers.push({ prompt, cost });
   }
+}
+
+function sampleKey(prompt: string): string {
+  return prompt.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function buildSamplePrompts(

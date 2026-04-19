@@ -153,6 +153,24 @@ describe('clusterPrompts', () => {
     expect(new Set(samples).size).toBe(samples.length);
   });
 
+  it('does not let duplicate high-cost prompts crowd out unique lower-cost samples', () => {
+    // Two duplicates of the top prompt, then two distinct lower-cost prompts.
+    // Before dedup-in-insert, the cap of 3 was filled by "fix lint" twice plus
+    // "fix lint again", leaving "fix lint later" invisible.
+    const events = [
+      makeEvent({ prompt: 'fix lint', cost: 0.10 }),
+      makeEvent({ prompt: 'fix lint', cost: 0.09 }),
+      makeEvent({ prompt: 'fix lint again', cost: 0.08 }),
+      makeEvent({ prompt: 'fix lint later', cost: 0.07 }),
+    ];
+    const clusters = clusterPrompts(events, { similarityThreshold: 0.3 });
+    const samples = clusters[0]!.samplePrompts;
+    expect(samples).toHaveLength(3);
+    expect(samples).toContain('fix lint');
+    expect(samples).toContain('fix lint again');
+    expect(samples).toContain('fix lint later');
+  });
+
   it('skips events with whitespace-only prompts', () => {
     const events = [
       makeEvent({ prompt: '   ', cost: 0.01 }),
