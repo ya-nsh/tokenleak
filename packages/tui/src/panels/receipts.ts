@@ -1,25 +1,13 @@
 import { Box, Text } from '@opentui/core';
-import type { Receipt, ReceiptLine } from '@tokenleak/core';
+import { CATEGORY_LABELS_SHORT, type Receipt, type ReceiptLine } from '@tokenleak/core';
 import { formatCost, padRight, padLeft, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 
 const VISIBLE_ROWS = 12;
 
-const CATEGORY_LABELS: Record<string, string> = {
-  debugging: 'DEBUG',
-  styling: 'STYLE',
-  'explain-again': 'EXPLAIN',
-  refactoring: 'REFACTOR',
-  testing: 'TEST',
-  'new-code': 'NEW CODE',
-  opinion: 'OPINION',
-  typo: 'TYPO',
-  misc: 'MISC',
-};
-
 function renderLine(line: ReceiptLine, rank: number, descColWidth: number) {
   const rankStr = padLeft(`${rank}.`, 3);
-  const category = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
+  const category = CATEGORY_LABELS_SHORT[line.category] ?? line.category.toUpperCase();
   const qty = `${line.quantity}×`;
   const cost = formatCost(line.totalCost);
   const desc = truncate(line.description, descColWidth);

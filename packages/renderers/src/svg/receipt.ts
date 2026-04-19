@@ -1,4 +1,9 @@
-import type { Receipt } from '@tokenleak/core';
+import {
+  CATEGORY_LABELS,
+  formatReceiptDollars,
+  type Receipt,
+  type ReceiptCategory,
+} from '@tokenleak/core';
 import { escapeXml } from './utils';
 
 const WIDTH = 800;
@@ -36,23 +41,7 @@ const LIGHT: ReceiptTheme = {
   accent: '#8a6b2f',
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  debugging: 'DEBUGGING',
-  styling: 'STYLING',
-  'explain-again': 'EXPLAIN AGAIN',
-  refactoring: 'REFACTOR',
-  testing: 'TESTING',
-  'new-code': 'NEW CODE',
-  opinion: 'OPINION POLL',
-  typo: 'TYPO FIX',
-  misc: 'MISC',
-};
-
 const EMPTY_STATE_HEIGHT = 80;
-
-function formatDollars(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function formatDate(iso: string): string {
   return iso;
@@ -141,12 +130,12 @@ export function renderReceiptSvg(
   y += SECTION_GAP;
 
   // ── Totals ───────────────────────────────────────────────────────
-  parts.push(totalRow('SUBTOTAL', formatDollars(receipt.summary.subtotal), y, theme, false));
+  parts.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal), y, theme, false));
   y += 36;
   parts.push(
     totalRow(
       `SERVICE FEES  (${receipt.summary.unlabeledEvents} uncaptured)`,
-      formatDollars(receipt.summary.serviceFees),
+      formatReceiptDollars(receipt.summary.serviceFees),
       y,
       theme,
       false,
@@ -155,7 +144,7 @@ export function renderReceiptSvg(
   y += 36;
   parts.push(dottedRule(y, theme));
   y += 28;
-  parts.push(totalRow('TOTAL', formatDollars(receipt.summary.total), y, theme, true));
+  parts.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total), y, theme, true));
   y += 48;
 
   // ── Footer ───────────────────────────────────────────────────────
@@ -178,13 +167,13 @@ function dottedRule(y: number, theme: ReceiptTheme): string {
 }
 
 function lineItemRow(
-  line: { description: string; category: string; quantity: number; totalCost: number },
+  line: { description: string; category: ReceiptCategory; quantity: number; totalCost: number },
   y: number,
   theme: ReceiptTheme,
 ): string {
   const categoryLabel = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
   const qtyStr = `${line.quantity}×`;
-  const costStr = formatDollars(line.totalCost);
+  const costStr = formatReceiptDollars(line.totalCost);
   const leftX = PAD_X;
   const rightX = WIDTH - PAD_X;
 
