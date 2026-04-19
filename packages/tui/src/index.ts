@@ -192,6 +192,7 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.replayDate = null;
   state.explainDate = null;
   state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
@@ -306,6 +307,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.wrappedScrollOffset = 0;
     currentState.replayScrollOffset = 0;
     currentState.receiptsScrollOffset = 0;
+    currentState.receiptsExpandedLineIndex = null;
     currentState.replayExpandedBlocks = new Set();
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
@@ -362,6 +364,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedReplayReport = null;
   state.cachedReceipt = null;
   state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -723,6 +726,15 @@ export async function main(): Promise<void> {
         } else {
           state.replayExpandedBlocks.add(blockIndex);
         }
+        render(state, renderer);
+        return true;
+      }
+
+      // Enter: expand/collapse sample prompts for the top visible line (receipts view)
+      if (sequence === '\r' && state.selectedView === 'receipts') {
+        const target = state.receiptsScrollOffset;
+        state.receiptsExpandedLineIndex =
+          state.receiptsExpandedLineIndex === target ? null : target;
         render(state, renderer);
         return true;
       }

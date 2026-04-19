@@ -5,16 +5,22 @@ import { COLORS, BOLD } from '../lib/theme.js';
 
 const VISIBLE_ROWS = 12;
 
-function renderLine(line: ReceiptLine, rank: number, descColWidth: number) {
+function renderLine(line: ReceiptLine, rank: number, descColWidth: number, isExpanded: boolean) {
   const rankStr = padLeft(`${rank}.`, 3);
   const category = CATEGORY_LABELS_SHORT[line.category] ?? line.category.toUpperCase();
   const qty = `${line.quantity}×`;
   const cost = formatCost(line.totalCost);
   const desc = truncate(line.description, descColWidth);
+  // Arrow indicator on the expanded line so the cursor position is obvious.
+  const pointer = isExpanded ? '▸' : ' ';
 
   return Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: `${rankStr} `, fg: COLORS.dimWhite }),
+    Text({
+      content: `${pointer}${rankStr} `,
+      fg: isExpanded ? COLORS.amber : COLORS.dimWhite,
+      attributes: isExpanded ? BOLD : undefined,
+    }),
     Text({ content: padRight(category, 9), fg: COLORS.amber, attributes: BOLD }),
     Text({ content: padLeft(qty, 5), fg: COLORS.cyan }),
     Text({ content: `  ${padRight(desc, descColWidth)}`, fg: COLORS.white }),
@@ -22,7 +28,22 @@ function renderLine(line: ReceiptLine, rank: number, descColWidth: number) {
   );
 }
 
-export function createReceiptsPanel(state: { receiptsScrollOffset: number }, receipt: Receipt | null) {
+function renderSamplePrompt(prompt: string, descColWidth: number) {
+  const indent = 6; // align under the description column
+  const width = Math.max(10, descColWidth - 2);
+  const text = truncate(prompt, width);
+  return Box(
+    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: ' '.repeat(indent), fg: COLORS.dimWhite }),
+    Text({ content: '└ ', fg: COLORS.dimWhite }),
+    Text({ content: text, fg: COLORS.dimWhite }),
+  );
+}
+
+export function createReceiptsPanel(
+  state: { receiptsScrollOffset: number; receiptsExpandedLineIndex: number | null },
+  receipt: Receipt | null,
+) {
   if (!receipt || receipt.lines.length === 0) {
     return Box(
       {
@@ -94,6 +115,31 @@ export function createReceiptsPanel(state: { receiptsScrollOffset: number }, rec
     Text({ content: `Total ${formatCost(receipt.summary.total)}`, fg: COLORS.amber, attributes: BOLD }),
   );
 
+  const expandedIndex = state.receiptsExpandedLineIndex;
+  const rows: ReturnType<typeof Box | typeof Text>[] = [];
+  for (let i = 0; i < visible.length; i++) {
+    const absoluteIndex = offset + i;
+    const isExpanded = expandedIndex === absoluteIndex;
+    rows.push(renderLine(visible[i]!, absoluteIndex + 1, descColWidth, isExpanded));
+    if (isExpanded) {
+      const samples = visible[i]!.samplePrompts;
+      if (samples.length === 0) {
+        rows.push(
+          Box(
+            { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
+            Text({ content: '      ', fg: COLORS.dimWhite }),
+            Text({ content: '└ ', fg: COLORS.dimWhite }),
+            Text({ content: 'No sample prompts available for this line.', fg: COLORS.dimWhite }),
+          ),
+        );
+      } else {
+        for (const sample of samples) {
+          rows.push(renderSamplePrompt(sample, descColWidth));
+        }
+      }
+    }
+  }
+
   return Box(
     {
       flexDirection: 'column',
@@ -106,7 +152,7 @@ export function createReceiptsPanel(state: { receiptsScrollOffset: number }, rec
     summary,
     Text({ content: '', fg: COLORS.dimWhite }),
     columnHeader,
-    ...visible.map((l, i) => renderLine(l, offset + i + 1, descColWidth)),
+    ...rows,
     ...scrollIndicators,
     Text({ content: '', fg: COLORS.dimWhite }),
     totalsRow,

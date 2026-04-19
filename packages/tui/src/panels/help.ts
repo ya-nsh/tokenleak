@@ -84,6 +84,7 @@ export function createHelpPanel() {
         ]),
         ...helpSection('RECEIPTS VIEW', [
           ['j / k', 'Scroll line items'],
+          ['enter', 'Expand top line into sample prompts'],
         ]),
       ),
     ),
