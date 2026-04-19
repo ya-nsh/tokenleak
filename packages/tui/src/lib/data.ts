@@ -9,6 +9,7 @@ import type {
   MoreStats,
   ProviderData,
   Receipt,
+  ReceiptLine,
   ReplayReport,
   TokenleakOutput,
   UsageEvent,
@@ -259,6 +260,28 @@ export function ensureMoreStats(state: AppState): MoreStats | null {
   const more = buildMoreStats(scoped.scopedProviders, scoped.windowRange);
   state.cachedMoreStats = more;
   return more;
+}
+
+/**
+ * Apply the current sort + filter to a receipt's lines. Returned array is a
+ * shallow copy so the caller can safely mutate or slice. The subtotal/total
+ * summary is not recomputed — filters only affect which rows are displayed.
+ */
+export function deriveReceiptLines(
+  receipt: Receipt,
+  sortMode: AppState['receiptsSortMode'],
+  filter: AppState['receiptsCategoryFilter'],
+): ReceiptLine[] {
+  const filtered = filter === null ? receipt.lines : receipt.lines.filter((l) => l.category === filter);
+  const sorted = [...filtered];
+  if (sortMode === 'qty') {
+    sorted.sort((a, b) => b.quantity - a.quantity);
+  } else if (sortMode === 'alpha') {
+    sorted.sort((a, b) => a.description.localeCompare(b.description));
+  } else {
+    sorted.sort((a, b) => b.totalCost - a.totalCost);
+  }
+  return sorted;
 }
 
 /** Lazily compute and cache the Receipt (window-dependent) */
