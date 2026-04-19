@@ -161,14 +161,43 @@ export function createReceiptsPanel(
     }),
   );
 
-  const totalsRow = Box(
-    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({
-      content: `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  `,
-      fg: COLORS.dimWhite,
-    }),
-    Text({ content: `Total ${formatCost(receipt.summary.total)}`, fg: COLORS.amber, attributes: BOLD }),
-  );
+  // When a category filter is active, the visible rows only sum to a subset
+  // of the receipt. Show that filtered subtotal alongside the unfiltered
+  // totals so the numbers can't be misread against the table above — and
+  // label the unfiltered line explicitly as "all".
+  const filterActive = state.receiptsCategoryFilter !== null;
+  const filteredSubtotal = filterActive
+    ? derivedLines.reduce((sum, l) => sum + l.totalCost, 0)
+    : receipt.summary.subtotal;
+
+  const totalsRow = filterActive
+    ? Box(
+        { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+        Box(
+          { flexDirection: 'row', width: '100%' },
+          Text({
+            content: `Filtered subtotal (${filterLabel}) `,
+            fg: COLORS.dimWhite,
+          }),
+          Text({
+            content: formatCost(filteredSubtotal),
+            fg: COLORS.amber,
+            attributes: BOLD,
+          }),
+        ),
+        Text({
+          content: `All categories · Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
+          fg: COLORS.dimWhite,
+        }),
+      )
+    : Box(
+        { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
+        Text({
+          content: `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  `,
+          fg: COLORS.dimWhite,
+        }),
+        Text({ content: `Total ${formatCost(receipt.summary.total)}`, fg: COLORS.amber, attributes: BOLD }),
+      );
 
   const expandedIndex = state.receiptsExpandedLineIndex;
   const rows: ReturnType<typeof Box | typeof Text>[] = [];

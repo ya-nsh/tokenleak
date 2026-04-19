@@ -1773,7 +1773,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 }
 
-function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
+export function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
   const cliArgs: Record<string, unknown> = {};
   let index = 0;
 
@@ -1894,7 +1894,7 @@ function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
   return cliArgs;
 }
 
-function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'svg' | 'png' | 'json' {
+export function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'svg' | 'png' | 'json' {
   const explicit = cliArgs['format'];
   if (typeof explicit === 'string') {
     if (explicit === 'terminal' || explicit === 'svg' || explicit === 'png' || explicit === 'json') {
@@ -1912,6 +1912,35 @@ function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'sv
   return 'terminal';
 }
 
+/**
+ * Validate the combination of format + share flags for the receipts subcommand.
+ * Throws TokenleakError on any disallowed combination; returns void on success.
+ * Exported for unit tests; {@link runReceipts} is the only runtime caller.
+ */
+export function validateReceiptsShareFlags(
+  format: 'terminal' | 'svg' | 'png' | 'json',
+  flags: { output: string | null; open: boolean; upload?: string },
+): void {
+  if (format === 'png' && !flags.output) {
+    throw new TokenleakError('--output <path> is required for --format png');
+  }
+  if (flags.open && !flags.output) {
+    throw new TokenleakError('--open requires --output to specify a file path');
+  }
+  if (flags.upload !== undefined && flags.upload !== 'gist') {
+    throw new TokenleakError(`Unknown upload target "${flags.upload}". Supported: gist`);
+  }
+  if (flags.upload === 'gist' && format === 'png') {
+    // Gist cannot host binary images as-is; a base64 text blob is not a
+    // viewable PNG and would silently diverge from --upload gist for other
+    // formats. Reject explicitly and tell the caller what to do.
+    throw new TokenleakError(
+      '--upload gist does not support --format png (gist cannot host binary images). ' +
+        'Use --format svg or --format json, or share the --output file directly.',
+    );
+  }
+}
+
 async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   if (config.allProviders && (
@@ -1926,15 +1955,14 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
     ? (cliArgs['top'] as number)
     : undefined;
 
-  if (format === 'png' && !config.output) {
-    throw new TokenleakError('--output <path> is required for --format png');
-  }
-  if (config.open && !config.output) {
-    throw new TokenleakError('--open requires --output to specify a file path');
-  }
-  if (config.upload !== undefined && config.upload !== 'gist') {
-    throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
-  }
+  validateReceiptsShareFlags(
+    format,
+    {
+      output: config.output ?? null,
+      open: config.open,
+      upload: config.upload,
+    },
+  );
 
   const range = computeDateRange({ since: config.since, until: config.until, days: config.days });
   const available = await selectAvailableProviders(config);
@@ -1984,14 +2012,11 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Sharing: upload to gist
   if (config.upload === 'gist') {
-    const ext = format === 'json' ? 'json' : format === 'svg' ? 'svg' : format === 'png' ? 'base64.txt' : 'txt';
+    // png + gist is rejected up-front, so rendered is always a string here.
+    const ext = format === 'json' ? 'json' : format === 'svg' ? 'svg' : 'txt';
     const filename = `tokenleak-receipt.${ext}`;
     const description = `Tokenleak receipt (${range.since} to ${range.until})`;
-    const payload =
-      format === 'png'
-        ? (rendered as Buffer).toString('base64')
-        : (rendered as string);
-    const url = await uploadToGist(payload, filename, description);
+    const url = await uploadToGist(rendered as string, filename, description);
     process.stderr.write(`Uploaded to gist: ${url}\n`);
   }
 }
