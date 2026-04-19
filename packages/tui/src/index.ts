@@ -20,6 +20,7 @@ import {
   ensureMoreStats,
   ensureReplayReport,
   ensureReceipt,
+  deriveReceiptLines,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -192,6 +193,9 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.replayDate = null;
   state.explainDate = null;
   state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
+  state.receiptsSortMode = 'cost';
+  state.receiptsCategoryFilter = null;
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
@@ -306,6 +310,9 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.wrappedScrollOffset = 0;
     currentState.replayScrollOffset = 0;
     currentState.receiptsScrollOffset = 0;
+    currentState.receiptsExpandedLineIndex = null;
+    currentState.receiptsSortMode = 'cost';
+    currentState.receiptsCategoryFilter = null;
     currentState.replayExpandedBlocks = new Set();
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
@@ -362,6 +369,9 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedReplayReport = null;
   state.cachedReceipt = null;
   state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
+  state.receiptsSortMode = 'cost';
+  state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -431,8 +441,11 @@ function getScrollableItemCount(state: AppState): number {
       return 30; // approximate content rows
     case 'replay':
       return ensureReplayReport(state)?.flowBlocks.length ?? 0;
-    case 'receipts':
-      return ensureReceipt(state)?.lines.length ?? 0;
+    case 'receipts': {
+      const receipt = ensureReceipt(state);
+      if (!receipt) return 0;
+      return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter).length;
+    }
     default:
       return 0;
   }
@@ -723,6 +736,44 @@ export async function main(): Promise<void> {
         } else {
           state.replayExpandedBlocks.add(blockIndex);
         }
+        render(state, renderer);
+        return true;
+      }
+
+      // Enter: expand/collapse sample prompts for the top visible line (receipts view)
+      if (sequence === '\r' && state.selectedView === 'receipts') {
+        const target = state.receiptsScrollOffset;
+        state.receiptsExpandedLineIndex =
+          state.receiptsExpandedLineIndex === target ? null : target;
+        render(state, renderer);
+        return true;
+      }
+
+      // o: cycle sort mode (receipts view)
+      if (sequence === 'o' && state.selectedView === 'receipts') {
+        const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
+        const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
+        state.receiptsSortMode = order[nextIndex]!;
+        state.receiptsScrollOffset = 0;
+        state.receiptsExpandedLineIndex = null;
+        render(state, renderer);
+        return true;
+      }
+
+      // f: cycle category filter through encountered categories + null (receipts view)
+      if (sequence === 'f' && state.selectedView === 'receipts') {
+        const receipt = state.cachedReceipt;
+        if (!receipt || receipt.lines.length === 0) {
+          return true;
+        }
+        const categories = Array.from(new Set(receipt.lines.map((l) => l.category)));
+        const current = state.receiptsCategoryFilter;
+        const currentIndex = current === null ? -1 : categories.indexOf(current);
+        const nextIndex = currentIndex + 1;
+        state.receiptsCategoryFilter =
+          nextIndex >= categories.length ? null : categories[nextIndex]!;
+        state.receiptsScrollOffset = 0;
+        state.receiptsExpandedLineIndex = null;
         render(state, renderer);
         return true;
       }

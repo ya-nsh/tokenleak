@@ -1,22 +1,12 @@
-import type { Receipt, ReceiptLine, UsageEvent } from '@tokenleak/core';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  debugging: 'DEBUGGING',
-  styling: 'STYLING',
-  'explain-again': 'EXPLAIN AGAIN',
-  refactoring: 'REFACTOR',
-  testing: 'TESTING',
-  'new-code': 'NEW CODE',
-  opinion: 'OPINION POLL',
-  typo: 'TYPO FIX',
-  misc: 'MISC',
-};
+import {
+  CATEGORY_LABELS,
+  formatReceiptDollars,
+  type Receipt,
+  type ReceiptLine,
+  type UsageEvent,
+} from '@tokenleak/core';
 
 const MIN_DOT_PADDING = 2;
-
-function formatDollars(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function dots(n: number): string {
   return '.'.repeat(Math.max(2, n));
@@ -56,16 +46,16 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
   }
 
   lines.push(dottedDivider);
-  lines.push(totalRow('SUBTOTAL', formatDollars(receipt.summary.subtotal), w));
+  lines.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal), w));
   lines.push(
     totalRow(
       `SERVICE FEES (${receipt.summary.unlabeledEvents} uncaptured)`,
-      formatDollars(receipt.summary.serviceFees),
+      formatReceiptDollars(receipt.summary.serviceFees),
       w,
     ),
   );
   lines.push(divider);
-  lines.push(totalRow('TOTAL', formatDollars(receipt.summary.total), w));
+  lines.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total), w));
   lines.push('');
   lines.push(centerLine('THANK YOU FOR YOUR PATRONAGE', w));
   lines.push(centerLine(`tokenleak · ${new Date().toISOString().slice(0, 10)}`, w));
@@ -76,7 +66,7 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
 function renderLineItem(line: ReceiptLine, width: number): string[] {
   const category = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
   const qtyStr = `${line.quantity}×`;
-  const costStr = formatDollars(line.totalCost);
+  const costStr = formatReceiptDollars(line.totalCost);
 
   const descriptionSpace = width - costStr.length - MIN_DOT_PADDING;
   const description = truncate(`${qtyStr} ${line.description}`, descriptionSpace);
@@ -127,6 +117,9 @@ export function buildReceiptsHelpText(): string {
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',
     '      --top <n>           Show top N line items (default: 12)',
+    '      --clipboard         Copy rendered receipt to the clipboard (terminal/svg/json)',
+    '      --open              Open the generated file (requires --output)',
+    '      --upload <target>   Upload output — currently supported: gist',
     '      --no-color          Accepted for parity with terminal output',
     '      --help              Show receipts help',
     '',
@@ -135,8 +128,9 @@ export function buildReceiptsHelpText(): string {
     'Examples:',
     '  tokenleak receipts',
     '  tokenleak receipts --since 2026-04-01 --until 2026-04-30',
-    '  tokenleak receipts --output receipt.png',
-    '  tokenleak receipts --format json',
+    '  tokenleak receipts --output receipt.png --open',
+    '  tokenleak receipts --clipboard',
+    '  tokenleak receipts --format json --upload gist',
     '',
   ].join('\n');
 }

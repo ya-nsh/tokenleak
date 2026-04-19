@@ -21,6 +21,14 @@ export interface ReceiptLine {
   quantity: number;
   totalCost: number;
   totalTokens: number;
+  /**
+   * Up to 3 representative prompts that rolled into this line, ranked by
+   * cost descending. Useful for drill-down views (TUI, MCP) that want to
+   * show "what went into this line item" without carrying every event.
+   * For the overflow "Other prompt clusters" line, these are the canonical
+   * prompts of the top-cost omitted clusters.
+   */
+  samplePrompts: string[];
 }
 
 export interface ReceiptSummary {
@@ -85,6 +93,7 @@ export function buildReceipt(
     quantity: c.count,
     totalCost: c.totalCost,
     totalTokens: c.totalTokens,
+    samplePrompts: c.samplePrompts,
   }));
 
   const overflow = clusters.slice(ranked.length);
@@ -95,6 +104,10 @@ export function buildReceipt(
       quantity: overflow.reduce((sum, c) => sum + c.count, 0),
       totalCost: overflow.reduce((sum, c) => sum + c.totalCost, 0),
       totalTokens: overflow.reduce((sum, c) => sum + c.totalTokens, 0),
+      // Preview the first few omitted clusters so drill-down can still show
+      // "what was cut off". Sorted by cluster cost descending (from
+      // clusterPrompts output order).
+      samplePrompts: overflow.slice(0, 3).map((c) => formatDescription(c.canonicalPrompt)),
     });
   }
 
@@ -125,22 +138,25 @@ interface CategoryRule {
   pattern: RegExp;
 }
 
+// Classification precedence: first matching rule wins. Rules are ordered from
+// most specific to most generic so that a prompt like "write a test for the
+// error handler" classifies as `testing` (intent) rather than `debugging`
+// (which matches the incidental word `error`). The `debugging` pattern is
+// deliberately last because its keywords (fix, bug, error, broken) show up
+// across many unrelated prompts and should only fire when no more specific
+// intent is present.
 const CATEGORY_RULES: CategoryRule[] = [
   { category: 'typo', pattern: /\b(typo|missing (semicolon|comma|bracket)|one[- ]liner)\b/i },
-  {
-    category: 'debugging',
-    pattern: /\b(debug|error|fail(ed|ing)?|broken|bug|stack ?trace|doesn'?t work|why (isn'?t|won'?t)|fix)\b/i,
-  },
   {
     category: 'styling',
     pattern: /\b(center|centre|padding|margin|flex|grid|css|tailwind|style|color|colou?r|font|align|div|layout)\b/i,
   },
+  { category: 'testing', pattern: /\b(test|spec|assert|mock|stub|coverage|jest|vitest|bun test)\b/i },
   {
     category: 'explain-again',
     pattern: /\b(explain|what does|what is|how does|why is|walk me through|can you describe|tell me about)\b/i,
   },
   { category: 'refactoring', pattern: /\b(refactor|rename|extract|simplif(y|ies)|clean ?up|deduplic|inline)\b/i },
-  { category: 'testing', pattern: /\b(test|spec|assert|mock|stub|coverage|jest|vitest|bun test)\b/i },
   {
     category: 'new-code',
     pattern: /\b(implement|add (a|an|the)?|create (a|an|the)?|build (a|an|the)?|write (a|an|the)?|generate|scaffold)\b/i,
@@ -148,6 +164,10 @@ const CATEGORY_RULES: CategoryRule[] = [
   {
     category: 'opinion',
     pattern: /\b(should i|which (is|would)|what do you think|recommend|better approach|best way|opinion)\b/i,
+  },
+  {
+    category: 'debugging',
+    pattern: /\b(debug|error|fail(ed|ing)?|broken|bug|stack ?trace|doesn'?t work|why (isn'?t|won'?t)|fix)\b/i,
   },
 ];
 

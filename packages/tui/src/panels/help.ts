@@ -82,6 +82,12 @@ export function createHelpPanel() {
           ['h', 'Previous day'],
           ['l', 'Next day'],
         ]),
+        ...helpSection('RECEIPTS VIEW', [
+          ['j / k', 'Scroll line items'],
+          ['enter', 'Expand top line into sample prompts'],
+          ['o', 'Cycle sort (cost / qty / alpha)'],
+          ['f', 'Cycle category filter'],
+        ]),
       ),
     ),
 
