@@ -48,6 +48,7 @@ export interface AppState {
 
   // receipts view state
   receiptsScrollOffset: number;
+  receiptsExpandedLineIndex: number | null;
 
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
@@ -89,6 +90,7 @@ export function createInitialState(): AppState {
     replayScrollOffset: 0,
     replayExpandedBlocks: new Set(),
     receiptsScrollOffset: 0,
+    receiptsExpandedLineIndex: null,
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
