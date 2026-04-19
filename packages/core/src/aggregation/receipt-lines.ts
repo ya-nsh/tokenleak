@@ -21,6 +21,14 @@ export interface ReceiptLine {
   quantity: number;
   totalCost: number;
   totalTokens: number;
+  /**
+   * Up to 3 representative prompts that rolled into this line, ranked by
+   * cost descending. Useful for drill-down views (TUI, MCP) that want to
+   * show "what went into this line item" without carrying every event.
+   * For the overflow "Other prompt clusters" line, these are the canonical
+   * prompts of the top-cost omitted clusters.
+   */
+  samplePrompts: string[];
 }
 
 export interface ReceiptSummary {
@@ -85,6 +93,7 @@ export function buildReceipt(
     quantity: c.count,
     totalCost: c.totalCost,
     totalTokens: c.totalTokens,
+    samplePrompts: c.samplePrompts,
   }));
 
   const overflow = clusters.slice(ranked.length);
@@ -95,6 +104,10 @@ export function buildReceipt(
       quantity: overflow.reduce((sum, c) => sum + c.count, 0),
       totalCost: overflow.reduce((sum, c) => sum + c.totalCost, 0),
       totalTokens: overflow.reduce((sum, c) => sum + c.totalTokens, 0),
+      // Preview the first few omitted clusters so drill-down can still show
+      // "what was cut off". Sorted by cluster cost descending (from
+      // clusterPrompts output order).
+      samplePrompts: overflow.slice(0, 3).map((c) => formatDescription(c.canonicalPrompt)),
     });
   }
 

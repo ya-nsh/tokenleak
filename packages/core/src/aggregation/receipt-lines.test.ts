@@ -99,6 +99,30 @@ describe('buildReceipt', () => {
     expect(receipt.lines).toHaveLength(5);
   });
 
+  it('emits samplePrompts on every line item and the overflow line', () => {
+    const distinctPrompts = [
+      'fix the lint error please',
+      'center a div horizontally please',
+      'refactor the auth middleware gently',
+      'explain javascript closures to me',
+      'implement a binary search tree',
+      'write a unit test for the parser',
+    ];
+    const events = distinctPrompts.map((p, i) => makeEvent({ prompt: p, cost: 0.10 - i * 0.01 }));
+    const receipt = buildReceipt(events, RANGE, { topLines: 3 });
+
+    // All line items should carry samplePrompts.
+    for (const line of receipt.lines) {
+      expect(Array.isArray(line.samplePrompts)).toBe(true);
+    }
+
+    // Overflow line should preview the clusters that were cut.
+    const overflow = receipt.lines.find((l) => l.description.startsWith('Other prompt clusters'));
+    expect(overflow).toBeDefined();
+    expect(overflow!.samplePrompts.length).toBeGreaterThan(0);
+    expect(overflow!.samplePrompts.length).toBeLessThanOrEqual(3);
+  });
+
   it('sorts lines by cost descending', () => {
     const events = [
       makeEvent({ prompt: 'cheap prompt alpha', cost: 0.01 }),
