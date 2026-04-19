@@ -3,6 +3,8 @@ import type { UsageEvent } from '../types';
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 const MIN_TOKEN_LENGTH = 3;
 const NGRAM_SIZE = 2;
+const SAMPLE_PROMPT_COUNT = 3;
+const SAMPLE_PROMPT_MAX_CHARS = 120;
 
 export interface PromptCluster {
   /** The representative prompt text — the one that cost the most in the cluster. */
@@ -13,6 +15,14 @@ export interface PromptCluster {
   totalCost: number;
   /** Summed tokens across all prompts in the cluster. */
   totalTokens: number;
+  /**
+   * Up to {@link SAMPLE_PROMPT_COUNT} representative prompts in this cluster,
+   * ranked by cost descending, deduped, and truncated to
+   * {@link SAMPLE_PROMPT_MAX_CHARS} characters each. Useful for drill-down
+   * views (TUI, MCP) that want to show "what went into this line item" without
+   * carrying every event.
+   */
+  samplePrompts: string[];
 }
 
 export interface ClusterOptions {
@@ -42,6 +52,8 @@ export function clusterPrompts(
     count: number;
     totalCost: number;
     totalTokens: number;
+    /** Highest-cost members seen so far, kept as a length-capped min-heap-like list. */
+    topMembers: Array<{ prompt: string; cost: number }>;
   }
 
   const clusters: WorkingCluster[] = [];
@@ -74,6 +86,7 @@ export function clusterPrompts(
         c.canonicalCost = event.cost;
       }
       for (const bigram of signature) c.signature.add(bigram);
+      insertTopMember(c.topMembers, prompt, event.cost);
     } else {
       clusters.push({
         canonicalPrompt: prompt,
@@ -82,6 +95,7 @@ export function clusterPrompts(
         count: 1,
         totalCost: event.cost,
         totalTokens: event.totalTokens,
+        topMembers: [{ prompt, cost: event.cost }],
       });
     }
   }
@@ -92,8 +106,48 @@ export function clusterPrompts(
       count: c.count,
       totalCost: c.totalCost,
       totalTokens: c.totalTokens,
+      samplePrompts: buildSamplePrompts(c.topMembers),
     }))
     .sort((a, b) => b.totalCost - a.totalCost);
+}
+
+function insertTopMember(
+  topMembers: Array<{ prompt: string; cost: number }>,
+  prompt: string,
+  cost: number,
+): void {
+  // Keep topMembers sorted by cost descending, capped at SAMPLE_PROMPT_COUNT.
+  // At these sizes (max 3 entries) a linear insert is cheaper than a heap.
+  for (let i = 0; i < topMembers.length; i++) {
+    if (cost > topMembers[i]!.cost) {
+      topMembers.splice(i, 0, { prompt, cost });
+      if (topMembers.length > SAMPLE_PROMPT_COUNT) topMembers.length = SAMPLE_PROMPT_COUNT;
+      return;
+    }
+  }
+  if (topMembers.length < SAMPLE_PROMPT_COUNT) {
+    topMembers.push({ prompt, cost });
+  }
+}
+
+function buildSamplePrompts(
+  topMembers: Array<{ prompt: string; cost: number }>,
+): string[] {
+  const seen = new Set<string>();
+  const samples: string[] = [];
+  for (const member of topMembers) {
+    const compact = member.prompt.replace(/\s+/g, ' ').trim();
+    if (compact.length === 0) continue;
+    const truncated =
+      compact.length <= SAMPLE_PROMPT_MAX_CHARS
+        ? compact
+        : `${compact.slice(0, SAMPLE_PROMPT_MAX_CHARS - 1)}…`;
+    if (seen.has(truncated)) continue;
+    seen.add(truncated);
+    samples.push(truncated);
+    if (samples.length >= SAMPLE_PROMPT_COUNT) break;
+  }
+  return samples;
 }
 
 /**
