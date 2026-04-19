@@ -26,6 +26,7 @@ const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
   { key: '7', label: 'Export', mode: 'export' },
   { key: '8', label: 'Wrapped', mode: 'wrapped' },
   { key: '9', label: 'Replay', mode: 'replay' },
+  { key: 'R', label: 'Receipts', mode: 'receipts' },
 ];
 
 export function buildHeader(
@@ -65,7 +66,9 @@ export function buildHeader(
     }
   }
 
-  // View mode indicators — each is a clickable Box
+  // View mode indicators — each is a clickable Box. The shortcut key is
+  // rendered dimly before the label so users can see which key switches to
+  // which view without opening the help overlay.
   const viewParts: ReturnType<typeof Box>[] = [];
   for (const v of VIEWS) {
     const isActive = state.selectedView === v.mode;
@@ -74,12 +77,19 @@ export function buildHeader(
     viewParts.push(
       Box(
         {
+          flexDirection: 'row',
           onMouseDown: onViewSwitch
             ? () => { onViewSwitch(viewMode); }
             : undefined,
         },
         Text({
-          content: ` ${v.label} `,
+          content: ` ${v.key} `,
+          fg: isActive ? COLORS.bg : COLORS.amber,
+          bg: isActive ? COLORS.cyan : undefined,
+          attributes: isActive ? BOLD : undefined,
+        }),
+        Text({
+          content: `${v.label} `,
           fg: isActive ? COLORS.bg : COLORS.dimWhite,
           bg: isActive ? COLORS.cyan : undefined,
           attributes: isActive ? BOLD : undefined,

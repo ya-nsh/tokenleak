@@ -56,6 +56,10 @@ export function createReceiptsPanel(state: { receiptsScrollOffset: number }, rec
         content: 'Prompt capture currently only works for Claude Code logs.',
         fg: COLORS.dimWhite,
       }),
+      Text({
+        content: 'Run Claude Code locally to generate logs with prompt text, then press r to refresh.',
+        fg: COLORS.dimWhite,
+      }),
     );
   }
 
