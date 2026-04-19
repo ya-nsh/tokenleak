@@ -53,6 +53,7 @@ export {
   DEFAULT_CONCURRENCY,
   MAX_JSONL_RECORD_BYTES,
   SCHEMA_VERSION,
+  MAX_PROMPT_CHARS,
 } from './constants';
 
 export {

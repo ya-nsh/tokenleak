@@ -108,4 +108,14 @@ describe('PiProvider', () => {
       cacheWrite: 3.75,
     });
   });
+
+  it('captures the preceding user prompt onto the assistant usage event', async () => {
+    const provider = new PiProvider(FIXTURES_DIR);
+    const data = await provider.load(FULL_RANGE);
+    const firstEvent = data.events?.[0];
+
+    // Fixture line 2 is `{role: 'user', content: 'Hello'}` preceding the
+    // assistant message on line 3 that carries the usage.
+    expect(firstEvent?.prompt).toBe('Hello');
+  });
 });
