@@ -9,6 +9,7 @@ import type {
   ProviderData,
   UsageEvent,
 } from '@tokenleak/core';
+import { MAX_PROMPT_CHARS } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
@@ -36,8 +37,6 @@ interface UsageRecord {
   projectId?: string;
   prompt?: string;
 }
-
-const MAX_PROMPT_CHARS = 2_000;
 
 function resolveBaseDir(baseDir?: string): string {
   if (baseDir) {

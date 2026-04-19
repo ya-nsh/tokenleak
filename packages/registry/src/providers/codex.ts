@@ -9,6 +9,7 @@ import type {
   ProviderData,
   UsageEvent,
 } from '@tokenleak/core';
+import { MAX_PROMPT_CHARS } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
@@ -51,6 +52,7 @@ interface CodexUsageRecord {
   cacheWriteTokens: number;
   sessionId?: string;
   projectId?: string;
+  prompt?: string;
 }
 
 interface SessionContext {
@@ -314,6 +316,29 @@ function parseTokenCountUsage(
   };
 }
 
+/**
+ * Extracts a user-authored prompt from a Codex JSONL record, or null if the
+ * record is not a user turn. Codex writes user turns twice: once as an
+ * `event_msg` with `payload.type === 'user_message'` (clean `payload.message`
+ * string), and again as a `response_item` message (mixed with session
+ * boilerplate). We prefer the `event_msg` source for cleanliness.
+ * Clamps at {@link MAX_PROMPT_CHARS}.
+ */
+export function extractCodexUserPrompt(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) return null;
+  const obj = record as Record<string, unknown>;
+  if (obj['type'] !== 'event_msg') return null;
+  const payload = obj['payload'];
+  if (typeof payload !== 'object' || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  if (p['type'] !== 'user_message') return null;
+  const message = p['message'];
+  if (typeof message !== 'string') return null;
+  const trimmed = message.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
+}
+
 function parseUsageRecord(
   record: unknown,
   context: SessionContext,
@@ -393,9 +418,16 @@ export class CodexProvider implements IProvider {
       };
       const relativeFile = relative(this.sessionsDir, file).split(sep).join('/');
       const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
+      let lastUserPrompt: string | undefined;
 
       try {
         for await (const record of splitJsonlRecords(file)) {
+          const userPrompt = extractCodexUserPrompt(record);
+          if (userPrompt !== null) {
+            lastUserPrompt = userPrompt;
+            continue;
+          }
+
           const usage = parseUsageRecord(record, context);
           if (!usage) {
             continue;
@@ -407,6 +439,10 @@ export class CodexProvider implements IProvider {
 
           usage.sessionId = relativeFile;
           usage.projectId = projectDir === '.' ? undefined : projectDir;
+          if (lastUserPrompt !== undefined) {
+            usage.prompt = lastUserPrompt;
+            lastUserPrompt = undefined;
+          }
 
           const normalizedModel = normalizeModelName(
             compactModelDateSuffix(usage.model),
@@ -436,6 +472,7 @@ export class CodexProvider implements IProvider {
             pricing: toCachePricing(costBreakdown.pricing),
             sessionId: usage.sessionId,
             projectId: usage.projectId,
+            prompt: usage.prompt,
           });
 
           if (!dailyMap.has(usage.date)) {

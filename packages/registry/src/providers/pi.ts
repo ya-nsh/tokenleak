@@ -10,6 +10,7 @@ import type {
   ProviderData,
   UsageEvent,
 } from '@tokenleak/core';
+import { MAX_PROMPT_CHARS } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
@@ -38,6 +39,7 @@ interface PiUsageRecord {
   explicitCost?: number;
   sessionId?: string;
   projectId?: string;
+  prompt?: string;
 }
 
 function resolveAgentDir(baseDir?: string): string {
@@ -112,6 +114,45 @@ function isSessionHeader(record: unknown): record is { type: 'session'; cwd?: st
   }
 
   return (record as Record<string, unknown>)['type'] === 'session';
+}
+
+/**
+ * Extracts a user-authored prompt from a Pi JSONL record, or null if the
+ * record is not a user message. Mirrors the shape used by Claude Code so
+ * the Receipts feature treats both providers identically: string `content`
+ * or an array of `{type: 'text', text: '…'}` blocks. Clamps at
+ * {@link MAX_PROMPT_CHARS}.
+ */
+export function extractPiUserPrompt(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) return null;
+  const obj = record as Record<string, unknown>;
+  if (obj['type'] !== 'message') return null;
+
+  const message = obj['message'];
+  if (typeof message !== 'object' || message === null) return null;
+  const msg = message as Record<string, unknown>;
+  if (msg['role'] !== 'user') return null;
+
+  const content = msg['content'];
+  let text: string | null = null;
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+      const b = block as Record<string, unknown>;
+      if (b['type'] === 'text' && typeof b['text'] === 'string') {
+        parts.push(b['text']);
+      }
+    }
+    if (parts.length > 0) text = parts.join('\n');
+  }
+
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
 }
 
 function parseUsageRecord(
@@ -235,6 +276,7 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     pricing,
     sessionId: record.sessionId,
     projectId: record.projectId,
+    prompt: record.prompt,
   };
 }
 
@@ -341,6 +383,7 @@ export class PiProvider implements IProvider {
     for (const file of files) {
       let projectId: string | undefined;
       const sessionId = relative(sessionsDir, file).split(sep).join('/');
+      let lastUserPrompt: string | undefined;
 
       for await (const record of splitJsonlRecords(file)) {
         if (isSessionHeader(record)) {
@@ -348,8 +391,18 @@ export class PiProvider implements IProvider {
           continue;
         }
 
+        const userPrompt = extractPiUserPrompt(record);
+        if (userPrompt !== null) {
+          lastUserPrompt = userPrompt;
+          continue;
+        }
+
         const usage = parseUsageRecord(record, projectId, sessionId);
         if (usage !== null && isInRange(usage.date, range)) {
+          if (lastUserPrompt !== undefined) {
+            usage.prompt = lastUserPrompt;
+            lastUserPrompt = undefined;
+          }
           records.push(usage);
         }
       }

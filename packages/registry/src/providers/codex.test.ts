@@ -198,4 +198,24 @@ describe('CodexProvider', () => {
     const day1 = data.daily[0]!;
     expect(day1.cost).toBeCloseTo(0.00572, 5);
   });
+
+  // -- prompt capture -----------------------------------------------------
+
+  it('attaches the preceding user_message as prompt on the next usage event', async () => {
+    const provider = new CodexProvider(CURRENT_FIXTURES_DIR);
+    const data = await provider.load(CURRENT_RANGE);
+    const firstEvent = data.events?.[0];
+
+    expect(firstEvent?.prompt).toBe('refactor the auth middleware');
+  });
+
+  it('does not attach a prompt to an event when no preceding user_message exists', async () => {
+    const provider = new CodexProvider(CURRENT_FIXTURES_DIR);
+    const data = await provider.load(CURRENT_RANGE);
+    // The second event (second token_count in the fixture) has no user_message
+    // before it, so it should have no prompt.
+    const secondEvent = data.events?.[1];
+
+    expect(secondEvent?.prompt).toBeUndefined();
+  });
 });
