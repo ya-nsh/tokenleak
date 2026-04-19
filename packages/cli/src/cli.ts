@@ -1873,6 +1873,19 @@ function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
         cliArgs['noColor'] = true;
         index += 1;
         break;
+      case '--clipboard':
+        cliArgs['clipboard'] = true;
+        index += 1;
+        break;
+      case '--open':
+        cliArgs['open'] = true;
+        index += 1;
+        break;
+      case '--upload':
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        cliArgs['upload'] = argv[index + 1]!;
+        index += 2;
+        break;
       default:
         throw new TokenleakError(`Unknown receipts flag "${arg}"`);
     }
@@ -1913,6 +1926,16 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
     ? (cliArgs['top'] as number)
     : undefined;
 
+  if (format === 'png' && !config.output) {
+    throw new TokenleakError('--output <path> is required for --format png');
+  }
+  if (config.open && !config.output) {
+    throw new TokenleakError('--open requires --output to specify a file path');
+  }
+  if (config.upload !== undefined && config.upload !== 'gist') {
+    throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
+  }
+
   const range = computeDateRange({ since: config.since, until: config.until, days: config.days });
   const available = await selectAvailableProviders(config);
   if (available.length === 0) {
@@ -1923,33 +1946,54 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   const events = collectEventsForReceipt(data.providers);
   const receipt = buildReceipt(events, range, topLines !== undefined ? { topLines } : {});
 
+  // Render once, then share. The rendered artefact is a string for every
+  // format except png (Buffer).
+  let rendered: string | Buffer;
   if (format === 'json') {
-    const json = JSON.stringify(receipt, null, 2);
-    if (config.output) writeFileSync(config.output, json);
-    else process.stdout.write(json + '\n');
-    return;
+    rendered = JSON.stringify(receipt, null, 2);
+  } else if (format === 'svg') {
+    rendered = renderReceiptSvg(receipt, { theme });
+  } else if (format === 'png') {
+    rendered = await renderReceiptPng(receipt, { theme });
+  } else {
+    rendered = renderReceiptTerminal(receipt, config.width);
   }
 
-  if (format === 'svg') {
-    const svg = renderReceiptSvg(receipt, { theme });
-    if (config.output) writeFileSync(config.output, svg);
-    else process.stdout.write(svg + '\n');
-    return;
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else if (typeof rendered === 'string') {
+    process.stdout.write(rendered + '\n');
   }
 
-  if (format === 'png') {
-    if (!config.output) {
-      throw new TokenleakError('--output <path> is required for --format png');
+  // Sharing: clipboard
+  if (config.clipboard) {
+    if (format === 'png') {
+      process.stderr.write('Clipboard is not supported for binary PNG output. Use --output to save the file.\n');
+    } else {
+      const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
+      await copyToClipboard(text);
+      process.stderr.write('Copied receipt to clipboard.\n');
     }
-    const png = await renderReceiptPng(receipt, { theme });
-    writeFileSync(config.output, png);
-    return;
   }
 
-  const terminalWidth = config.width;
-  const rendered = renderReceiptTerminal(receipt, terminalWidth);
-  if (config.output) writeFileSync(config.output, rendered);
-  else process.stdout.write(rendered + '\n');
+  // Sharing: open generated file
+  if (config.open && config.output) {
+    await openFile(config.output);
+    process.stderr.write(`Opened ${config.output} in default application.\n`);
+  }
+
+  // Sharing: upload to gist
+  if (config.upload === 'gist') {
+    const ext = format === 'json' ? 'json' : format === 'svg' ? 'svg' : format === 'png' ? 'base64.txt' : 'txt';
+    const filename = `tokenleak-receipt.${ext}`;
+    const description = `Tokenleak receipt (${range.since} to ${range.until})`;
+    const payload =
+      format === 'png'
+        ? (rendered as Buffer).toString('base64')
+        : (rendered as string);
+    const url = await uploadToGist(payload, filename, description);
+    process.stderr.write(`Uploaded to gist: ${url}\n`);
+  }
 }
 
 const main = defineCommand({
