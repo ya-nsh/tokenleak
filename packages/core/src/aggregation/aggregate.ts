@@ -19,7 +19,7 @@ export function aggregate(
   daily: DailyUsage[],
   referenceDate: string,
 ): AggregatedStats {
-  const streaks = calculateStreaks(daily);
+  const streaks = calculateStreaks(daily, referenceDate);
   const rolling30 = rollingWindow(daily, 30, referenceDate);
   const rolling7 = rollingWindow(daily, 7, referenceDate);
   const peak = findPeakDay(daily);

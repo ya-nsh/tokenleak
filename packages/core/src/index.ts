@@ -6,6 +6,7 @@ export type {
   CachePricingDetails,
   ProviderData,
   ProviderColors,
+  ProviderWarning,
   AggregatedStats,
   DayOfWeekEntry,
   TopModelEntry,
@@ -124,6 +125,10 @@ export {
   ONE_DAY_MS,
   dateToUtcMs,
   formatDateStringUtc,
+  formatDateStringLocal,
+  getTodayLocal,
+  shiftDateStringLocal,
+  inclusiveDaySpan,
   compareDateStrings,
 } from './date-utils';
 

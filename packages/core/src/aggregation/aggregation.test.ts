@@ -74,11 +74,11 @@ function makeProvider(
 
 describe('calculateStreaks', () => {
   test('no usage returns 0', () => {
-    expect(calculateStreaks([])).toEqual({ current: 0, longest: 0 });
+    expect(calculateStreaks([], '2025-01-15')).toEqual({ current: 0, longest: 0 });
   });
 
   test('single day returns 1', () => {
-    expect(calculateStreaks([makeDay('2025-01-15')])).toEqual({
+    expect(calculateStreaks([makeDay('2025-01-15')], '2025-01-15')).toEqual({
       current: 1,
       longest: 1,
     });
@@ -90,7 +90,7 @@ describe('calculateStreaks', () => {
       makeDay('2025-01-02'),
       makeDay('2025-01-03'),
     ];
-    expect(calculateStreaks(days)).toEqual({ current: 3, longest: 3 });
+    expect(calculateStreaks(days, '2025-01-03')).toEqual({ current: 3, longest: 3 });
   });
 
   test('gap resets streak', () => {
@@ -100,7 +100,7 @@ describe('calculateStreaks', () => {
       makeDay('2025-01-04'), // gap
       makeDay('2025-01-05'),
     ];
-    const result = calculateStreaks(days);
+    const result = calculateStreaks(days, '2025-01-05');
     expect(result.current).toBe(2);
     expect(result.longest).toBe(2);
   });
@@ -115,9 +115,19 @@ describe('calculateStreaks', () => {
       makeDay('2025-01-10'),
       makeDay('2025-01-11'),
     ];
-    const result = calculateStreaks(days);
+    const result = calculateStreaks(days, '2025-01-11');
     expect(result.current).toBe(2);
     expect(result.longest).toBe(4);
+  });
+
+  test('current streak resets when the reference date is after the last active day', () => {
+    const days = [
+      makeDay('2025-01-01'),
+      makeDay('2025-01-02'),
+    ];
+    const result = calculateStreaks(days, '2025-01-10');
+    expect(result.current).toBe(0);
+    expect(result.longest).toBe(2);
   });
 
   test('streak spanning month boundary', () => {
@@ -127,7 +137,7 @@ describe('calculateStreaks', () => {
       makeDay('2025-02-01'),
       makeDay('2025-02-02'),
     ];
-    expect(calculateStreaks(days)).toEqual({ current: 4, longest: 4 });
+    expect(calculateStreaks(days, '2025-02-02')).toEqual({ current: 4, longest: 4 });
   });
 
   test('streak spanning year boundary', () => {
@@ -136,7 +146,7 @@ describe('calculateStreaks', () => {
       makeDay('2024-12-31'),
       makeDay('2025-01-01'),
     ];
-    expect(calculateStreaks(days)).toEqual({ current: 3, longest: 3 });
+    expect(calculateStreaks(days, '2025-01-01')).toEqual({ current: 3, longest: 3 });
   });
 });
 

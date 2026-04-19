@@ -7,6 +7,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
@@ -199,6 +200,21 @@ function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['prici
   };
 }
 
+function incrementWarningCount(
+  warnings: Map<string, ProviderWarning>,
+  kind: ProviderWarning['kind'],
+  file: string,
+): void {
+  const key = `${kind}:${file}`;
+  const existing = warnings.get(key);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+
+  warnings.set(key, { kind, file, count: 1 });
+}
+
 /**
  * Builds the DailyUsage array from a flat list of usage records,
  * grouping by date and model.
@@ -306,6 +322,7 @@ export class ClaudeCodeProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const files = collectJsonlFiles(this.baseDir);
     const allEvents: UsageEvent[] = [];
+    const warnings = new Map<string, ProviderWarning>();
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const latestRecordsByMessageId = new Map<string, UsageRecord>();
       const anonymousRecords: UsageRecord[] = [];
@@ -314,7 +331,9 @@ export class ClaudeCodeProvider implements IProvider {
 
       try {
         let lastPrompt: string | null = null;
-        for await (const record of splitJsonlRecords(file)) {
+        for await (const record of splitJsonlRecords(file, {
+          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
+        })) {
           const userPrompt = extractUserPrompt(record);
           if (userPrompt !== null) {
             lastPrompt = userPrompt;
@@ -337,6 +356,7 @@ export class ClaudeCodeProvider implements IProvider {
       } catch {
         // Skip files that fail to parse — corrupted files shouldn't
         // prevent loading data from other files
+        incrementWarningCount(warnings, 'read', file);
         return [];
       }
 
@@ -386,6 +406,9 @@ export class ClaudeCodeProvider implements IProvider {
       totalCost,
       colors: this.colors,
       events: allEvents,
+      warnings: [...warnings.values()].sort(
+        (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+      ),
     };
   }
 }

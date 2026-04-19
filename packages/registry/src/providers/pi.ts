@@ -8,6 +8,7 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
@@ -102,6 +103,21 @@ function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['prici
     cacheRead: pricing.cacheRead,
     cacheWrite: pricing.cacheWrite,
   };
+}
+
+function incrementWarningCount(
+  warnings: Map<string, ProviderWarning>,
+  kind: ProviderWarning['kind'],
+  file: string,
+): void {
+  const key = `${kind}:${file}`;
+  const existing = warnings.get(key);
+  if (existing) {
+    existing.count += 1;
+    return;
+  }
+
+  warnings.set(key, { kind, file, count: 1 });
 }
 
 function isSessionHeader(record: unknown): record is { type: 'session'; cwd?: string } {
@@ -233,7 +249,7 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
   };
 }
 
-function buildProviderData(records: PiUsageRecord[]): ProviderData {
+function buildProviderData(records: PiUsageRecord[], warnings: ProviderWarning[] = []): ProviderData {
   const byDate = new Map<string, Map<string, ModelBreakdown>>();
   const events = records.map(toUsageEvent);
 
@@ -306,6 +322,7 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
     totalCost,
     colors: PI_COLORS,
     events: events.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    warnings,
   };
 }
 
@@ -331,13 +348,16 @@ export class PiProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const sessionsDir = getSessionsDir(this.agentDir);
     const files = await collectJsonlFiles(sessionsDir);
+    const warnings = new Map<string, ProviderWarning>();
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const records: PiUsageRecord[] = [];
       let projectId: string | undefined;
       const sessionId = relative(sessionsDir, file).split(sep).join('/');
 
       try {
-        for await (const record of splitJsonlRecords(file)) {
+        for await (const record of splitJsonlRecords(file, {
+          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
+        })) {
           if (isSessionHeader(record)) {
             projectId =
               typeof record.cwd === 'string' && record.cwd.trim() ? record.cwd : projectId;
@@ -350,6 +370,7 @@ export class PiProvider implements IProvider {
           }
         }
       } catch {
+        incrementWarningCount(warnings, 'read', file);
         return [];
       }
 
@@ -357,6 +378,11 @@ export class PiProvider implements IProvider {
     });
     const records = recordsByFile.flat();
 
-    return buildProviderData(records);
+    return buildProviderData(
+      records,
+      [...warnings.values()].sort(
+        (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+      ),
+    );
   }
 }

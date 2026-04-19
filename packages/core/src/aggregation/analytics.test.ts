@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   buildAttributionClusters,
   buildProjectRollups,
@@ -8,6 +11,8 @@ import {
   normalizeScores,
 } from './analytics';
 import type { UsageEvent } from '../types';
+
+const TEMP_DIRS: string[] = [];
 
 const EVENTS: UsageEvent[] = [
   {
@@ -60,6 +65,24 @@ describe('analytics helpers', () => {
     expect(repoRoot).toBe('/Users/test/work');
     expect(inferDirectoryLabel('/Users/test/work/tokenleak/packages/core', repoRoot)).toBe('tokenleak');
     expect(inferDirectoryLabel('project-alpha', null)).toBe('project-alpha');
+  });
+
+  afterEach(() => {
+    while (TEMP_DIRS.length > 0) {
+      const dir = TEMP_DIRS.pop();
+      if (dir) {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('prefers an actual git root when one exists on disk', () => {
+    const root = join(tmpdir(), `tokenleak-repo-root-${Date.now()}`);
+    mkdirSync(join(root, '.git'), { recursive: true });
+    mkdirSync(join(root, 'packages', 'core'), { recursive: true });
+    TEMP_DIRS.push(root);
+
+    expect(inferRepoRoot(join(root, 'packages', 'core'))).toBe(root);
   });
 
   it('builds session rollups with derived duration and top models', () => {

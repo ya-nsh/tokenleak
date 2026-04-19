@@ -99,8 +99,8 @@ export async function loadCompareTokenleakData(
   ]);
 
   const compareOutput = buildCompareOutput(
-    { range: currentRange, stats: currentResult.stats },
     { range: previousRange, stats: previousResult.stats },
+    { range: currentRange, stats: currentResult.stats },
   );
 
   return {
@@ -116,7 +116,7 @@ export async function loadCompareTokenleakData(
       more: buildMoreStats(currentResult.data, currentRange, {
         previousRange,
         previousProviders: previousResult.data,
-        previousStats: compareOutput.periodB.stats,
+        previousStats: compareOutput.periodA.stats,
         deltas: compareOutput.deltas,
       }),
     },

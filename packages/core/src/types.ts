@@ -34,6 +34,13 @@ export interface ProviderData {
   totalCost: number;
   colors: ProviderColors;
   events?: UsageEvent[];
+  warnings?: ProviderWarning[];
+}
+
+export interface ProviderWarning {
+  kind: 'parse' | 'oversize' | 'read';
+  file: string;
+  count: number;
 }
 
 export interface ProviderColors {
