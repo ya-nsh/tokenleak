@@ -78,6 +78,9 @@ export {
   clusterPrompts,
   tokenBigrams,
   buildReceipt,
+  CATEGORY_LABELS,
+  CATEGORY_LABELS_SHORT,
+  formatReceiptDollars,
 } from './aggregation';
 
 export type {

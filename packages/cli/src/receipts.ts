@@ -1,22 +1,12 @@
-import type { Receipt, ReceiptLine, UsageEvent } from '@tokenleak/core';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  debugging: 'DEBUGGING',
-  styling: 'STYLING',
-  'explain-again': 'EXPLAIN AGAIN',
-  refactoring: 'REFACTOR',
-  testing: 'TESTING',
-  'new-code': 'NEW CODE',
-  opinion: 'OPINION POLL',
-  typo: 'TYPO FIX',
-  misc: 'MISC',
-};
+import {
+  CATEGORY_LABELS,
+  formatReceiptDollars,
+  type Receipt,
+  type ReceiptLine,
+  type UsageEvent,
+} from '@tokenleak/core';
 
 const MIN_DOT_PADDING = 2;
-
-function formatDollars(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function dots(n: number): string {
   return '.'.repeat(Math.max(2, n));
@@ -56,16 +46,16 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
   }
 
   lines.push(dottedDivider);
-  lines.push(totalRow('SUBTOTAL', formatDollars(receipt.summary.subtotal), w));
+  lines.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal), w));
   lines.push(
     totalRow(
       `SERVICE FEES (${receipt.summary.unlabeledEvents} uncaptured)`,
-      formatDollars(receipt.summary.serviceFees),
+      formatReceiptDollars(receipt.summary.serviceFees),
       w,
     ),
   );
   lines.push(divider);
-  lines.push(totalRow('TOTAL', formatDollars(receipt.summary.total), w));
+  lines.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total), w));
   lines.push('');
   lines.push(centerLine('THANK YOU FOR YOUR PATRONAGE', w));
   lines.push(centerLine(`tokenleak · ${new Date().toISOString().slice(0, 10)}`, w));
@@ -76,7 +66,7 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
 function renderLineItem(line: ReceiptLine, width: number): string[] {
   const category = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
   const qtyStr = `${line.quantity}×`;
-  const costStr = formatDollars(line.totalCost);
+  const costStr = formatReceiptDollars(line.totalCost);
 
   const descriptionSpace = width - costStr.length - MIN_DOT_PADDING;
   const description = truncate(`${qtyStr} ${line.description}`, descriptionSpace);

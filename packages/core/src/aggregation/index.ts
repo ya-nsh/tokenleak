@@ -22,6 +22,7 @@ export type {
   ReceiptCategory,
   BuildReceiptOptions,
 } from './receipt-lines';
+export { CATEGORY_LABELS, CATEGORY_LABELS_SHORT, formatReceiptDollars } from './receipt-labels';
 export {
   buildSessionRollups,
   buildProjectRollups,
