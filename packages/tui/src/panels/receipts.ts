@@ -1,7 +1,20 @@
 import { Box, Text } from '@opentui/core';
-import { CATEGORY_LABELS_SHORT, type Receipt, type ReceiptLine } from '@tokenleak/core';
+import {
+  CATEGORY_LABELS_SHORT,
+  type Receipt,
+  type ReceiptCategory,
+  type ReceiptLine,
+} from '@tokenleak/core';
 import { formatCost, padRight, padLeft, truncate } from '../lib/format.js';
+import { deriveReceiptLines } from '../lib/data.js';
 import { COLORS, BOLD } from '../lib/theme.js';
+import type { ReceiptsSortMode } from '../lib/state.js';
+
+const SORT_LABELS: Record<ReceiptsSortMode, string> = {
+  cost: 'cost',
+  qty: 'qty',
+  alpha: 'alpha',
+};
 
 const VISIBLE_ROWS = 12;
 
@@ -41,7 +54,12 @@ function renderSamplePrompt(prompt: string, descColWidth: number) {
 }
 
 export function createReceiptsPanel(
-  state: { receiptsScrollOffset: number; receiptsExpandedLineIndex: number | null },
+  state: {
+    receiptsScrollOffset: number;
+    receiptsExpandedLineIndex: number | null;
+    receiptsSortMode: ReceiptsSortMode;
+    receiptsCategoryFilter: ReceiptCategory | null;
+  },
   receipt: Receipt | null,
 ) {
   if (!receipt || receipt.lines.length === 0) {
@@ -72,8 +90,13 @@ export function createReceiptsPanel(
     );
   }
 
+  const derivedLines = deriveReceiptLines(
+    receipt,
+    state.receiptsSortMode,
+    state.receiptsCategoryFilter,
+  );
   const offset = state.receiptsScrollOffset;
-  const visible = receipt.lines.slice(offset, offset + VISIBLE_ROWS);
+  const visible = derivedLines.slice(offset, offset + VISIBLE_ROWS);
 
   const DESC_MIN = 20;
   const DESC_MAX = 52;
@@ -84,9 +107,41 @@ export function createReceiptsPanel(
   if (offset > 0) {
     scrollIndicators.push(Text({ content: `  ${offset} more above`, fg: COLORS.dimWhite }));
   }
-  const below = receipt.lines.length - offset - visible.length;
+  const below = derivedLines.length - offset - visible.length;
   if (below > 0) {
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
+  }
+
+  const filterLabel = state.receiptsCategoryFilter
+    ? (CATEGORY_LABELS_SHORT[state.receiptsCategoryFilter] ?? state.receiptsCategoryFilter)
+    : 'all';
+  const titleSuffix = ` · sort: ${SORT_LABELS[state.receiptsSortMode]} · filter: ${filterLabel}`;
+  const titleRow = Box(
+    { flexDirection: 'row', width: '100%' },
+    Text({ content: ' Receipts', fg: COLORS.amber, attributes: BOLD }),
+    Text({ content: titleSuffix, fg: COLORS.dimWhite }),
+  );
+
+  // Empty-after-filter guard: we already know the receipt has lines; this
+  // branch only fires when the filter narrowed everything away.
+  if (derivedLines.length === 0) {
+    return Box(
+      {
+        flexDirection: 'column',
+        width: '100%',
+        flexGrow: 1,
+        borderStyle: 'single',
+        borderColor: COLORS.dimWhite,
+        paddingLeft: 1,
+        paddingRight: 1,
+      },
+      titleRow,
+      Text({ content: '', fg: COLORS.dimWhite }),
+      Text({
+        content: `No receipt lines match the current filter (${filterLabel}). Press f to cycle.`,
+        fg: COLORS.dimWhite,
+      }),
+    );
   }
 
   const columnHeader = Box(
@@ -148,7 +203,7 @@ export function createReceiptsPanel(
       borderStyle: 'single',
       borderColor: COLORS.dimWhite,
     },
-    Text({ content: ' Receipts ', fg: COLORS.amber, attributes: BOLD }),
+    titleRow,
     summary,
     Text({ content: '', fg: COLORS.dimWhite }),
     columnHeader,
