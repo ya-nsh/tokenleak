@@ -117,6 +117,9 @@ export function buildReceiptsHelpText(): string {
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',
     '      --top <n>           Show top N line items (default: 12)',
+    '      --clipboard         Copy rendered receipt to the clipboard (terminal/svg/json)',
+    '      --open              Open the generated file (requires --output)',
+    '      --upload <target>   Upload output — currently supported: gist',
     '      --no-color          Accepted for parity with terminal output',
     '      --help              Show receipts help',
     '',
@@ -125,8 +128,9 @@ export function buildReceiptsHelpText(): string {
     'Examples:',
     '  tokenleak receipts',
     '  tokenleak receipts --since 2026-04-01 --until 2026-04-30',
-    '  tokenleak receipts --output receipt.png',
-    '  tokenleak receipts --format json',
+    '  tokenleak receipts --output receipt.png --open',
+    '  tokenleak receipts --clipboard',
+    '  tokenleak receipts --format json --upload gist',
     '',
   ].join('\n');
 }

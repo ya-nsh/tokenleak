@@ -1256,10 +1256,16 @@ async function buildReceiptsPreset(): Promise<InteractiveCommand> {
     format === 'png' || format === 'svg'
       ? await promptOutputPath(`tokenleak-receipt.${format}`)
       : await ask('Output file (blank keeps stdout)');
+  const clipboard = format === 'png' ? false : await askYesNo('Copy receipt to clipboard', false);
+  const shouldOpen = output ? await askYesNo('Open generated file', false) : false;
+  const upload = format === 'png' ? '' : await ask('Upload target [blank/gist]');
 
   const args: CliArgs = { format, ...rangeArgs };
   if (theme) args['theme'] = theme;
   if (output) args['output'] = output;
+  if (clipboard) args['clipboard'] = true;
+  if (shouldOpen) args['open'] = true;
+  if (upload) args['upload'] = upload;
   applySelectedProviders(args, providers);
 
   return createSubcommandRunCommand('receipts', args, [], {
