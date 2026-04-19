@@ -131,4 +131,58 @@ describe('buildReceipt', () => {
     expect(receipt.lines[0]!.description.length).toBeLessThanOrEqual(80);
     expect(receipt.lines[0]!.description.endsWith('…')).toBe(true);
   });
+
+  describe('classifier precedence', () => {
+    function classify(prompt: string) {
+      const receipt = buildReceipt([makeEvent({ prompt, cost: 0.01 })], RANGE);
+      return receipt.lines[0]?.category;
+    }
+
+    it('typo beats debugging when both match', () => {
+      // "fix the typo" contains both `fix` (debugging) and `typo`.
+      expect(classify('fix the typo on line 3')).toBe('typo');
+    });
+
+    it('testing beats debugging for test-intent prompts', () => {
+      // "test for the error handler" mentions `error` but the intent is testing.
+      expect(classify('write a test for the error handler')).toBe('testing');
+      expect(classify('add spec coverage for the failing flow')).toBe('testing');
+    });
+
+    it('testing beats new-code when a test is being authored', () => {
+      expect(classify('write a test for the parser')).toBe('testing');
+      expect(classify('create a mock for the auth middleware')).toBe('testing');
+    });
+
+    it('styling beats new-code when layout work is requested', () => {
+      expect(classify('add padding to the navbar')).toBe('styling');
+      expect(classify('implement a flex layout for the card')).toBe('styling');
+    });
+
+    it('explain-again beats debugging for explanation requests about bugs', () => {
+      expect(classify('explain why this fails')).toBe('explain-again');
+      expect(classify('what does this error mean')).toBe('explain-again');
+    });
+
+    it('refactoring beats debugging when the verb is refactor', () => {
+      expect(classify('refactor this broken module')).toBe('refactoring');
+      expect(classify('clean up the debug helper')).toBe('refactoring');
+    });
+
+    it('opinion beats everything when the user is asking for a recommendation', () => {
+      expect(classify('which library should I use for testing')).toBe('opinion');
+      expect(classify('what do you think is the best way to fix this')).toBe('opinion');
+    });
+
+    it('debugging still catches plain failure-oriented prompts', () => {
+      expect(classify('fix the bug')).toBe('debugging');
+      expect(classify('debug this crash')).toBe('debugging');
+      expect(classify('stack trace shows segfault')).toBe('debugging');
+    });
+
+    it('falls back to misc when no pattern matches', () => {
+      expect(classify('hello world')).toBe('misc');
+      expect(classify('quantum flux capacitor handling')).toBe('misc');
+    });
+  });
 });

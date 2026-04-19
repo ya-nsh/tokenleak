@@ -25,11 +25,15 @@ const SAMPLE_RECEIPT: Receipt = {
 };
 
 describe('renderReceiptPng', () => {
-  it.skip('output starts with PNG magic bytes (run manually with --timeout 30000)', async () => {
-    const buf = await renderReceiptPng(SAMPLE_RECEIPT, { theme: 'dark' });
-    expect(buf).toBeInstanceOf(Buffer);
-    for (let i = 0; i < PNG_MAGIC_BYTES.length; i++) {
-      expect(buf[i]).toBe(PNG_MAGIC_BYTES[i]!);
-    }
-  });
+  it(
+    'output starts with PNG magic bytes',
+    async () => {
+      const buf = await renderReceiptPng(SAMPLE_RECEIPT, { theme: 'dark' });
+      expect(buf).toBeInstanceOf(Buffer);
+      for (let i = 0; i < PNG_MAGIC_BYTES.length; i++) {
+        expect(buf[i]).toBe(PNG_MAGIC_BYTES[i]!);
+      }
+    },
+    30_000,
+  );
 });
