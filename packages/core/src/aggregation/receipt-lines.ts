@@ -125,22 +125,25 @@ interface CategoryRule {
   pattern: RegExp;
 }
 
+// Classification precedence: first matching rule wins. Rules are ordered from
+// most specific to most generic so that a prompt like "write a test for the
+// error handler" classifies as `testing` (intent) rather than `debugging`
+// (which matches the incidental word `error`). The `debugging` pattern is
+// deliberately last because its keywords (fix, bug, error, broken) show up
+// across many unrelated prompts and should only fire when no more specific
+// intent is present.
 const CATEGORY_RULES: CategoryRule[] = [
   { category: 'typo', pattern: /\b(typo|missing (semicolon|comma|bracket)|one[- ]liner)\b/i },
-  {
-    category: 'debugging',
-    pattern: /\b(debug|error|fail(ed|ing)?|broken|bug|stack ?trace|doesn'?t work|why (isn'?t|won'?t)|fix)\b/i,
-  },
   {
     category: 'styling',
     pattern: /\b(center|centre|padding|margin|flex|grid|css|tailwind|style|color|colou?r|font|align|div|layout)\b/i,
   },
+  { category: 'testing', pattern: /\b(test|spec|assert|mock|stub|coverage|jest|vitest|bun test)\b/i },
   {
     category: 'explain-again',
     pattern: /\b(explain|what does|what is|how does|why is|walk me through|can you describe|tell me about)\b/i,
   },
   { category: 'refactoring', pattern: /\b(refactor|rename|extract|simplif(y|ies)|clean ?up|deduplic|inline)\b/i },
-  { category: 'testing', pattern: /\b(test|spec|assert|mock|stub|coverage|jest|vitest|bun test)\b/i },
   {
     category: 'new-code',
     pattern: /\b(implement|add (a|an|the)?|create (a|an|the)?|build (a|an|the)?|write (a|an|the)?|generate|scaffold)\b/i,
@@ -148,6 +151,10 @@ const CATEGORY_RULES: CategoryRule[] = [
   {
     category: 'opinion',
     pattern: /\b(should i|which (is|would)|what do you think|recommend|better approach|best way|opinion)\b/i,
+  },
+  {
+    category: 'debugging',
+    pattern: /\b(debug|error|fail(ed|ing)?|broken|bug|stack ?trace|doesn'?t work|why (isn'?t|won'?t)|fix)\b/i,
   },
 ];
 
