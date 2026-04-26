@@ -7,12 +7,18 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  incrementProviderWarning,
+  resolveUsageCost,
+} from '../costing';
 
 const PROVIDER_NAME = 'cursor';
 const DISPLAY_NAME = 'Cursor';
@@ -142,25 +148,12 @@ function compactModelDateSuffix(model: string): string {
   return model.replace(DASHED_DATE_SUFFIX, '-$1$2$3');
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
-}
-
-function parseUsageFile(filePath: string): UsageRecord[] {
+function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>): UsageRecord[] {
   let raw: string;
   try {
     raw = readFileSync(filePath, 'utf8');
   } catch {
+    incrementProviderWarning(warnings, 'read', filePath);
     return [];
   }
 
@@ -194,11 +187,13 @@ function parseUsageFile(filePath: string): UsageRecord[] {
   for (const line of lines.slice(1)) {
     const fields = parseCsvLine(line);
     if (fields.length <= costIndex) {
+      incrementProviderWarning(warnings, 'parse', filePath);
       continue;
     }
 
     const timestamp = toIsoTimestamp(fields[0] ?? '');
     if (!timestamp) {
+      incrementProviderWarning(warnings, 'parse', filePath);
       continue;
     }
 
@@ -209,6 +204,7 @@ function parseUsageFile(filePath: string): UsageRecord[] {
 
     const rawModel = (fields[modelIndex] ?? '').trim();
     if (!rawModel) {
+      incrementProviderWarning(warnings, 'parse', filePath);
       continue;
     }
 
@@ -223,6 +219,7 @@ function parseUsageFile(filePath: string): UsageRecord[] {
       !Number.isFinite(cacheReadTokens) ||
       !Number.isFinite(outputTokens)
     ) {
+      incrementProviderWarning(warnings, 'parse', filePath);
       continue;
     }
 
@@ -256,28 +253,15 @@ function parseUsageFile(filePath: string): UsageRecord[] {
   return records;
 }
 
-function getRecordCost(record: UsageRecord): number {
-  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
-    return record.explicitCost;
-  }
-
-  return estimateCostBreakdown(
-    record.normalizedModel,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  ).totalCost;
-}
-
 function toUsageEvent(record: UsageRecord): UsageEvent {
-  const pricing = estimateCostBreakdown(
-    record.normalizedModel,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  ).pricing;
+  const cost = resolveUsageCost({
+    model: record.normalizedModel,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    explicitCost: record.explicitCost,
+  });
 
   return {
     provider: PROVIDER_NAME,
@@ -293,13 +277,16 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
       record.outputTokens +
       record.cacheReadTokens +
       record.cacheWriteTokens,
-    cost: getRecordCost(record),
-    pricing: toCachePricing(pricing),
+    cost: cost.cost,
+    pricing: cost.pricing,
+    costSource: cost.costSource,
+    pricedTokens: cost.pricedTokens,
+    unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
   };
 }
 
-function buildProviderData(records: UsageRecord[]): ProviderData {
+function buildProviderData(records: UsageRecord[], warnings: ProviderWarning[]): ProviderData {
   const byDate = new Map<string, Map<string, ModelBreakdown>>();
   const events = records.map(toUsageEvent);
 
@@ -318,6 +305,10 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
       existing.cacheWriteTokens += event.cacheWriteTokens;
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
+      existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      existing.costSource =
+        (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
       if (!existing.pricing && event.pricing) {
         existing.pricing = event.pricing;
       }
@@ -333,6 +324,9 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
       totalTokens: event.totalTokens,
       cost: event.cost,
       pricing: event.pricing,
+      costSource: event.costSource,
+      pricedTokens: event.pricedTokens,
+      unpricedTokens: event.unpricedTokens,
     });
   }
 
@@ -372,6 +366,8 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
     totalCost,
     colors: CURSOR_COLORS,
     events,
+    costCompleteness: buildEventCostCompleteness(events),
+    warnings,
   };
 }
 
@@ -396,9 +392,16 @@ export class CursorProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const files = collectUsageFiles(this.cacheDir);
-    const records = files.flatMap((filePath) => parseUsageFile(filePath))
+    const warnings = new Map<string, ProviderWarning>();
+    const records = files.flatMap((filePath) => parseUsageFile(filePath, warnings))
       .filter((record) => isInRange(record.date, range));
+    addUnknownPricingWarnings(warnings, records.map(toUsageEvent));
 
-    return buildProviderData(records);
+    return buildProviderData(
+      records,
+      [...warnings.values()].sort(
+        (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+      ),
+    );
   }
 }

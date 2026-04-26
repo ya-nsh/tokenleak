@@ -686,15 +686,32 @@ async function loadProviderDataForRange(
   const results = await Promise.all(
     availableProviders.map(async (provider) => {
       try {
-        return await provider.load(dateRange);
+        return { data: await provider.load(dateRange), failed: false };
       } catch {
-        return null;
+        const data: ProviderData = {
+          provider: provider.name,
+          displayName: provider.displayName,
+          daily: [],
+          totalTokens: 0,
+          totalCost: 0,
+          colors: provider.colors,
+          events: [],
+          warnings: [{ kind: 'provider-load', file: provider.name, count: 1 }],
+          costCompleteness: {
+            status: 'unknown',
+            totalTokens: 0,
+            pricedTokens: 0,
+            unpricedTokens: 0,
+            unknownModels: [],
+          },
+        };
+        return { data, failed: true };
       }
     }),
   );
 
-  const providerDataList = results.filter((result): result is ProviderData => result !== null);
-  if (providerDataList.length === 0) {
+  const providerDataList = results.map((result) => result.data);
+  if (results.every((result) => result.failed)) {
     throw new TokenleakError('No provider data found');
   }
 
@@ -709,6 +726,21 @@ function collectProviderWarnings(providers: ProviderData[]): Array<{ provider: s
 
 function emitProviderWarnings(providers: ProviderData[], label: string = 'Warning'): void {
   for (const { provider, warning } of collectProviderWarnings(providers)) {
+    if (warning.kind === 'unknown-pricing') {
+      const plural = warning.count === 1 ? 'event has' : 'events have';
+      process.stderr.write(
+        `${label}: ${provider} ${warning.count} ${plural} no verified pricing for model "${warning.file}"; cost totals are incomplete.\n`,
+      );
+      continue;
+    }
+
+    if (warning.kind === 'provider-load') {
+      process.stderr.write(
+        `${label}: ${provider} failed to load; data from this provider is omitted.\n`,
+      );
+      continue;
+    }
+
     const plural = warning.count === 1 ? 'entry' : 'entries';
     process.stderr.write(
       `${label}: ${provider} skipped ${warning.count} ${warning.kind} ${plural} in ${warning.file}\n`,

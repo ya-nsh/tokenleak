@@ -96,7 +96,19 @@ describe('CodexProvider', () => {
     expect(data.daily[0]!.cacheReadTokens).toBe(700);
     expect(data.daily[0]!.totalTokens).toBe(2880);
     expect(data.totalTokens).toBe(2880);
-    expect(data.totalCost).toBeGreaterThan(0);
+    expect(data.totalCost).toBe(0);
+    expect(data.costCompleteness).toMatchObject({
+      status: 'unknown',
+      totalTokens: 2880,
+      pricedTokens: 0,
+      unpricedTokens: 2880,
+      unknownModels: ['gpt-5.4'],
+    });
+    expect(data.warnings).toContainEqual({
+      kind: 'unknown-pricing',
+      file: 'gpt-5.4',
+      count: 2,
+    });
   });
 
   // -- load: empty directory ----------------------------------------------

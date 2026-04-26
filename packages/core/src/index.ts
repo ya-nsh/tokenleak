@@ -59,6 +59,9 @@ export type {
   DateRange,
   CompareOutput,
   CompareDeltas,
+  ProviderWarningKind,
+  CostSource,
+  CostCompleteness,
 } from './types';
 
 export {
@@ -131,6 +134,12 @@ export {
   inclusiveDaySpan,
   compareDateStrings,
 } from './date-utils';
+
+export {
+  buildDailyCostCompleteness,
+  buildEventCostCompleteness,
+  mergeCostCompleteness,
+} from './cost-completeness';
 
 export { analyzeEfficiency, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
 export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';

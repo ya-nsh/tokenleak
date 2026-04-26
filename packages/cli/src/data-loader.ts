@@ -6,6 +6,7 @@ import {
   buildMoreStats,
   computePreviousPeriod,
   parseCompareRange,
+  mergeCostCompleteness,
 } from '@tokenleak/core';
 import type {
   CompareOutput,
@@ -59,23 +60,40 @@ async function loadAndAggregate(
   const results = await Promise.all(
     providers.map(async (p) => {
       try {
-        return await p.load(range);
+        return { data: await p.load(range), failed: false };
       } catch {
-        return null;
+        const data: ProviderData = {
+          provider: p.name,
+          displayName: p.displayName,
+          daily: [],
+          totalTokens: 0,
+          totalCost: 0,
+          colors: p.colors,
+          events: [],
+          warnings: [{ kind: 'provider-load', file: p.name, count: 1 }],
+          costCompleteness: {
+            status: 'unknown',
+            totalTokens: 0,
+            pricedTokens: 0,
+            unpricedTokens: 0,
+            unknownModels: [],
+          },
+        };
+        return { data, failed: true };
       }
     }),
   );
 
-  const providerDataList: ProviderData[] = results.filter(
-    (r): r is ProviderData => r !== null,
-  );
+  const providerDataList = results.map((result) => result.data);
+  const successfulProviderCount = results.filter((result) => !result.failed).length;
 
-  if (!allowEmpty && providerDataList.length === 0) {
+  if (!allowEmpty && successfulProviderCount === 0) {
     throw new TokenleakError('No provider data found');
   }
 
   const mergedDaily = mergeProviderData(providerDataList);
   const stats = aggregate(mergedDaily, range.until);
+  stats.costCompleteness = mergeCostCompleteness(providerDataList);
 
   return { data: providerDataList, stats };
 }

@@ -14,8 +14,12 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange, mapWithConcurrency } from '../utils';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  resolveUsageCost,
+} from '../costing';
 
 const PROVIDER_NAME = 'pi';
 const DISPLAY_NAME = 'Pi';
@@ -91,18 +95,6 @@ function toIsoTimestamp(value: unknown): string | null {
   }
 
   return null;
-}
-
-function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
 }
 
 function incrementWarningCount(
@@ -205,32 +197,17 @@ function parseUsageRecord(
   };
 }
 
-function getRecordCost(record: PiUsageRecord): number {
-  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
-    return record.explicitCost;
-  }
-
-  return estimateCostBreakdown(
-    record.normalizedModel,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  ).totalCost;
-}
-
 function toUsageEvent(record: PiUsageRecord): UsageEvent {
   const totalTokens =
     record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
-  const pricing = toCachePricing(
-    estimateCostBreakdown(
-      record.normalizedModel,
-      record.inputTokens,
-      record.outputTokens,
-      record.cacheReadTokens,
-      record.cacheWriteTokens,
-    ).pricing,
-  );
+  const cost = resolveUsageCost({
+    model: record.normalizedModel,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    explicitCost: record.explicitCost,
+  });
 
   return {
     provider: PROVIDER_NAME,
@@ -242,8 +219,11 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     cacheReadTokens: record.cacheReadTokens,
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
-    cost: getRecordCost(record),
-    pricing,
+    cost: cost.cost,
+    pricing: cost.pricing,
+    costSource: cost.costSource,
+    pricedTokens: cost.pricedTokens,
+    unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
     projectId: record.projectId,
   };
@@ -268,6 +248,10 @@ function buildProviderData(records: PiUsageRecord[], warnings: ProviderWarning[]
       existing.cacheWriteTokens += event.cacheWriteTokens;
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
+      existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      existing.costSource =
+        (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
       if (!existing.pricing && event.pricing) {
         existing.pricing = event.pricing;
       }
@@ -281,6 +265,9 @@ function buildProviderData(records: PiUsageRecord[], warnings: ProviderWarning[]
         totalTokens: event.totalTokens,
         cost: event.cost,
         pricing: event.pricing,
+        costSource: event.costSource,
+        pricedTokens: event.pricedTokens,
+        unpricedTokens: event.unpricedTokens,
       });
     }
   }
@@ -322,6 +309,7 @@ function buildProviderData(records: PiUsageRecord[], warnings: ProviderWarning[]
     totalCost,
     colors: PI_COLORS,
     events: events.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    costCompleteness: buildEventCostCompleteness(events),
     warnings,
   };
 }
@@ -377,6 +365,7 @@ export class PiProvider implements IProvider {
       return records;
     });
     const records = recordsByFile.flat();
+    addUnknownPricingWarnings(warnings, records.map(toUsageEvent));
 
     return buildProviderData(
       records,

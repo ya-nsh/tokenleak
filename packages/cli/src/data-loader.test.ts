@@ -65,8 +65,12 @@ describe('loadTokenleakData', () => {
       }),
     ], RANGE);
 
-    expect(output.providers).toHaveLength(1);
+    expect(output.providers).toHaveLength(2);
     expect(output.providers[0]?.provider).toBe('claude-code');
+    expect(output.providers[1]?.provider).toBe('codex');
+    expect(output.providers[1]?.warnings).toEqual([
+      { kind: 'provider-load', file: 'codex', count: 1 },
+    ]);
     expect(output.dateRange).toEqual(RANGE);
     expect(output.more?.cacheRoi).toBeDefined();
   });

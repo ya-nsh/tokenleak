@@ -18,6 +18,9 @@ export interface ModelBreakdown {
   totalTokens: number;
   cost: number;
   pricing?: CachePricingDetails | null;
+  costSource?: CostSource;
+  pricedTokens?: number;
+  unpricedTokens?: number;
 }
 
 export interface CachePricingDetails {
@@ -35,12 +38,25 @@ export interface ProviderData {
   colors: ProviderColors;
   events?: UsageEvent[];
   warnings?: ProviderWarning[];
+  costCompleteness?: CostCompleteness;
 }
 
+export type ProviderWarningKind = 'parse' | 'oversize' | 'read' | 'provider-load' | 'unknown-pricing';
+
 export interface ProviderWarning {
-  kind: 'parse' | 'oversize' | 'read';
+  kind: ProviderWarningKind;
   file: string;
   count: number;
+}
+
+export type CostSource = 'provider-reported' | 'estimated' | 'unpriced';
+
+export interface CostCompleteness {
+  status: 'complete' | 'partial' | 'unknown';
+  totalTokens: number;
+  pricedTokens: number;
+  unpricedTokens: number;
+  unknownModels: string[];
 }
 
 export interface ProviderColors {
@@ -69,6 +85,7 @@ export interface AggregatedStats {
   dayOfWeek: DayOfWeekEntry[];
   topModels: TopModelEntry[];
   rolling30dTopModel: string | null;
+  costCompleteness?: CostCompleteness;
 }
 
 export interface UsageEvent {
@@ -83,6 +100,9 @@ export interface UsageEvent {
   totalTokens: number;
   cost: number;
   pricing?: CachePricingDetails | null;
+  costSource?: CostSource;
+  pricedTokens?: number;
+  unpricedTokens?: number;
   sessionId?: string;
   projectId?: string;
   repoRoot?: string;

@@ -13,8 +13,8 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange, mapWithConcurrency } from '../utils';
+import { addUnknownPricingWarnings, buildEventCostCompleteness, resolveUsageCost } from '../costing';
 
 const DEFAULT_CONFIG_DIR = join(homedir(), '.claude');
 
@@ -188,18 +188,6 @@ export function extractUserPrompt(record: unknown): string | null {
   return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
 }
 
-function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
-}
-
 function incrementWarningCount(
   warnings: Map<string, ProviderWarning>,
   kind: ProviderWarning['kind'],
@@ -224,14 +212,13 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
 
   for (const rec of records) {
     const normalizedModel = normalizeModelName(rec.model);
-    const costBreakdown = estimateCostBreakdown(
-      rec.model,
-      rec.inputTokens,
-      rec.outputTokens,
-      rec.cacheReadTokens,
-      rec.cacheWriteTokens,
-    );
-    const pricing = toCachePricing(costBreakdown.pricing);
+    const cost = resolveUsageCost({
+      model: rec.model,
+      inputTokens: rec.inputTokens,
+      outputTokens: rec.outputTokens,
+      cacheReadTokens: rec.cacheReadTokens,
+      cacheWriteTokens: rec.cacheWriteTokens,
+    });
 
     let dateModels = byDate.get(rec.date);
     if (!dateModels) {
@@ -249,11 +236,14 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
         cacheWriteTokens: 0,
         totalTokens: 0,
         cost: 0,
-        pricing,
+        pricing: cost.pricing,
+        costSource: cost.costSource,
+        pricedTokens: 0,
+        unpricedTokens: 0,
       };
       dateModels.set(normalizedModel, mb);
-    } else if (!mb.pricing && pricing) {
-      mb.pricing = pricing;
+    } else if (!mb.pricing && cost.pricing) {
+      mb.pricing = cost.pricing;
     }
 
     mb.inputTokens += rec.inputTokens;
@@ -262,7 +252,10 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
     mb.cacheWriteTokens += rec.cacheWriteTokens;
     mb.totalTokens +=
       rec.inputTokens + rec.outputTokens + rec.cacheReadTokens + rec.cacheWriteTokens;
-    mb.cost += costBreakdown.totalCost;
+    mb.cost += cost.cost;
+    mb.pricedTokens = (mb.pricedTokens ?? 0) + cost.pricedTokens;
+    mb.unpricedTokens = (mb.unpricedTokens ?? 0) + cost.unpricedTokens;
+    mb.costSource = (mb.unpricedTokens ?? 0) >= mb.totalTokens ? 'unpriced' : mb.costSource;
   }
 
   const daily: DailyUsage[] = [];
@@ -367,13 +360,13 @@ export class ClaudeCodeProvider implements IProvider {
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {
       const normalizedModel = normalizeModelName(record.model);
-      const costBreakdown = estimateCostBreakdown(
-        record.model,
-        record.inputTokens,
-        record.outputTokens,
-        record.cacheReadTokens,
-        record.cacheWriteTokens,
-      );
+      const cost = resolveUsageCost({
+        model: record.model,
+        inputTokens: record.inputTokens,
+        outputTokens: record.outputTokens,
+        cacheReadTokens: record.cacheReadTokens,
+        cacheWriteTokens: record.cacheWriteTokens,
+      });
       allEvents.push({
         provider: this.name,
         timestamp: record.timestamp,
@@ -388,13 +381,17 @@ export class ClaudeCodeProvider implements IProvider {
           record.outputTokens +
           record.cacheReadTokens +
           record.cacheWriteTokens,
-        cost: costBreakdown.totalCost,
-        pricing: toCachePricing(costBreakdown.pricing),
+        cost: cost.cost,
+        pricing: cost.pricing,
+        costSource: cost.costSource,
+        pricedTokens: cost.pricedTokens,
+        unpricedTokens: cost.unpricedTokens,
         sessionId: record.sessionId,
         projectId: record.projectId,
         prompt: record.prompt,
       });
     }
+    addUnknownPricingWarnings(warnings, allEvents);
     const totalTokens = daily.reduce((sum, d) => sum + d.totalTokens, 0);
     const totalCost = daily.reduce((sum, d) => sum + d.cost, 0);
 
@@ -406,6 +403,7 @@ export class ClaudeCodeProvider implements IProvider {
       totalCost,
       colors: this.colors,
       events: allEvents,
+      costCompleteness: buildEventCostCompleteness(allEvents),
       warnings: [...warnings.values()].sort(
         (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
       ),

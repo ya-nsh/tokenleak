@@ -13,8 +13,12 @@ import type {
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange, mapWithConcurrency } from '../utils';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  resolveUsageCost,
+} from '../costing';
 
 /**
  * Shape of a Codex session JSONL response event.
@@ -129,18 +133,6 @@ function compactModelDateSuffix(model: string): string {
 function extractDate(timestamp: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
   return match ? match[1]! : null;
-}
-
-function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
 }
 
 function incrementWarningCount(
@@ -429,13 +421,13 @@ export class CodexProvider implements IProvider {
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
           const cacheWriteTokens = usage.cacheWriteTokens;
-          const costBreakdown = estimateCostBreakdown(
-            normalizedModel,
+          const cost = resolveUsageCost({
+            model: normalizedModel,
             inputTokens,
             outputTokens,
             cacheReadTokens,
             cacheWriteTokens,
-          );
+          });
           fileEvents.push({
             provider: this.name,
             timestamp: usage.timestamp,
@@ -446,8 +438,11 @@ export class CodexProvider implements IProvider {
             cacheReadTokens,
             cacheWriteTokens,
             totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
-            cost: costBreakdown.totalCost,
-            pricing: toCachePricing(costBreakdown.pricing),
+            cost: cost.cost,
+            pricing: cost.pricing,
+            costSource: cost.costSource,
+            pricedTokens: cost.pricedTokens,
+            unpricedTokens: cost.unpricedTokens,
             sessionId: usage.sessionId,
             projectId: usage.projectId,
           });
@@ -460,6 +455,7 @@ export class CodexProvider implements IProvider {
       return fileEvents;
     });
     const events = eventsByFile.flat();
+    addUnknownPricingWarnings(warnings, events);
 
     for (const event of events) {
       if (!dailyMap.has(event.date)) {
@@ -477,6 +473,9 @@ export class CodexProvider implements IProvider {
           totalTokens: 0,
           cost: 0,
           pricing: event.pricing,
+          costSource: event.costSource,
+          pricedTokens: 0,
+          unpricedTokens: 0,
         });
       }
       const breakdown = modelMap.get(event.model)!;
@@ -486,6 +485,10 @@ export class CodexProvider implements IProvider {
       breakdown.cacheWriteTokens += event.cacheWriteTokens;
       breakdown.totalTokens += event.totalTokens;
       breakdown.cost += event.cost;
+      breakdown.pricedTokens = (breakdown.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      breakdown.unpricedTokens = (breakdown.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      breakdown.costSource =
+        (breakdown.unpricedTokens ?? 0) >= breakdown.totalTokens ? 'unpriced' : breakdown.costSource;
       if (!breakdown.pricing) {
         breakdown.pricing = event.pricing;
       }
@@ -525,6 +528,7 @@ export class CodexProvider implements IProvider {
       totalCost,
       colors: this.colors,
       events,
+      costCompleteness: buildEventCostCompleteness(events),
       warnings: [...warnings.values()].sort(
         (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
       ),
