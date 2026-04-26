@@ -4,8 +4,16 @@ import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate } from 
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
-const VISIBLE_ROWS = 10;
+const VISIBLE_ROWS = 8;
 const MAX_REPOS = 30;
+const DETAIL_WIDTH = 76;
+const TABLE_WIDTH = 77;
+const REPO_COL = 16;
+const TOKEN_COL = 8;
+const COST_COL = 8;
+const GIT_COL = 11;
+const TOK_COMMIT_COL = 9;
+const COST_COMMIT_COL = 9;
 
 function formatNullableNumber(value: number | null, digits: number = 0): string {
   if (value === null) return '-';
@@ -26,29 +34,64 @@ function buildEfficiencyRatio(repo: NutritionRepoSummary, maxCostPerCommit: numb
   return 1 - Math.min(repo.costPerCommit / maxCostPerCommit, 1);
 }
 
-function renderRepoRow(repo: NutritionRepoSummary, rank: number, labelWidth: number, maxCostPerCommit: number) {
+function middleTruncate(value: string, maxLen: number): string {
+  if (value.length <= maxLen) return value;
+  if (maxLen <= 3) return truncate(value, maxLen);
+
+  const edge = Math.floor((maxLen - 3) / 2);
+  const tail = maxLen - 3 - edge;
+  return `${value.slice(0, edge)}...${value.slice(value.length - tail)}`;
+}
+
+function repoIdentity(repo: NutritionRepoSummary): string {
+  return repo.repoRoot ?? repo.label;
+}
+
+function roiSignal(repo: NutritionRepoSummary, maxCostPerCommit: number): { label: string; bar: string; fg: string } {
+  if (repo.commits <= 0) {
+    return { label: 'No Git signal', bar: '        ', fg: COLORS.red };
+  }
+
   const score = buildEfficiencyRatio(repo, maxCostPerCommit);
-  const bar = asciiBar(score, 8);
-  const label = truncate(repo.label, labelWidth);
+  if (score >= 0.66) {
+    return { label: 'strong', bar: asciiBar(score, 8), fg: COLORS.green };
+  }
+  if (score >= 0.33) {
+    return { label: 'ok', bar: asciiBar(score, 8), fg: COLORS.cyan };
+  }
+  return { label: 'weak', bar: asciiBar(score, 8), fg: COLORS.amber };
+}
+
+function renderRepoRow(repo: NutritionRepoSummary, rank: number, maxCostPerCommit: number) {
+  const signal = roiSignal(repo, maxCostPerCommit);
+  const label = truncate(repo.label, REPO_COL);
   const outcome = repo.commits > 0
     ? `${repo.commits}c/${formatTokens(repo.changedLines)}l`
-    : 'no git signal';
+    : 'No signal';
+  const detail = middleTruncate(repoIdentity(repo), DETAIL_WIDTH);
+  const providers = repo.providers.join(', ') || '-';
+  const models = repo.models.slice(0, 3).join(', ') || '-';
+  const modelDetail = middleTruncate(`providers ${providers}  models ${models}`, DETAIL_WIDTH);
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Box(
       { flexDirection: 'row', width: '100%' },
       Text({ content: `${padLeft(`${rank}.`, 3)} `, fg: COLORS.dimWhite }),
-      Text({ content: `${bar} `, fg: repo.commits > 0 ? COLORS.green : COLORS.dimWhite }),
-      Text({ content: padRight(label, labelWidth + 2), fg: COLORS.white }),
-      Text({ content: padLeft(formatTokens(repo.tokens), 10), fg: COLORS.green }),
-      Text({ content: padLeft(formatCost(repo.cost), 9), fg: COLORS.amber }),
-      Text({ content: padLeft(outcome, 15), fg: repo.commits > 0 ? COLORS.cyan : COLORS.red }),
-      Text({ content: padLeft(formatNullableNumber(repo.tokensPerCommit), 12), fg: COLORS.white }),
-      Text({ content: padLeft(formatNullableCost(repo.costPerCommit), 11), fg: COLORS.amber }),
+      Text({ content: padRight(label, REPO_COL), fg: COLORS.white }),
+      Text({ content: padLeft(formatTokens(repo.tokens), TOKEN_COL), fg: COLORS.green }),
+      Text({ content: padLeft(formatCost(repo.cost), COST_COL), fg: COLORS.amber }),
+      Text({ content: padLeft(outcome, GIT_COL), fg: repo.commits > 0 ? COLORS.cyan : COLORS.red }),
+      Text({ content: padLeft(formatNullableNumber(repo.tokensPerCommit), TOK_COMMIT_COL), fg: COLORS.white }),
+      Text({ content: padLeft(formatNullableCost(repo.costPerCommit), COST_COMMIT_COL), fg: COLORS.amber }),
+      Text({ content: `  ${signal.bar} ${signal.label}`, fg: signal.fg }),
     ),
     Text({
-      content: `      providers ${repo.providers.join(', ') || '-'}  models ${repo.models.slice(0, 3).join(', ') || '-'}`,
+      content: `     repo ${detail}`,
+      fg: COLORS.dimWhite,
+    }),
+    Text({
+      content: `     ${modelDetail}`,
       fg: COLORS.dimWhite,
     }),
   );
@@ -66,10 +109,10 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
         paddingLeft: 1,
         paddingRight: 1,
       },
-      Text({ content: ' Nutrition Label ', fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: ' AI ROI ', fg: COLORS.amber, attributes: BOLD }),
       Text({ content: '', fg: COLORS.dimWhite }),
       Text({
-        content: 'No event-level usage data available. Nutrition needs provider events with repo or project context.',
+        content: 'No event-level usage data available. AI ROI needs provider events with repo or project context.',
         fg: COLORS.dimWhite,
       }),
     );
@@ -82,8 +125,6 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     0,
     ...repos.map((repo) => repo.costPerCommit ?? 0),
   );
-  const maxLabel = Math.max(12, ...visible.map((repo) => repo.label.length));
-  const labelWidth = Math.min(28, maxLabel);
   const missingCount = report.missingOutcomeRepos.length;
 
   const scrollIndicators: ReturnType<typeof Text>[] = [];
@@ -95,16 +136,34 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
 
+  const signalNotice = missingCount > 0
+    ? [
+        Text({
+          content: 'No Git signal: AI usage exists, but no commits were found in this window.',
+          fg: COLORS.red,
+        }),
+        Text({
+          content: 'Enable it by opening the repo locally, ensuring it is a Git worktree, and choosing a window with commits.',
+          fg: COLORS.red,
+        }),
+      ]
+    : [
+        Text({
+          content: 'All repo-root usage has matching Git output in this window.',
+          fg: COLORS.green,
+        }),
+      ];
+
   const columnHeader = Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({ content: padRight('', 4), fg: COLORS.dimWhite }),
-    Text({ content: padRight('Value', 9), fg: COLORS.dimWhite }),
-    Text({ content: padRight('Repo', labelWidth + 2), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Tokens', 10), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Cost', 9), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Outcome', 15), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Tok/Commit', 12), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('$/Commit', 11), fg: COLORS.dimWhite }),
+    Text({ content: padRight('Repo', REPO_COL), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Tokens', TOKEN_COL), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Cost', COST_COL), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Git Output', GIT_COL), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('Tok/C', TOK_COMMIT_COL), fg: COLORS.dimWhite }),
+    Text({ content: padLeft('$/C', COST_COMMIT_COL), fg: COLORS.dimWhite }),
+    Text({ content: '  ROI Signal', fg: COLORS.dimWhite }),
   );
 
   return Box(
@@ -115,7 +174,7 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
       borderStyle: 'single',
       borderColor: COLORS.dimWhite,
     },
-    Text({ content: ' Nutrition Label ', fg: COLORS.amber, attributes: BOLD }),
+    Text({ content: ' AI ROI: token spend vs Git output ', fg: COLORS.amber, attributes: BOLD }),
     Box(
       { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({
@@ -131,15 +190,19 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
         fg: COLORS.cyan,
       }),
       Text({
-        content: missingCount > 0
-          ? `${missingCount} repo(s) have usage but no commit signal in this window.`
-          : 'All repo-root usage has a matching Git outcome signal.',
-        fg: missingCount > 0 ? COLORS.red : COLORS.green,
+        content: 'ROI Signal compares token/cost spend against local Git commits and changed lines.',
+        fg: COLORS.dimWhite,
       }),
+      Text({
+        content: 'It is directional, not a code quality score.',
+        fg: COLORS.dimWhite,
+      }),
+      ...signalNotice,
       Text({ content: '', fg: COLORS.dimWhite }),
     ),
     columnHeader,
-    ...visible.map((repo, index) => renderRepoRow(repo, offset + index + 1, labelWidth, maxCostPerCommit)),
+    Text({ content: ` ${'─'.repeat(TABLE_WIDTH)}`, fg: COLORS.dimWhite }),
+    ...visible.map((repo, index) => renderRepoRow(repo, offset + index + 1, maxCostPerCommit)),
     ...scrollIndicators,
   );
 }
