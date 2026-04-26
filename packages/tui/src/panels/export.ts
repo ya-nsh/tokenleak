@@ -24,6 +24,11 @@ const EXPORT_OPTIONS: ExportOption[] = [
     label: 'Wrapped Live',
     description: 'Launch the AI Wrapped presentation in your browser',
   },
+  {
+    key: 'a',
+    label: 'LLM Analysis Prompt',
+    description: 'Copy a privacy-preserving Markdown prompt for external LLM analysis',
+  },
 ];
 
 function renderOption(opt: ExportOption, isDisabled: boolean) {

@@ -12,7 +12,7 @@ export { buildMoreStats, computeModelMixShift } from './more';
 export { buildExplainReport } from './explain';
 export { buildFocusReport } from './focus';
 export { buildReplayReport } from './replay';
-export { buildCommonsExport, inspectCommonsExport } from './commons';
+export { buildCommonsExport, buildCommonsPromptExport, inspectCommonsExport } from './commons';
 export { buildWasteReport } from './waste';
 export { buildNutritionReport } from './nutrition';
 export { collectGitOutcomeSignals } from './nutrition-git';

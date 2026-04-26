@@ -59,6 +59,7 @@ export function createHelpPanel() {
           ['p', 'Save PNG'],
           ['w', 'Save Wrapped PNG'],
           ['l', 'Launch Live Server'],
+          ['a', 'Copy LLM prompt'],
         ]),
       ),
 

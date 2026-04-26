@@ -88,6 +88,7 @@ export {
   buildExplainReport,
   buildReplayReport,
   buildCommonsExport,
+  buildCommonsPromptExport,
   inspectCommonsExport,
   buildWasteReport,
   buildNutritionReport,

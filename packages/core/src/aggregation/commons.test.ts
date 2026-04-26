@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { TokenleakOutput } from '../types';
-import { buildCommonsExport, inspectCommonsExport } from './commons';
+import { buildCommonsExport, buildCommonsPromptExport, inspectCommonsExport } from './commons';
 
 const OUTPUT: TokenleakOutput = {
   schemaVersion: 1,
@@ -167,5 +167,19 @@ describe('buildCommonsExport', () => {
     expect(report.valid).toBe(true);
     expect(report.errors).toEqual([]);
     expect(report.summary.providerModels).toBe(1);
+  });
+
+  it('builds an LLM-ready prompt without local identifiers', () => {
+    const prompt = buildCommonsPromptExport(buildCommonsExport(OUTPUT));
+
+    expect(prompt).toContain('# Tokenleak LLM Analysis Prompt');
+    expect(prompt).toContain('## Privacy Guarantees');
+    expect(prompt).toContain('## Analysis Goals');
+    expect(prompt).toContain('```json');
+    expect(prompt).toContain('"containsPrompts": false');
+    expect(prompt).not.toContain('/Users/alice');
+    expect(prompt).not.toContain('private-repo');
+    expect(prompt).not.toContain('secret-session-id');
+    expect(prompt).not.toContain('2026-04-25T10:12:00.000Z');
   });
 });

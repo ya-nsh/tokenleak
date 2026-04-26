@@ -142,6 +142,46 @@ export function buildCommonsExport(output: TokenleakOutput): CommonsExport {
   };
 }
 
+export function buildCommonsPromptExport(exportData: CommonsExport): string {
+  const payload = JSON.stringify(exportData, null, 2);
+
+  return [
+    '# Tokenleak LLM Analysis Prompt',
+    '',
+    'You are analyzing anonymized aggregate AI coding-assistant usage data from Tokenleak.',
+    'Use only the data below. Treat every bucket as approximate, and do not infer private repo names, file paths, prompts, session IDs, or exact timestamps.',
+    '',
+    '## Privacy Guarantees',
+    '',
+    `- Contains prompts: ${exportData.privacy.containsPrompts}`,
+    `- Contains paths: ${exportData.privacy.containsPaths}`,
+    `- Contains repo names: ${exportData.privacy.containsRepoNames}`,
+    `- Contains session IDs: ${exportData.privacy.containsSessionIds}`,
+    `- Contains exact timestamps: ${exportData.privacy.containsExactTimestamps}`,
+    `- Granularity: ${exportData.privacy.granularity}`,
+    '',
+    '## Analysis Goals',
+    '',
+    'Produce a concise usage analysis for a developer or engineering team. Include:',
+    '',
+    '1. A short executive summary of the most important patterns.',
+    '2. Spend and token optimization opportunities.',
+    '3. Model-mix observations and cheaper-model routing suggestions.',
+    '4. Cache efficiency observations.',
+    '5. Time-of-day and day-of-week workflow patterns.',
+    '6. Project/session-size observations from bucketed data only.',
+    '7. A prioritized action list with expected impact and confidence.',
+    '8. Follow-up questions that would improve the analysis without requesting private prompts, paths, repo names, or session IDs.',
+    '',
+    '## Data',
+    '',
+    '```json',
+    payload,
+    '```',
+    '',
+  ].join('\n');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

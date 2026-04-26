@@ -47,7 +47,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Focus** — deep-work session rankings scored by duration, density, and streaks
 - **Explain** — narrative day-by-day usage breakdown
 - **Compare** — side-by-side period comparison with deltas
-- **Export** — save PNG, Wrapped PNG, or launch a live server
+- **Export** — save PNG, Wrapped PNG, launch a live server, or copy an LLM-ready analysis prompt
 - **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
 - **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
 - **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
@@ -90,6 +90,11 @@ tokenleak --format svg --output usage.svg
 
 # Export a PNG image
 tokenleak --format png --output usage.png
+
+# Export anonymized aggregate data or an LLM-ready analysis prompt
+tokenleak commons export --days 90 --output commons.json
+tokenleak commons prompt --days 90 --clipboard
+tokenleak commons prompt --provider claude,codex --output tokenleak-llm-prompt.md
 
 # Generate your AI Coding Wrapped story card
 tokenleak --format wrapped
@@ -464,9 +469,10 @@ Subcommands:
 
 - `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
 - `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
+- `tokenleak commons export` writes anonymized aggregate JSON; `tokenleak commons prompt` writes or copies a Markdown prompt for external LLM analysis; `tokenleak commons inspect <file>` validates a commons JSON export before sharing.
 - `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today.
 - `tokenleak cursor --help` prints the Cursor auth/cache command help text.
-- `tokenleak explain --help`, `tokenleak focus --help`, and `tokenleak replay --help` print the subcommand-specific help text.
+- `tokenleak explain --help`, `tokenleak focus --help`, `tokenleak commons --help`, and `tokenleak replay --help` print the subcommand-specific help text.
 
 | Flag | Alias | Default | Description |
 | --- | --- | --- | --- |
