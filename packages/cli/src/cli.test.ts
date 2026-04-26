@@ -386,13 +386,9 @@ describe('interactive helpers', () => {
     const options = createMenuOptions();
     const customIndex = options.findIndex((o) => o.title === 'Build Custom Command');
     const output = stripAnsi(
-      buildLauncherBody(
-        { version: '2.1.0', helpText: 'help' },
-        options,
-        customIndex,
-        88,
-        12,
-      ).join('\n'),
+      buildLauncherBody({ version: '2.1.0', helpText: 'help' }, options, customIndex, 88, 12).join(
+        '\n',
+      ),
     );
 
     expect(output).toContain('Build Custom Command');
@@ -705,11 +701,21 @@ describe('run', () => {
   });
 
   test('throws a login hint when cursor is requested without auth or cache', async () => {
+    const originalCursorDir = process.env['TOKENLEAK_CURSOR_DIR'];
+    const cursorRoot = mkdtempSync(join(tmpdir(), 'tokenleak-empty-cursor-'));
     let thrown: unknown;
     try {
+      process.env['TOKENLEAK_CURSOR_DIR'] = cursorRoot;
       await run({ format: 'json', provider: 'cursor' });
     } catch (error: unknown) {
       thrown = error;
+    } finally {
+      if (originalCursorDir === undefined) {
+        delete process.env['TOKENLEAK_CURSOR_DIR'];
+      } else {
+        process.env['TOKENLEAK_CURSOR_DIR'] = originalCursorDir;
+      }
+      rmSync(cursorRoot, { recursive: true, force: true });
     }
     expect(thrown).toBeInstanceOf(TokenleakError);
     expect((thrown as TokenleakError).message).toBe(
@@ -854,10 +860,13 @@ describe('CLI invocation', () => {
   });
 
   test('commons export rejects invalid day counts with a clear error', async () => {
-    const proc = Bun.spawn(['bun', cliPath, 'commons', 'export', '--days', 'nope', '--provider', 'pi'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+    const proc = Bun.spawn(
+      ['bun', cliPath, 'commons', 'export', '--days', 'nope', '--provider', 'pi'],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
     const exitCode = await proc.exited;
     const stderr = await new Response(proc.stderr).text();
 

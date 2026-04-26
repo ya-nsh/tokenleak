@@ -52,7 +52,11 @@ function sortRows<T extends CandidateRow>(rows: T[]): T[] {
     .sort((left, right) => right.tokens - left.tokens || left.label.localeCompare(right.label));
 }
 
-function toEvidenceRows(rows: CandidateRow[], totalTokens: number, limit: number): ExplainEvidenceRow[] {
+function toEvidenceRows(
+  rows: CandidateRow[],
+  totalTokens: number,
+  limit: number,
+): ExplainEvidenceRow[] {
   return sortRows(rows)
     .filter((row) => row.tokens > 0)
     .slice(0, limit)
@@ -75,10 +79,7 @@ function buildPreviousDates(targetDate: string, count: number): string[] {
   return dates;
 }
 
-function averageForDates(
-  byDate: Map<string, number>,
-  dates: string[],
-): number {
+function averageForDates(byDate: Map<string, number>, dates: string[]): number {
   if (dates.length === 0) {
     return 0;
   }
@@ -137,7 +138,11 @@ function buildModelDailyMaps(providers: ProviderData[]): {
   return { tokenByModelAndDate, costByModelAndDate };
 }
 
-function buildProviderEvidenceRows(providers: ProviderData[], targetDate: string, totalTokens: number): ExplainEvidenceRow[] {
+function buildProviderEvidenceRows(
+  providers: ProviderData[],
+  targetDate: string,
+  totalTokens: number,
+): ExplainEvidenceRow[] {
   const rows = providers.map((provider) => {
     const day = provider.daily.find((entry) => entry.date === targetDate);
     return {
@@ -150,7 +155,11 @@ function buildProviderEvidenceRows(providers: ProviderData[], targetDate: string
   return toEvidenceRows(rows, totalTokens, PROVIDER_LIMIT);
 }
 
-function buildModelEvidenceRows(providers: ProviderData[], targetDate: string, totalTokens: number): ExplainEvidenceRow[] {
+function buildModelEvidenceRows(
+  providers: ProviderData[],
+  targetDate: string,
+  totalTokens: number,
+): ExplainEvidenceRow[] {
   const totals = new Map<string, CandidateRow>();
 
   for (const provider of providers) {
@@ -175,9 +184,10 @@ function buildModelEvidenceRows(providers: ProviderData[], targetDate: string, t
 }
 
 function buildSessionLabel(session: SessionDrilldownEntry): string {
-  const suffix = session.directory && session.directory !== '.'
-    ? session.directory
-    : session.projectId ?? session.label ?? session.sessionId;
+  const suffix =
+    session.directory && session.directory !== '.'
+      ? session.directory
+      : (session.projectId ?? session.label ?? session.sessionId);
   return `${session.provider}:${suffix}`;
 }
 
@@ -218,7 +228,10 @@ function isSpike(currentTokens: number, averageTokens: number): boolean {
     return currentTokens >= SPIKE_MIN_TOKENS;
   }
 
-  return currentTokens >= averageTokens * SPIKE_MULTIPLIER && currentTokens - averageTokens >= SPIKE_MIN_DELTA;
+  return (
+    currentTokens >= averageTokens * SPIKE_MULTIPLIER &&
+    currentTokens - averageTokens >= SPIKE_MIN_DELTA
+  );
 }
 
 function formatTokens(tokens: number): string {
@@ -261,7 +274,8 @@ function buildHeadline(
   }
 
   const leadProvider = topProviders[0];
-  const providerSuffix = leadProvider && leadProvider.share >= 0.5 ? ` led by ${leadProvider.label}` : '';
+  const providerSuffix =
+    leadProvider && leadProvider.share >= 0.5 ? ` led by ${leadProvider.label}` : '';
 
   if (average30dTokens > 0 && totalTokens >= average30dTokens * 3) {
     return `Spike day on ${targetDate}${providerSuffix}`;
@@ -303,12 +317,14 @@ function buildSummaryLines(input: {
   const first = `${formatCompactTokens(input.totalTokens)} tokens (${formatCost(input.totalCost)}) on ${input.date}, ${describeDelta(input.totalTokens, input.average7dTokens)} vs trailing 7d average and ${describeDelta(input.totalTokens, input.average30dTokens)} vs trailing 30d average.`;
   const provider = input.topProviders[0];
   const model = input.topModels[0];
-  const second = provider && model
-    ? `${provider.label} contributed ${formatPercent(provider.share)} of the day, and ${model.label} accounted for ${formatPercent(model.share)} of tokens.`
-    : `Trailing cost baselines were ${formatCost(input.average7dCost)}/day over 7d and ${formatCost(input.average30dCost)}/day over 30d.`;
-  const third = input.anomalies.length > 0
-    ? `${input.anomalies.length} anomaly flag${input.anomalies.length === 1 ? '' : 's'} raised. Cache hit rate was ${formatPercent(input.dayCacheHitRate)} versus a 7d average of ${formatPercent(input.average7dCacheHitRate)}.`
-    : `No anomaly flags were raised. Cache hit rate was ${formatPercent(input.dayCacheHitRate)} versus a 7d average of ${formatPercent(input.average7dCacheHitRate)}.`;
+  const second =
+    provider && model
+      ? `${provider.label} contributed ${formatPercent(provider.share)} of the day, and ${model.label} accounted for ${formatPercent(model.share)} of tokens.`
+      : `Trailing cost baselines were ${formatCost(input.average7dCost)}/day over 7d and ${formatCost(input.average30dCost)}/day over 30d.`;
+  const third =
+    input.anomalies.length > 0
+      ? `${input.anomalies.length} anomaly flag${input.anomalies.length === 1 ? '' : 's'} raised. Cache hit rate was ${formatPercent(input.dayCacheHitRate)} versus a 7d average of ${formatPercent(input.average7dCacheHitRate)}.`
+      : `No anomaly flags were raised. Cache hit rate was ${formatPercent(input.dayCacheHitRate)} versus a 7d average of ${formatPercent(input.average7dCacheHitRate)}.`;
 
   return [first, second, third];
 }
@@ -336,7 +352,11 @@ function buildProviderSpikeAnomaly(
 
   const winner = candidates
     .filter((entry) => isSpike(entry.currentTokens, entry.averageTokens))
-    .sort((left, right) => right.currentTokens - left.currentTokens || left.provider.displayName.localeCompare(right.provider.displayName))[0];
+    .sort(
+      (left, right) =>
+        right.currentTokens - left.currentTokens ||
+        left.provider.displayName.localeCompare(right.provider.displayName),
+    )[0];
 
   if (!winner) {
     return null;
@@ -363,7 +383,10 @@ function buildModelSpikeAnomaly(
 
   const winner = candidates
     .filter((entry) => isSpike(entry.currentTokens, entry.averageTokens))
-    .sort((left, right) => right.currentTokens - left.currentTokens || left.model.localeCompare(right.model))[0];
+    .sort(
+      (left, right) =>
+        right.currentTokens - left.currentTokens || left.model.localeCompare(right.model),
+    )[0];
 
   if (!winner) {
     return null;
@@ -386,16 +409,18 @@ function buildCacheDropAnomaly(
     return null;
   }
 
-  const currentRate = cacheHitRate([{
-    date: targetDate,
-    inputTokens: current.inputTokens,
-    outputTokens: 0,
-    cacheReadTokens: current.cacheReadTokens,
-    cacheWriteTokens: 0,
-    totalTokens: current.tokens,
-    cost: current.cost,
-    models: [],
-  }]);
+  const currentRate = cacheHitRate([
+    {
+      date: targetDate,
+      inputTokens: current.inputTokens,
+      outputTokens: 0,
+      cacheReadTokens: current.cacheReadTokens,
+      cacheWriteTokens: 0,
+      totalTokens: current.tokens,
+      cost: current.cost,
+      models: [],
+    },
+  ]);
 
   const previousEntries: DailyUsage[] = previous7Dates.map((date) => {
     const totals = mergedDailyTotals.get(date);
@@ -426,7 +451,10 @@ function buildCacheDropAnomaly(
 function buildLongSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnomaly | null {
   const session = sessions
     .filter((entry) => (entry.durationMs ?? 0) >= LONG_SESSION_MS)
-    .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0) || right.totalTokens - left.totalTokens)[0];
+    .sort(
+      (left, right) =>
+        (right.durationMs ?? 0) - (left.durationMs ?? 0) || right.totalTokens - left.totalTokens,
+    )[0];
 
   if (!session || session.durationMs === null) {
     return null;
@@ -442,17 +470,22 @@ function buildLongSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnom
 
 function buildDenseSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnomaly | null {
   const candidates = sessions
-    .filter((
-      entry,
-    ): entry is SessionDrilldownEntry & { durationMs: number } => (
-      entry.durationMs !== null && entry.durationMs > 0 && entry.totalTokens >= DENSE_SESSION_MIN_TOKENS
-    ))
+    .filter(
+      (entry): entry is SessionDrilldownEntry & { durationMs: number } =>
+        entry.durationMs !== null &&
+        entry.durationMs > 0 &&
+        entry.totalTokens >= DENSE_SESSION_MIN_TOKENS,
+    )
     .map((entry) => ({
       session: entry,
       tokensPerHour: entry.totalTokens / (entry.durationMs / 3_600_000),
     }))
     .filter((entry) => entry.tokensPerHour >= DENSE_SESSION_TOKENS_PER_HOUR)
-    .sort((left, right) => right.tokensPerHour - left.tokensPerHour || right.session.totalTokens - left.session.totalTokens)[0];
+    .sort(
+      (left, right) =>
+        right.tokensPerHour - left.tokensPerHour ||
+        right.session.totalTokens - left.session.totalTokens,
+    )[0];
 
   if (!candidates) {
     return null;
@@ -473,51 +506,49 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
   const mergedDailyTotals = buildMergedDailyTotals(providers);
   const previous7Dates = buildPreviousDates(targetDate, LOOKBACK_7D);
   const previous30Dates = buildPreviousDates(targetDate, LOOKBACK_30D);
+  const tokenTotalsByDate = new Map<string, number>();
+  const costTotalsByDate = new Map<string, number>();
+  for (const [date, totals] of mergedDailyTotals) {
+    tokenTotalsByDate.set(date, totals.tokens);
+    costTotalsByDate.set(date, totals.cost);
+  }
   const dayTotals = mergedDailyTotals.get(targetDate) ?? {
     tokens: 0,
     cost: 0,
     inputTokens: 0,
     cacheReadTokens: 0,
   };
-  const average7dTokens = averageForDates(
-    new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.tokens] as const)),
-    previous7Dates,
-  );
-  const average30dTokens = averageForDates(
-    new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.tokens] as const)),
-    previous30Dates,
-  );
-  const average7dCost = averageForDates(
-    new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.cost] as const)),
-    previous7Dates,
-  );
-  const average30dCost = averageForDates(
-    new Map([...mergedDailyTotals.entries()].map(([date, totals]) => [date, totals.cost] as const)),
-    previous30Dates,
-  );
-  const dayCacheHitRate = cacheHitRate([{
-    date: targetDate,
-    inputTokens: dayTotals.inputTokens,
-    outputTokens: 0,
-    cacheReadTokens: dayTotals.cacheReadTokens,
-    cacheWriteTokens: 0,
-    totalTokens: dayTotals.tokens,
-    cost: dayTotals.cost,
-    models: [],
-  }]);
-  const average7dCacheHitRate = cacheHitRate(previous7Dates.map((date) => {
-    const totals = mergedDailyTotals.get(date);
-    return {
-      date,
-      inputTokens: totals?.inputTokens ?? 0,
+  const average7dTokens = averageForDates(tokenTotalsByDate, previous7Dates);
+  const average30dTokens = averageForDates(tokenTotalsByDate, previous30Dates);
+  const average7dCost = averageForDates(costTotalsByDate, previous7Dates);
+  const average30dCost = averageForDates(costTotalsByDate, previous30Dates);
+  const dayCacheHitRate = cacheHitRate([
+    {
+      date: targetDate,
+      inputTokens: dayTotals.inputTokens,
       outputTokens: 0,
-      cacheReadTokens: totals?.cacheReadTokens ?? 0,
+      cacheReadTokens: dayTotals.cacheReadTokens,
       cacheWriteTokens: 0,
-      totalTokens: totals?.tokens ?? 0,
-      cost: totals?.cost ?? 0,
+      totalTokens: dayTotals.tokens,
+      cost: dayTotals.cost,
       models: [],
-    };
-  }));
+    },
+  ]);
+  const average7dCacheHitRate = cacheHitRate(
+    previous7Dates.map((date) => {
+      const totals = mergedDailyTotals.get(date);
+      return {
+        date,
+        inputTokens: totals?.inputTokens ?? 0,
+        outputTokens: 0,
+        cacheReadTokens: totals?.cacheReadTokens ?? 0,
+        cacheWriteTokens: 0,
+        totalTokens: totals?.tokens ?? 0,
+        cost: totals?.cost ?? 0,
+        models: [],
+      };
+    }),
+  );
 
   const dayEvents = collectEvents(providers).filter((event) => event.date === targetDate);
   const sessionRollups = buildSessionRollups(dayEvents);
@@ -537,7 +568,13 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
     totalCost: dayTotals.cost,
     comparedTo7dAverage: dayTotals.tokens - average7dTokens,
     comparedTo30dAverage: dayTotals.tokens - average30dTokens,
-    headline: buildHeadline(targetDate, dayTotals.tokens, average7dTokens, average30dTokens, topProviders),
+    headline: buildHeadline(
+      targetDate,
+      dayTotals.tokens,
+      average7dTokens,
+      average30dTokens,
+      topProviders,
+    ),
     summary: buildSummaryLines({
       date: targetDate,
       totalTokens: dayTotals.tokens,

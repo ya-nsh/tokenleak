@@ -1,7 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import { COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
-import { getCursorBannerText } from './cursor-setup.js';
 
 function formatUpdateTime(): string {
   const now = new Date();
@@ -23,6 +22,36 @@ export function buildStatusBar(state: AppState) {
       },
       Text({ content: 'Loading...', fg: COLORS.amber }),
       Text({ content: '', fg: COLORS.dimWhite }),
+    );
+  }
+
+  if (state.loadError) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: state.loadError, fg: COLORS.red }),
+      Text({ content: 'r:retry  q:quit', fg: COLORS.dimWhite }),
+    );
+  }
+
+  if (state.viewTasks.activeLabel) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: `Loading ${state.viewTasks.activeLabel}...`, fg: COLORS.amber }),
+      Text({ content: `Updated ${formatUpdateTime()}`, fg: COLORS.dimWhite }),
     );
   }
 
@@ -56,9 +85,9 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const helpHint = '?:help';
-  const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-9/0/R:view`;
-  const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
+  const helpHint = '?:keys';
+  const nav = `\u2190\u2192:view  tab/\u21E7tab:period`;
+  const cursorHint = '  c:cursor';
 
   let keys: string;
   if (state.selectedView === 'overview') {
@@ -71,7 +100,13 @@ export function buildStatusBar(state: AppState) {
     keys = `${nav}  h/l:date  j/k:scroll  enter:expand  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'receipts') {
     keys = `${nav}  j/k:scroll  enter:expand  o:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped' || state.selectedView === 'nutrition') {
+  } else if (
+    state.selectedView === 'advisor' ||
+    state.selectedView === 'focus' ||
+    state.selectedView === 'compare' ||
+    state.selectedView === 'wrapped' ||
+    state.selectedView === 'nutrition'
+  ) {
     keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
     keys = `${nav}  p:png  w:wrapped  l:live  a:LLM prompt  r:refresh${cursorHint}  ${helpHint}  q:quit`;

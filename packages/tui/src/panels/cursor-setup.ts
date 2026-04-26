@@ -11,6 +11,7 @@ export interface CursorSetupCallbacks {
   onLabelInput: (value: string) => void;
   onTokenInput: (value: string) => void;
   onSubmit: () => void;
+  onCancel: () => void;
 }
 
 export interface CursorSetupPanel {
@@ -61,6 +62,15 @@ export function buildCursorBanner(state: AppState) {
   );
 }
 
+const KITTY_ESCAPE_SEQUENCE = /^\x1B\[(?:27|57344)(?:;[0-9:]+)?u$/;
+const MODIFY_OTHER_KEYS_ESCAPE_SEQUENCE = /^\x1B\[27;\d+;(?:27|57344)~$/;
+
+export function isEscapeKeySequence(sequence: string): boolean {
+  return sequence === '\x1b'
+    || KITTY_ESCAPE_SEQUENCE.test(sequence)
+    || MODIFY_OTHER_KEYS_ESCAPE_SEQUENCE.test(sequence);
+}
+
 function renderField(label: string, input: InputRenderable) {
   return Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 2, paddingRight: 2 },
@@ -105,6 +115,14 @@ export function getCursorSetupInstructions(status: CursorSetupStatus | null): st
     return lines;
   }
 
+  if (status.state === 'ready') {
+    return [
+      'Cursor is connected. Press Enter in the token field to replace the saved session and resync usage.',
+      'Leave the token empty and press Esc if no change is needed.',
+      ...lines,
+    ];
+  }
+
   if (status.state === 'sync_failed_cached' || status.state === 'needs_sync') {
     return [
       'Press Enter to retry the Cursor usage sync for the active account.',
@@ -136,6 +154,7 @@ function createFieldInput(
   field: CursorSetupField,
   onInput: (value: string) => void,
   onFieldFocus: (field: CursorSetupField) => void,
+  onCancel: () => void,
 ): InputRenderable {
   const input = new InputRenderable(renderer, {
     width: '100%',
@@ -147,6 +166,13 @@ function createFieldInput(
     textColor: COLORS.white,
     focusedTextColor: COLORS.white,
     placeholderColor: COLORS.dimWhite,
+    onKeyDown: (key) => {
+      if (key.name === 'escape') {
+        key.preventDefault();
+        key.stopPropagation();
+        onCancel();
+      }
+    },
   });
 
   input.on(InputRenderableEvents.INPUT, onInput);
@@ -165,7 +191,9 @@ export function createCursorSetupPanel(
   const isError = isErrorMessage(state);
   const title = status?.state === 'needs_reauth'
     ? ' Cursor Re-authentication '
-    : ' Cursor Setup ';
+    : status?.state === 'ready'
+      ? ' Cursor Connected '
+      : ' Cursor Setup ';
   const labelInput = createFieldInput(
     renderer,
     state.cursorSetupLabel,
@@ -173,6 +201,7 @@ export function createCursorSetupPanel(
     'label',
     callbacks.onLabelInput,
     callbacks.onFieldFocus,
+    callbacks.onCancel,
   );
   const tokenInput = createFieldInput(
     renderer,
@@ -181,6 +210,7 @@ export function createCursorSetupPanel(
     'token',
     callbacks.onTokenInput,
     callbacks.onFieldFocus,
+    callbacks.onCancel,
   );
 
   labelInput.on(InputRenderableEvents.ENTER, () => {

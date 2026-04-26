@@ -89,9 +89,8 @@ function gridSpan(content: string): string {
 function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerCommit: number) {
   const signal = roiSignal(repo, maxCostPerCommit);
   const label = repo.label;
-  const outcome = repo.commits > 0
-    ? `${repo.commits}/${formatTokens(repo.changedLines)}`
-    : 'No signal';
+  const outcome =
+    repo.commits > 0 ? `${repo.commits}/${formatTokens(repo.changedLines)}` : 'No signal';
   const detail = middleTruncate(repoIdentity(repo), DETAIL_WIDTH);
   const providers = repo.providers.join(', ') || '-';
   const models = repo.models.slice(0, 3).join(', ') || '-';
@@ -118,6 +117,26 @@ function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerComm
 }
 
 export function createNutritionPanel(state: AppState, report: NutritionReport | null) {
+  if (state.nutritionSignalsLoading) {
+    return Box(
+      {
+        flexDirection: 'column',
+        width: '100%',
+        flexGrow: 1,
+        borderStyle: 'single',
+        borderColor: COLORS.dimWhite,
+        paddingLeft: 1,
+        paddingRight: 1,
+      },
+      Text({ content: ' AI ROI ', fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: '', fg: COLORS.dimWhite }),
+      Text({
+        content: 'Loading local Git outcome signals...',
+        fg: COLORS.dimWhite,
+      }),
+    );
+  }
+
   if (!report || report.repos.length === 0) {
     return Box(
       {
@@ -132,7 +151,8 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
       Text({ content: ' AI ROI ', fg: COLORS.amber, attributes: BOLD }),
       Text({ content: '', fg: COLORS.dimWhite }),
       Text({
-        content: 'No event-level usage data available. AI ROI needs provider events with repo or project context.',
+        content:
+          'No event-level usage data available. AI ROI needs provider events with repo or project context.',
         fg: COLORS.dimWhite,
       }),
     );
@@ -141,10 +161,7 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
   const repos = report.repos.slice(0, MAX_REPOS);
   const offset = state.nutritionScrollOffset;
   const visible = repos.slice(offset, offset + NUTRITION_VISIBLE_ROWS);
-  const maxCostPerCommit = Math.max(
-    0,
-    ...repos.map((repo) => repo.costPerCommit ?? 0),
-  );
+  const maxCostPerCommit = Math.max(0, ...repos.map((repo) => repo.costPerCommit ?? 0));
   const missingCount = report.missingOutcomeRepos.length;
 
   const scrollIndicators: ReturnType<typeof Text>[] = [];
@@ -156,23 +173,25 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
 
-  const signalNotice = missingCount > 0
-    ? [
-        Text({
-          content: 'No Git signal: AI usage exists, but no commits were found in this window.',
-          fg: COLORS.red,
-        }),
-        Text({
-          content: 'Enable it by opening the repo locally, ensuring it is a Git worktree, and choosing a window with commits.',
-          fg: COLORS.red,
-        }),
-      ]
-    : [
-        Text({
-          content: 'All repo-root usage has matching Git output in this window.',
-          fg: COLORS.green,
-        }),
-      ];
+  const signalNotice =
+    missingCount > 0
+      ? [
+          Text({
+            content: 'No Git signal: AI usage exists, but no commits were found in this window.',
+            fg: COLORS.red,
+          }),
+          Text({
+            content:
+              'Enable it by opening the repo locally, ensuring it is a Git worktree, and choosing a window with commits.',
+            fg: COLORS.red,
+          }),
+        ]
+      : [
+          Text({
+            content: 'All repo-root usage has matching Git output in this window.',
+            fg: COLORS.green,
+          }),
+        ];
 
   const tableRows = visible.flatMap((repo, index) =>
     renderRepoRows(repo, offset + index + 1, maxCostPerCommit),
@@ -203,7 +222,8 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
         fg: COLORS.cyan,
       }),
       Text({
-        content: 'ROI Signal compares token/cost spend against local Git commits and changed lines.',
+        content:
+          'ROI Signal compares token/cost spend against local Git commits and changed lines.',
         fg: COLORS.dimWhite,
       }),
       Text({
@@ -216,7 +236,11 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     Box(
       { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({ content: gridLine('┌', '┬', '┐'), fg: COLORS.dimWhite }),
-      Text({ content: gridRow(COLUMNS.map((column) => column.title)), fg: COLORS.amber, attributes: BOLD }),
+      Text({
+        content: gridRow(COLUMNS.map((column) => column.title)),
+        fg: COLORS.amber,
+        attributes: BOLD,
+      }),
       Text({ content: gridLine('├', '┼', '┤'), fg: COLORS.dimWhite }),
       ...trimmedRows,
       Text({ content: gridLine('└', '┴', '┘'), fg: COLORS.dimWhite }),
