@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { AggregatedStats } from '@tokenleak/core';
-import { formatTokens, formatCost, formatPercent } from '../lib/format.js';
+import { formatTokens, formatPercent, formatCostWithCompleteness } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
@@ -52,7 +52,7 @@ export function createStatsRow(state: AppState, stats: AggregatedStats | null) {
     },
     statCard('Tokens', formatTokens(stats.totalTokens), COLORS.green),
     sep(),
-    statCard('Cost', formatCost(stats.totalCost), COLORS.amber),
+    statCard('Cost', formatCostWithCompleteness(stats.totalCost, stats.costCompleteness), COLORS.amber),
     sep(),
     statCard('Active', `${stats.activeDays}/${stats.totalDays}d`, COLORS.cyan),
     sep(),

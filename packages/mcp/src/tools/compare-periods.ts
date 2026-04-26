@@ -3,21 +3,22 @@ import {
   mergeProviderData,
   buildCompareOutput,
   computePreviousPeriod,
+  getTodayLocal,
+  inclusiveDaySpan,
+  shiftDateStringLocal,
 } from '@tokenleak/core';
-import type { DateRange, ProviderData } from '@tokenleak/core';
+import type { DateRange } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
+import { loadProviderData } from '../shared/provider-load.js';
 
 async function loadAndAggregate(
   providers: Awaited<ReturnType<ProviderRegistry['getAvailable']>>,
   range: DateRange,
 ) {
-  const results = await Promise.all(
-    providers.map((p) => p.load(range).catch(() => null)),
-  );
-  const data = results.filter((r): r is ProviderData => r !== null);
+  const { data, warnings } = await loadProviderData(providers, range);
   const merged = mergeProviderData(data);
   const stats = aggregate(merged, range.until);
-  return { data, stats };
+  return { stats, warnings };
 }
 
 export async function handleComparePeriods(
@@ -30,12 +31,9 @@ export async function handleComparePeriods(
   registry: ProviderRegistry,
 ) {
   try {
-    const now = new Date();
     const currentRange: DateRange = {
       since: args.current_since,
-      until:
-        args.current_until ??
-        `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`,
+      until: args.current_until ?? getTodayLocal(),
     };
 
     let previousRange: DateRange;
@@ -44,12 +42,11 @@ export async function handleComparePeriods(
     } else if (args.previous_since) {
       previousRange = { since: args.previous_since, until: currentRange.since };
     } else if (args.previous_until) {
-      const currentDays = Math.round(
-        (new Date(currentRange.until).getTime() - new Date(currentRange.since).getTime()) / 86400000,
-      );
-      const end = new Date(args.previous_until);
-      end.setDate(end.getDate() - currentDays);
-      previousRange = { since: end.toISOString().slice(0, 10), until: args.previous_until };
+      const currentDays = inclusiveDaySpan(currentRange.since, currentRange.until);
+      previousRange = {
+        since: shiftDateStringLocal(args.previous_until, -(currentDays - 1)),
+        until: args.previous_until,
+      };
     } else {
       previousRange = computePreviousPeriod(currentRange);
     }
@@ -70,7 +67,17 @@ export async function handleComparePeriods(
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(compareOutput, null, 2),
+          text: JSON.stringify(
+            {
+              ...compareOutput,
+              warnings: {
+                current: currentResult.warnings,
+                previous: previousResult.warnings,
+              },
+            },
+            null,
+            2,
+          ),
         },
       ],
     };

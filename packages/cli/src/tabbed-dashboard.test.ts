@@ -114,7 +114,7 @@ describe('startTabbedDashboard', () => {
       async load(range: DateRange): Promise<ProviderData> {
         const delay = range.since === '2026-03-07'
           ? 30
-          : range.since === '2025-03-14'
+          : range.since === '2025-03-15'
             ? 5
             : 1;
         await Bun.sleep(delay);
@@ -140,7 +140,7 @@ describe('startTabbedDashboard', () => {
 
     const screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
     const lastScreen = screens.at(-1) ?? '';
-    expect(lastScreen).toContain('2025-03-14 → 2026-03-14');
+    expect(lastScreen).toContain('2025-03-15 → 2026-03-14');
     expect(lastScreen).not.toContain('2026-03-07 → 2026-03-14');
   });
 
@@ -157,7 +157,7 @@ describe('startTabbedDashboard', () => {
           await Bun.sleep(30);
           throw new Error('stale failure');
         }
-        if (range.since === '2025-03-14') {
+        if (range.since === '2025-03-15') {
           await Bun.sleep(5);
         }
         return createProviderData('claude-code');
@@ -182,6 +182,6 @@ describe('startTabbedDashboard', () => {
     await expect(dashboardPromise).resolves.toBeUndefined();
     const screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
     const lastScreen = screens.at(-1) ?? '';
-    expect(lastScreen).toContain('2025-03-14 → 2026-03-14');
+    expect(lastScreen).toContain('2025-03-15 → 2026-03-14');
   });
 });

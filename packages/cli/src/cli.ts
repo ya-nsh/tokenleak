@@ -19,11 +19,13 @@ import {
   inspectCommonsExport,
   mergeProviderData,
   buildMoreStats,
+  getTodayLocal,
 } from '@tokenleak/core';
 import type {
   DateRange,
   FocusReport,
   NutritionReport,
+  ProviderWarning,
   RenderOptions,
   TokenleakOutput,
   ProviderData,
@@ -684,19 +686,66 @@ async function loadProviderDataForRange(
   const results = await Promise.all(
     availableProviders.map(async (provider) => {
       try {
-        return await provider.load(dateRange);
+        return { data: await provider.load(dateRange), failed: false };
       } catch {
-        return null;
+        const data: ProviderData = {
+          provider: provider.name,
+          displayName: provider.displayName,
+          daily: [],
+          totalTokens: 0,
+          totalCost: 0,
+          colors: provider.colors,
+          events: [],
+          warnings: [{ kind: 'provider-load', file: provider.name, count: 1 }],
+          costCompleteness: {
+            status: 'unknown',
+            totalTokens: 0,
+            pricedTokens: 0,
+            unpricedTokens: 0,
+            unknownModels: [],
+          },
+        };
+        return { data, failed: true };
       }
     }),
   );
 
-  const providerDataList = results.filter((result): result is ProviderData => result !== null);
-  if (providerDataList.length === 0) {
+  const providerDataList = results.map((result) => result.data);
+  if (results.every((result) => result.failed)) {
     throw new TokenleakError('No provider data found');
   }
 
   return { dateRange, providerDataList };
+}
+
+function collectProviderWarnings(providers: ProviderData[]): Array<{ provider: string; warning: ProviderWarning }> {
+  return providers.flatMap((provider) =>
+    (provider.warnings ?? []).map((warning) => ({ provider: provider.displayName, warning })),
+  );
+}
+
+function emitProviderWarnings(providers: ProviderData[], label: string = 'Warning'): void {
+  for (const { provider, warning } of collectProviderWarnings(providers)) {
+    if (warning.kind === 'unknown-pricing') {
+      const plural = warning.count === 1 ? 'event has' : 'events have';
+      process.stderr.write(
+        `${label}: ${provider} ${warning.count} ${plural} no verified pricing for model "${warning.file}"; cost totals are incomplete.\n`,
+      );
+      continue;
+    }
+
+    if (warning.kind === 'provider-load') {
+      process.stderr.write(
+        `${label}: ${provider} failed to load; data from this provider is omitted.\n`,
+      );
+      continue;
+    }
+
+    const plural = warning.count === 1 ? 'entry' : 'entries';
+    process.stderr.write(
+      `${label}: ${provider} skipped ${warning.count} ${warning.kind} ${plural} in ${warning.file}\n`,
+    );
+  }
 }
 
 /** Infer format from output file extension. */
@@ -1491,6 +1540,8 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   // Handle --compare mode.
   if (config.compare) {
     const compareResult = await loadCompareTokenleakData(available, dateRange, config.compare);
+    emitProviderWarnings(compareResult.currentData, 'Warning');
+    emitProviderWarnings(compareResult.previousData, 'Warning');
 
     if (config.more && (config.format === 'png' || config.format === 'svg')) {
       const renderer = getRenderer(config.format);
@@ -1554,6 +1605,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     process.stderr.write(`Loading usage data (${dateRange.since} to ${dateRange.until})...\n`);
   }
   const { providerDataList } = await loadProviderDataForRange(config, dateRange, available);
+  emitProviderWarnings(providerDataList, 'Warning');
 
   if (config.wrappedLive) {
     const totalEvents = providerDataList.reduce((s, p) => s + (p.events?.length ?? 0), 0);
@@ -1879,7 +1931,7 @@ function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string
   }
 
   if (date === null) {
-    date = new Date().toISOString().slice(0, 10);
+    date = getTodayLocal();
   }
 
   const cliArgs: Record<string, unknown> = {};
@@ -2255,6 +2307,7 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   }
 
   const replayOutput = await loadTokenleakData(available, replayRange);
+  emitProviderWarnings(replayOutput.providers, 'Warning');
   const report = buildReplayReport(replayOutput.providers, date);
   const rendered =
     format === 'json'
@@ -2312,6 +2365,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 
   const explainOutput = await loadTokenleakData(available, explainRange);
+  emitProviderWarnings(explainOutput.providers, 'Warning');
   const report = buildExplainReport(explainOutput.providers, date);
   const rendered =
     format === 'json'
@@ -2536,6 +2590,7 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   }
 
   const data = await loadTokenleakData(available, range);
+  emitProviderWarnings(data.providers, 'Warning');
   const events = collectEventsForReceipt(data.providers);
   const receipt = buildReceipt(events, range, topLines !== undefined ? { topLines } : {});
 

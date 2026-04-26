@@ -17,6 +17,18 @@ function appendCompareSection(rendered: string, output: TokenleakOutput, options
   return `${rendered}\n\n${renderCompareView(output, options.width, options.noColor)}`;
 }
 
+function appendCostCompletenessWarning(rendered: string, output: TokenleakOutput): string {
+  const completeness = output.aggregated.costCompleteness;
+  if (!completeness || completeness.status === 'complete') {
+    return rendered;
+  }
+
+  const models = completeness.unknownModels.slice(0, 4).join(', ');
+  const suffix = completeness.unknownModels.length > 4 ? ', ...' : '';
+  const modelText = models ? ` Unknown pricing: ${models}${suffix}.` : '';
+  return `${rendered}\n\nCost totals are incomplete: ${formatTokens(completeness.unpricedTokens)} tokens were not priced.${modelText}`;
+}
+
 function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
@@ -80,31 +92,40 @@ export class TerminalRenderer implements IRenderer {
     };
 
     if (effectiveOptions.width < MIN_COMPACT_WIDTH) {
-      return appendCompareSection(renderOneliner(output, effectiveOptions), output, effectiveOptions);
+      return appendCostCompletenessWarning(
+        appendCompareSection(renderOneliner(output, effectiveOptions), output, effectiveOptions),
+        output,
+      );
     }
 
     const model = buildDashboardModel(output, effectiveOptions);
 
     if (model.mode === 'compact') {
-      return appendModelEfficiencySection(
+      return appendCostCompletenessWarning(
+        appendModelEfficiencySection(
+          appendCacheRoiSection(
+            appendCompareSection(renderCompactDashboard(model, effectiveOptions), output, effectiveOptions),
+            output,
+            effectiveOptions,
+          ),
+          output,
+          effectiveOptions,
+        ),
+        output,
+      );
+    }
+
+    return appendCostCompletenessWarning(
+      appendModelEfficiencySection(
         appendCacheRoiSection(
-          appendCompareSection(renderCompactDashboard(model, effectiveOptions), output, effectiveOptions),
+          appendCompareSection(renderDashboardModel(model, effectiveOptions), output, effectiveOptions),
           output,
           effectiveOptions,
         ),
         output,
         effectiveOptions,
-      );
-    }
-
-    return appendModelEfficiencySection(
-      appendCacheRoiSection(
-        appendCompareSection(renderDashboardModel(model, effectiveOptions), output, effectiveOptions),
-        output,
-        effectiveOptions,
       ),
       output,
-      effectiveOptions,
     );
   }
 }

@@ -6,6 +6,7 @@ export type {
   CachePricingDetails,
   ProviderData,
   ProviderColors,
+  ProviderWarning,
   AggregatedStats,
   DayOfWeekEntry,
   TopModelEntry,
@@ -58,6 +59,9 @@ export type {
   DateRange,
   CompareOutput,
   CompareDeltas,
+  ProviderWarningKind,
+  CostSource,
+  CostCompleteness,
 } from './types';
 
 export {
@@ -124,8 +128,18 @@ export {
   ONE_DAY_MS,
   dateToUtcMs,
   formatDateStringUtc,
+  formatDateStringLocal,
+  getTodayLocal,
+  shiftDateStringLocal,
+  inclusiveDaySpan,
   compareDateStrings,
 } from './date-utils';
+
+export {
+  buildDailyCostCompleteness,
+  buildEventCostCompleteness,
+  mergeCostCompleteness,
+} from './cost-completeness';
 
 export { analyzeEfficiency, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
 export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';

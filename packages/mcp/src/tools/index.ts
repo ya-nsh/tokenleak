@@ -20,7 +20,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_usage_summary',
-    'Get a summary of token usage and costs across all providers. Returns totals, streaks, rolling windows, cache hit rate, and per-provider breakdown.',
+    'Get a summary of token usage and costs across all providers. Returns totals, cost completeness, provider-load warnings, streaks, rolling windows, cache hit rate, and per-provider breakdown.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 30)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
@@ -32,7 +32,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_daily_usage',
-    'Get day-by-day token usage and cost data for trend analysis.',
+    'Get day-by-day token usage and cost data for trend analysis, including per-day cost completeness.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 14)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
@@ -44,7 +44,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_cost_breakdown',
-    'Get a breakdown of costs by model, ranked from most to least expensive.',
+    'Get a breakdown of costs by model, ranked from most to least expensive, including aggregate cost completeness.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 30)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
@@ -66,7 +66,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'compare_periods',
-    'Compare token usage between two time periods. Shows deltas for tokens, cost, streaks, active days, and cache hit rate.',
+    'Compare token usage between two time periods. Shows deltas for tokens, cost, cost completeness, streaks, active days, and cache hit rate.',
     {
       current_since: z.string().describe('Start date of the current period (YYYY-MM-DD)'),
       current_until: z.string().optional().describe('End date of the current period (default: today)'),

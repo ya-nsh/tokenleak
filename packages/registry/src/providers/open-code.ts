@@ -8,12 +8,18 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange } from '../utils';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  incrementProviderWarning,
+  resolveUsageCost,
+} from '../costing';
 
 const PROVIDER_NAME = 'open-code';
 const DISPLAY_NAME = 'OpenCode';
@@ -150,45 +156,20 @@ function toIsoTimestamp(createdAt: string | number): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
-}
-
-function getEstimatedCostBreakdown(record: UsageRecord) {
-  return estimateCostBreakdown(
-    record.model,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  );
-}
-
-function getRecordCost(record: UsageRecord): number {
-  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
-    return record.explicitCost;
-  }
-
-  return getEstimatedCostBreakdown(record).totalCost;
-}
-
 function toUsageEvent(record: UsageRecord): UsageEvent {
   const totalTokens =
     record.inputTokens +
     record.outputTokens +
     record.cacheReadTokens +
     record.cacheWriteTokens;
-  const estimated = getEstimatedCostBreakdown(record);
+  const cost = resolveUsageCost({
+    model: normalizeModelName(record.model),
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    explicitCost: record.explicitCost,
+  });
   return {
     provider: PROVIDER_NAME,
     timestamp: record.timestamp,
@@ -199,57 +180,56 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
     cacheReadTokens: record.cacheReadTokens,
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
-    cost: getRecordCost(record),
-    pricing: toCachePricing(estimated.pricing),
+    cost: cost.cost,
+    pricing: cost.pricing,
+    costSource: cost.costSource,
+    pricedTokens: cost.pricedTokens,
+    unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
     projectId: record.projectId,
     durationMs: record.durationMs,
   };
 }
 
-function buildProviderData(records: UsageRecord[]): ProviderData {
+function buildProviderData(records: UsageRecord[], warnings: ProviderWarning[] = []): ProviderData {
   const byDate = new Map<string, Map<string, ModelBreakdown>>();
+  const events = records.map(toUsageEvent);
 
-  for (const record of records) {
-    let dateMap = byDate.get(record.date);
+  for (const event of events) {
+    let dateMap = byDate.get(event.date);
     if (!dateMap) {
       dateMap = new Map();
-      byDate.set(record.date, dateMap);
+      byDate.set(event.date, dateMap);
     }
 
-    const normalized = normalizeModelName(record.model);
-    const existing = dateMap.get(normalized);
-    const estimated = getEstimatedCostBreakdown(record);
-    const recordCost = typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)
-      ? record.explicitCost
-      : estimated.totalCost;
-    const pricing = toCachePricing(estimated.pricing);
-
+    const existing = dateMap.get(event.model);
     if (existing) {
-      existing.inputTokens += record.inputTokens;
-      existing.outputTokens += record.outputTokens;
-      existing.cacheReadTokens += record.cacheReadTokens;
-      existing.cacheWriteTokens += record.cacheWriteTokens;
-      existing.totalTokens +=
-        record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
-      existing.cost += recordCost;
-      if (!existing.pricing && pricing) {
-        existing.pricing = pricing;
+      existing.inputTokens += event.inputTokens;
+      existing.outputTokens += event.outputTokens;
+      existing.cacheReadTokens += event.cacheReadTokens;
+      existing.cacheWriteTokens += event.cacheWriteTokens;
+      existing.totalTokens += event.totalTokens;
+      existing.cost += event.cost;
+      existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      existing.costSource =
+        (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
+      if (!existing.pricing && event.pricing) {
+        existing.pricing = event.pricing;
       }
     } else {
-      dateMap.set(normalized, {
-        model: normalized,
-        inputTokens: record.inputTokens,
-        outputTokens: record.outputTokens,
-        cacheReadTokens: record.cacheReadTokens,
-        cacheWriteTokens: record.cacheWriteTokens,
-        totalTokens:
-          record.inputTokens +
-          record.outputTokens +
-          record.cacheReadTokens +
-          record.cacheWriteTokens,
-        cost: recordCost,
-        pricing,
+      dateMap.set(event.model, {
+        model: event.model,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+        cacheReadTokens: event.cacheReadTokens,
+        cacheWriteTokens: event.cacheWriteTokens,
+        totalTokens: event.totalTokens,
+        cost: event.cost,
+        pricing: event.pricing,
+        costSource: event.costSource,
+        pricedTokens: event.pricedTokens,
+        unpricedTokens: event.unpricedTokens,
       });
     }
   }
@@ -290,15 +270,22 @@ function buildProviderData(records: UsageRecord[]): ProviderData {
     totalTokens,
     totalCost,
     colors: COLORS,
-    events: records.map(toUsageEvent),
+    events,
+    costCompleteness: buildEventCostCompleteness(events),
+    warnings,
   };
 }
 
-function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
+function loadFromSqlite(
+  dbPath: string,
+  range: DateRange,
+  warnings: Map<string, ProviderWarning>,
+): UsageRecord[] {
   let db: InstanceType<typeof Database>;
   try {
     db = new Database(dbPath, { readonly: true });
   } catch {
+    incrementProviderWarning(warnings, 'read', dbPath);
     return [];
   }
 
@@ -335,13 +322,18 @@ function loadFromSqlite(dbPath: string, range: DateRange): UsageRecord[] {
     }
     return records;
   } catch {
+    incrementProviderWarning(warnings, 'read', dbPath);
     return [];
   } finally {
     db.close();
   }
 }
 
-function loadFromLegacyJson(sessionsDir: string, range: DateRange): UsageRecord[] {
+function loadFromLegacyJson(
+  sessionsDir: string,
+  range: DateRange,
+  warnings: Map<string, ProviderWarning>,
+): UsageRecord[] {
   const files = readdirSync(sessionsDir).filter((file) => file.endsWith('.json'));
   const records: UsageRecord[] = [];
 
@@ -375,6 +367,7 @@ function loadFromLegacyJson(sessionsDir: string, range: DateRange): UsageRecord[
         }
       }
     } catch {
+      incrementProviderWarning(warnings, 'parse', join(sessionsDir, file));
       continue;
     }
   }
@@ -382,7 +375,11 @@ function loadFromLegacyJson(sessionsDir: string, range: DateRange): UsageRecord[
   return records;
 }
 
-function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[] {
+function loadFromCurrentStorage(
+  baseDir: string,
+  range: DateRange,
+  warnings: Map<string, ProviderWarning>,
+): UsageRecord[] {
   const messagesRoot = join(baseDir, 'storage', 'message');
   if (!existsSync(messagesRoot)) {
     return [];
@@ -398,6 +395,7 @@ function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[
     try {
       messageFiles = readdirSync(sessionPath).filter((file) => file.endsWith('.json'));
     } catch {
+      incrementProviderWarning(warnings, 'read', sessionPath);
       continue;
     }
 
@@ -468,6 +466,7 @@ function loadFromCurrentStorage(baseDir: string, range: DateRange): UsageRecord[
           recordsWithoutId.push(record);
         }
       } catch {
+        incrementProviderWarning(warnings, 'parse', join(sessionPath, file));
         continue;
       }
     }
@@ -506,10 +505,17 @@ export class OpenCodeProvider implements IProvider {
   }
 
   async load(range: DateRange): Promise<ProviderData> {
+    const warnings = new Map<string, ProviderWarning>();
     const currentMessagesRoot = join(this.baseDir, 'storage', 'message');
     if (existsSync(currentMessagesRoot)) {
-      const currentRecords = loadFromCurrentStorage(this.baseDir, range);
-      return buildProviderData(currentRecords);
+      const currentRecords = loadFromCurrentStorage(this.baseDir, range, warnings);
+      addUnknownPricingWarnings(warnings, currentRecords.map(toUsageEvent));
+      return buildProviderData(
+        currentRecords,
+        [...warnings.values()].sort(
+          (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+        ),
+      );
     }
 
     const opencodeDbPath = join(this.baseDir, 'opencode.db');
@@ -519,13 +525,19 @@ export class OpenCodeProvider implements IProvider {
     let records: UsageRecord[] = [];
 
     if (existsSync(opencodeDbPath)) {
-      records = loadFromSqlite(opencodeDbPath, range);
+      records = loadFromSqlite(opencodeDbPath, range, warnings);
     } else if (existsSync(sessionsDbPath)) {
-      records = loadFromSqlite(sessionsDbPath, range);
+      records = loadFromSqlite(sessionsDbPath, range, warnings);
     } else if (existsSync(sessionsDir)) {
-      records = loadFromLegacyJson(sessionsDir, range);
+      records = loadFromLegacyJson(sessionsDir, range, warnings);
     }
+    addUnknownPricingWarnings(warnings, records.map(toUsageEvent));
 
-    return buildProviderData(records);
+    return buildProviderData(
+      records,
+      [...warnings.values()].sort(
+        (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+      ),
+    );
   }
 }

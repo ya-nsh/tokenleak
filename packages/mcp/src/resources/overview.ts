@@ -4,18 +4,15 @@ import {
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 export async function handleOverview(registry: ProviderRegistry): Promise<string> {
   const range = resolveRange({});
   const available = await registry.getAvailable();
 
-  const results = await Promise.all(
-    available.map((p) => p.load(range).catch(() => null)),
-  );
-  const data = results.filter((r): r is ProviderData => r !== null);
+  const { data, warnings } = await loadProviderData(available, range);
 
   if (data.length === 0) {
     return JSON.stringify(
@@ -26,6 +23,7 @@ export async function handleOverview(registry: ProviderRegistry): Promise<string
         providers: [],
         aggregated: null,
         more: null,
+        warnings,
       },
       null,
       2,
@@ -43,6 +41,7 @@ export async function handleOverview(registry: ProviderRegistry): Promise<string
       providers: data,
       aggregated: stats,
       more: buildMoreStats(data, range),
+      warnings,
     },
     null,
     2,

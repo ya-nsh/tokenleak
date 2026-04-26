@@ -1,6 +1,16 @@
-import { MAX_JSONL_RECORD_BYTES } from '@tokenleak/core';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { MAX_JSONL_RECORD_BYTES } from '@tokenleak/core';
+
+export interface JsonlRecordWarning {
+  kind: 'parse' | 'oversize';
+  file: string;
+  line: number;
+}
+
+export interface SplitJsonlOptions {
+  onWarning?: (warning: JsonlRecordWarning) => void;
+}
 
 /**
  * Returns the maximum allowed record size in bytes.
@@ -23,19 +33,25 @@ function getMaxRecordBytes(): number {
 
 /**
  * Async generator that reads a JSONL file line-by-line and yields parsed JSON
- * objects. Blank lines are skipped. Oversized or malformed records cause an
- * error that includes the file path and 1-based line number.
+ * objects. Blank lines are skipped. Oversized or malformed records are skipped
+ * and surfaced through the optional warning callback.
  */
-export async function* splitJsonlRecords(filePath: string): AsyncGenerator<unknown> {
+export async function* splitJsonlRecords(
+  filePath: string,
+  options: SplitJsonlOptions = {},
+): AsyncGenerator<unknown> {
   const maxBytes = getMaxRecordBytes();
-  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const input = createReadStream(filePath, { encoding: 'utf8' });
   const lines = createInterface({
-    input: stream,
+    input,
     crlfDelay: Infinity,
   });
+  let lineNumber = 0;
 
   try {
     for await (const line of lines) {
+      lineNumber += 1;
+
       // Skip blank lines and lines that are only whitespace/null bytes
       if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
         continue;
@@ -43,21 +59,18 @@ export async function* splitJsonlRecords(filePath: string): AsyncGenerator<unkno
 
       const byteLength = Buffer.byteLength(line, 'utf8');
       if (byteLength > maxBytes) {
-        // Skip oversized records instead of crashing — real-world JSONL files
-        // can have corrupted entries
+        options.onWarning?.({ kind: 'oversize', file: filePath, line: lineNumber });
         continue;
       }
 
       try {
         yield JSON.parse(line) as unknown;
       } catch {
-        // Skip malformed JSON lines — real-world log files can have corrupted
-        // entries (null bytes, partial writes, etc.)
-        continue;
+        options.onWarning?.({ kind: 'parse', file: filePath, line: lineNumber });
       }
     }
   } finally {
     lines.close();
-    stream.destroy();
+    input.destroy();
   }
 }

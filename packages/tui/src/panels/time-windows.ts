@@ -1,6 +1,11 @@
 import { Box, Text } from '@opentui/core';
 import type { TimeWindowData } from '../lib/data.js';
-import { formatTokens, formatCost, padLeft, padRight } from '../lib/format.js';
+import {
+  formatTokens,
+  formatCostWithCompleteness,
+  padLeft,
+  padRight,
+} from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 
 interface TimeWindowsProps {
@@ -75,7 +80,7 @@ export function createTimeWindowsPanel(props: TimeWindowsProps) {
       ),
       dataRow(
         'Cost',
-        costValues.map(formatCost),
+        windows.map((w) => formatCostWithCompleteness(w.stats.totalCost, w.stats.costCompleteness)),
         findMaxIndex(costValues),
       ),
       dataRow(
@@ -85,7 +90,9 @@ export function createTimeWindowsPanel(props: TimeWindowsProps) {
       ),
       dataRow(
         'Avg Daily Cost',
-        avgCostValues.map(formatCost),
+        windows.map((w) =>
+          formatCostWithCompleteness(w.stats.averageDailyCost, w.stats.costCompleteness),
+        ),
         findMaxIndex(avgCostValues),
       ),
       dataRow(

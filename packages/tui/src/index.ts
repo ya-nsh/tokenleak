@@ -1,7 +1,13 @@
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
-import { buildCommonsExport, buildCommonsPromptExport, SCHEMA_VERSION } from '@tokenleak/core';
+import {
+  buildCommonsExport,
+  buildCommonsPromptExport,
+  SCHEMA_VERSION,
+  getTodayLocal,
+  shiftDateStringLocal,
+} from '@tokenleak/core';
 import {
   CursorAuthError,
   resolveCursorSetupStatus,
@@ -395,19 +401,11 @@ function buildTokenleakOutput(
 
   // Scope dateRange to the selected window
   const days = WINDOW_DAYS[state.selectedWindowIndex];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayLocal();
 
-  const dateRange =
-    days && days > 0
-      ? {
-          since: (() => {
-            const d = new Date();
-            d.setDate(d.getDate() - (days - 1));
-            return d.toISOString().slice(0, 10);
-          })(),
-          until: today,
-        }
-      : state.data.dateRange;
+  const dateRange = days && days > 0
+    ? { since: shiftDateStringLocal(today, -(days - 1)), until: today }
+    : state.data.dateRange;
 
   // Attach more stats if available for achievements that need hourOfDay
   const more = options.computeMore ? ensureMoreStats(state) : state.cachedMoreStats;

@@ -5,10 +5,10 @@ import {
   mergeProviderData,
   SCHEMA_VERSION,
 } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
 import { MODEL_PRICING } from '@tokenleak/registry';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 export async function handleGetEfficiencyAdvice(
   args: { days?: number; since?: string; until?: string; provider?: string },
@@ -21,10 +21,7 @@ export async function handleGetEfficiencyAdvice(
       ? available.filter((p) => p.name === args.provider)
       : available;
 
-    const results = await Promise.all(
-      filtered.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(filtered, range);
 
     if (data.length === 0) {
       return {
@@ -36,6 +33,7 @@ export async function handleGetEfficiencyAdvice(
                 schemaVersion: SCHEMA_VERSION,
                 dateRange: range,
                 recommendations: [],
+                warnings,
                 message: 'No provider data found for the given range.',
               },
               null,
@@ -65,7 +63,15 @@ export async function handleGetEfficiencyAdvice(
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(report, null, 2),
+          text: JSON.stringify(
+            {
+              ...report,
+              costCompleteness: stats.costCompleteness,
+              warnings,
+            },
+            null,
+            2,
+          ),
         },
       ],
     };

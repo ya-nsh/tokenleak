@@ -1,7 +1,7 @@
 import { aggregate, mergeProviderData } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 export async function handleGetCostBreakdown(
   args: { days?: number; since?: string; until?: string },
@@ -11,10 +11,7 @@ export async function handleGetCostBreakdown(
     const range = resolveRange(args);
     const available = await registry.getAvailable();
 
-    const results = await Promise.all(
-      available.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(available, range);
 
     if (data.length === 0) {
       return {
@@ -22,7 +19,7 @@ export async function handleGetCostBreakdown(
           {
             type: 'text' as const,
             text: JSON.stringify(
-              { dateRange: range, models: [], message: 'No provider data found.' },
+              { dateRange: range, models: [], warnings, message: 'No provider data found.' },
               null,
               2,
             ),
@@ -42,7 +39,9 @@ export async function handleGetCostBreakdown(
             {
               dateRange: range,
               totalCost: stats.totalCost,
+              costCompleteness: stats.costCompleteness,
               models: stats.topModels,
+              warnings,
             },
             null,
             2,

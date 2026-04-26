@@ -1,5 +1,6 @@
 import type { AggregatedStats, DailyUsage } from '../types';
 import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
+import { buildDailyCostCompleteness } from '../cost-completeness';
 import { calculateStreaks } from './streaks';
 import { rollingWindow } from './rolling-window';
 import { findPeakDay } from './peaks';
@@ -19,7 +20,7 @@ export function aggregate(
   daily: DailyUsage[],
   referenceDate: string,
 ): AggregatedStats {
-  const streaks = calculateStreaks(daily);
+  const streaks = calculateStreaks(daily, referenceDate);
   const rolling30 = rollingWindow(daily, 30, referenceDate);
   const rolling7 = rollingWindow(daily, 7, referenceDate);
   const peak = findPeakDay(daily);
@@ -42,6 +43,7 @@ export function aggregate(
   const activeDays = daily.length;
   const totalDays = computeTotalDays(daily);
   const averages = calculateAverages(daily, totalDays);
+  const costCompleteness = buildDailyCostCompleteness(daily);
 
   return {
     currentStreak: streaks.current,
@@ -63,6 +65,7 @@ export function aggregate(
     dayOfWeek: dow,
     topModels: models,
     rolling30dTopModel,
+    costCompleteness,
   };
 }
 

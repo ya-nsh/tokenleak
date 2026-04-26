@@ -8,13 +8,18 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
-import { estimateCostBreakdown } from '../models/cost';
 import { isInRange, mapWithConcurrency } from '../utils';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  resolveUsageCost,
+} from '../costing';
 
 const PROVIDER_NAME = 'pi';
 const DISPLAY_NAME = 'Pi';
@@ -92,16 +97,19 @@ function toIsoTimestamp(value: unknown): string | null {
   return null;
 }
 
-function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
-  if (!pricing) {
-    return undefined;
+function incrementWarningCount(
+  warnings: Map<string, ProviderWarning>,
+  kind: ProviderWarning['kind'],
+  file: string,
+): void {
+  const key = `${kind}:${file}`;
+  const existing = warnings.get(key);
+  if (existing) {
+    existing.count += 1;
+    return;
   }
 
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
+  warnings.set(key, { kind, file, count: 1 });
 }
 
 function isSessionHeader(record: unknown): record is { type: 'session'; cwd?: string } {
@@ -189,32 +197,17 @@ function parseUsageRecord(
   };
 }
 
-function getRecordCost(record: PiUsageRecord): number {
-  if (typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)) {
-    return record.explicitCost;
-  }
-
-  return estimateCostBreakdown(
-    record.normalizedModel,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  ).totalCost;
-}
-
 function toUsageEvent(record: PiUsageRecord): UsageEvent {
   const totalTokens =
     record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
-  const pricing = toCachePricing(
-    estimateCostBreakdown(
-      record.normalizedModel,
-      record.inputTokens,
-      record.outputTokens,
-      record.cacheReadTokens,
-      record.cacheWriteTokens,
-    ).pricing,
-  );
+  const cost = resolveUsageCost({
+    model: record.normalizedModel,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    explicitCost: record.explicitCost,
+  });
 
   return {
     provider: PROVIDER_NAME,
@@ -226,14 +219,17 @@ function toUsageEvent(record: PiUsageRecord): UsageEvent {
     cacheReadTokens: record.cacheReadTokens,
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
-    cost: getRecordCost(record),
-    pricing,
+    cost: cost.cost,
+    pricing: cost.pricing,
+    costSource: cost.costSource,
+    pricedTokens: cost.pricedTokens,
+    unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
     projectId: record.projectId,
   };
 }
 
-function buildProviderData(records: PiUsageRecord[]): ProviderData {
+function buildProviderData(records: PiUsageRecord[], warnings: ProviderWarning[] = []): ProviderData {
   const byDate = new Map<string, Map<string, ModelBreakdown>>();
   const events = records.map(toUsageEvent);
 
@@ -252,6 +248,10 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
       existing.cacheWriteTokens += event.cacheWriteTokens;
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
+      existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      existing.costSource =
+        (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
       if (!existing.pricing && event.pricing) {
         existing.pricing = event.pricing;
       }
@@ -265,6 +265,9 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
         totalTokens: event.totalTokens,
         cost: event.cost,
         pricing: event.pricing,
+        costSource: event.costSource,
+        pricedTokens: event.pricedTokens,
+        unpricedTokens: event.unpricedTokens,
       });
     }
   }
@@ -306,6 +309,8 @@ function buildProviderData(records: PiUsageRecord[]): ProviderData {
     totalCost,
     colors: PI_COLORS,
     events: events.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+    costCompleteness: buildEventCostCompleteness(events),
+    warnings,
   };
 }
 
@@ -331,13 +336,16 @@ export class PiProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const sessionsDir = getSessionsDir(this.agentDir);
     const files = await collectJsonlFiles(sessionsDir);
+    const warnings = new Map<string, ProviderWarning>();
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const records: PiUsageRecord[] = [];
       let projectId: string | undefined;
       const sessionId = relative(sessionsDir, file).split(sep).join('/');
 
       try {
-        for await (const record of splitJsonlRecords(file)) {
+        for await (const record of splitJsonlRecords(file, {
+          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
+        })) {
           if (isSessionHeader(record)) {
             projectId =
               typeof record.cwd === 'string' && record.cwd.trim() ? record.cwd : projectId;
@@ -350,13 +358,20 @@ export class PiProvider implements IProvider {
           }
         }
       } catch {
+        incrementWarningCount(warnings, 'read', file);
         return [];
       }
 
       return records;
     });
     const records = recordsByFile.flat();
+    addUnknownPricingWarnings(warnings, records.map(toUsageEvent));
 
-    return buildProviderData(records);
+    return buildProviderData(
+      records,
+      [...warnings.values()].sort(
+        (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
+      ),
+    );
   }
 }

@@ -1,7 +1,7 @@
 import { aggregate, mergeProviderData, buildMoreStats } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 const DEFAULT_HABITS_DAYS = 90;
 
@@ -13,10 +13,7 @@ export async function handleGetStreaksAndHabits(
     const range = resolveRange(args, DEFAULT_HABITS_DAYS);
     const available = await registry.getAvailable();
 
-    const results = await Promise.all(
-      available.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(available, range);
 
     if (data.length === 0) {
       return {
@@ -24,7 +21,7 @@ export async function handleGetStreaksAndHabits(
           {
             type: 'text' as const,
             text: JSON.stringify(
-              { dateRange: range, message: 'No provider data found.' },
+              { dateRange: range, warnings, message: 'No provider data found.' },
               null,
               2,
             ),
@@ -52,6 +49,8 @@ export async function handleGetStreaksAndHabits(
               dayOfWeek: stats.dayOfWeek,
               sessionMetrics: more.sessionMetrics,
               hourOfDay: more.hourOfDay,
+              costCompleteness: stats.costCompleteness,
+              warnings,
             },
             null,
             2,

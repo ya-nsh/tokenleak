@@ -88,3 +88,12 @@ export function resetPricingState(): void {
   remotePricing = null;
   initialized = false;
 }
+
+/**
+ * Seed remote pricing for tests without touching the network or disk cache.
+ * @internal
+ */
+export function setRemotePricingForTest(data: Record<string, ModelPricing>): void {
+  remotePricing = data;
+  initialized = true;
+}
