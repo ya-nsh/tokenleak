@@ -8,21 +8,21 @@ See where your AI tokens actually go. Tokenleak reads usage data from **Claude C
 
 Tokenleak auto-detects supported providers from their local logs and storage. This is the quick scan of where it looks before it renders dashboards, reports, and images:
 
-| Client | Local data location | Provider key and aliases | Supported |
-| ------ | ------------------- | ------------------------ | --------- |
-| Claude Code | `~/.claude/projects/**/*.jsonl` | `claude-code`, `anthropic`, `claude`, `claudecode` | Yes |
-| Codex | `~/.codex/sessions/**/*.jsonl` | `codex`, `openai` | Yes |
-| Cursor | `~/.config/tokenleak/cursor-cache/usage*.csv` after `tokenleak cursor login` | `cursor`, `cursor-ide`, `cursoride` | Yes |
-| Gemini | `~/.gemini/tmp/**/*.{json,jsonl}` | `gemini`, `google` | Yes |
-| GitHub Copilot | `~/.copilot/otel/**/*.jsonl` | `copilot`, `github-copilot`, `copilot-otel` | Yes |
-| Amp | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json` | `amp`, `sourcegraph-amp` | Yes |
-| Qwen | `~/.qwen/projects/**/*.jsonl` | `qwen` | Yes |
-| Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json` | `roo-code`, `roo`, `roocode` | Yes |
-| Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilo`, `kilocode` | Yes |
-| OpenClaw | `~/.openclaw/agents/**/*.jsonl*` | `openclaw`, `open-claw` | Yes |
-| Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes` | Yes |
-| OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
-| Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
+| Icon | Client | Local data location | Provider key and aliases | Supported |
+| ---- | ------ | ------------------- | ------------------------ | --------- |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=anthropic.com&sz=64" alt="Claude Code icon" /> | Claude Code | `~/.claude/projects/**/*.jsonl` | `claude-code`, `anthropic`, `claude`, `claudecode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/openai?s=64" alt="Codex icon" /> | Codex | `~/.codex/sessions/**/*.jsonl` | `codex`, `openai` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=cursor.com&sz=64" alt="Cursor icon" /> | Cursor | `~/.config/tokenleak/cursor-cache/usage*.csv` after `tokenleak cursor login` | `cursor`, `cursor-ide`, `cursoride` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" alt="Gemini icon" /> | Gemini | `~/.gemini/tmp/**/*.{json,jsonl}` | `gemini`, `google` | Yes |
+| <img width="36" height="36" src="https://cdn.simpleicons.org/githubcopilot/000000" alt="GitHub Copilot icon" /> | GitHub Copilot | `~/.copilot/otel/**/*.jsonl` | `copilot`, `github-copilot`, `copilot-otel` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=ampcode.com&sz=64" alt="Amp icon" /> | Amp | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json` | `amp`, `sourcegraph-amp` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/QwenLM?s=64" alt="Qwen icon" /> | Qwen | `~/.qwen/projects/**/*.jsonl` | `qwen` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/RooCodeInc?s=64" alt="Roo Code icon" /> | Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json` | `roo-code`, `roo`, `roocode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo Code icon" /> | Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilo`, `kilocode` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=openclaw.ai&sz=64" alt="OpenClaw icon" /> | OpenClaw | `~/.openclaw/agents/**/*.jsonl*` | `openclaw`, `open-claw` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/NousResearch?s=64" alt="Hermes icon" /> | Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/sst?s=64" alt="OpenCode icon" /> | OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/badlogic?s=64" alt="Pi icon" /> | Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
 
 - Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
 - Use `CODEX_HOME` to override the Codex base directory.
