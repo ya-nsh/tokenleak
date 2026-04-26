@@ -67,13 +67,31 @@ export function buildHeader(
     }
   }
 
-  // View mode indicators — each is a clickable Box. The shortcut key is
-  // rendered dimly before the label so users can see which key switches to
-  // which view without opening the help overlay.
+  // View mode indicators — each is a clickable Box. Inactive tabs keep their
+  // shortcut key visible; the active tab uses only the label inside the highlight.
   const viewParts: ReturnType<typeof Box>[] = [];
   for (const v of VIEWS) {
     const isActive = state.selectedView === v.mode;
     const viewMode = v.mode;
+    const children = isActive
+      ? [
+          Text({
+            content: ` ${v.label} `,
+            fg: COLORS.bg,
+            bg: COLORS.cyan,
+            attributes: BOLD,
+          }),
+        ]
+      : [
+          Text({
+            content: v.key,
+            fg: COLORS.amber,
+          }),
+          Text({
+            content: `${v.label} `,
+            fg: COLORS.dimWhite,
+          }),
+        ];
 
     viewParts.push(
       Box(
@@ -83,18 +101,7 @@ export function buildHeader(
             ? () => { onViewSwitch(viewMode); }
             : undefined,
         },
-        Text({
-          content: ` ${v.key} `,
-          fg: isActive ? COLORS.bg : COLORS.amber,
-          bg: isActive ? COLORS.cyan : undefined,
-          attributes: isActive ? BOLD : undefined,
-        }),
-        Text({
-          content: `${v.label} `,
-          fg: isActive ? COLORS.bg : COLORS.dimWhite,
-          bg: isActive ? COLORS.cyan : undefined,
-          attributes: isActive ? BOLD : undefined,
-        }),
+        ...children,
       ),
     );
   }
@@ -109,10 +116,9 @@ export function buildHeader(
       height: 1,
     },
     Box(
-      { flexDirection: 'row', gap: 1 },
-      Text({ content: ' TOKENLEAK ', fg: COLORS.amber, attributes: BOLD }),
+      { flexDirection: 'row' },
       ...tabParts,
-      Text({ content: '  ', fg: COLORS.dimWhite }),
+      Text({ content: ' ', fg: COLORS.dimWhite }),
       ...viewParts,
     ),
     Box(

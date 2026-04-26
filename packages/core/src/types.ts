@@ -364,6 +364,60 @@ export interface ReplayReport {
   summary: ReplayDaySummary;
 }
 
+export interface CommonsPrivacyBlock {
+  containsPrompts: false;
+  containsPaths: false;
+  containsRepoNames: false;
+  containsSessionIds: false;
+  containsExactTimestamps: false;
+  granularity: 'aggregate-v1';
+}
+
+export interface CommonsBucketEntry {
+  label: string;
+  count: number;
+}
+
+export interface CommonsProviderModelEntry {
+  provider: string;
+  model: string;
+  tokensBucket: string;
+  costBucket: string;
+  cacheHitRateBucket: string;
+  eventCountBucket: string;
+}
+
+export interface CommonsExport {
+  schemaVersion: 1;
+  generated: string;
+  dateRange: DateRange;
+  privacy: CommonsPrivacyBlock;
+  totals: {
+    tokensBucket: string;
+    costBucket: string;
+    activeDaysBucket: string;
+    providerCount: number;
+    cacheHitRateBucket: string;
+  };
+  providerModels: CommonsProviderModelEntry[];
+  dayOfWeek: CommonsBucketEntry[];
+  hourOfDay: CommonsBucketEntry[];
+  projectBuckets: CommonsBucketEntry[];
+  sessionBuckets: CommonsBucketEntry[];
+}
+
+export interface CommonsInspectReport {
+  valid: boolean;
+  errors: string[];
+  summary: {
+    providerModels: number;
+    dayOfWeekBuckets: number;
+    hourOfDayBuckets: number;
+    projectBuckets: number;
+    sessionBuckets: number;
+  };
+}
+
 export type WasteCategory =
   | 'premium-short-output'
   | 'low-cache-hit-rate'

@@ -1,7 +1,7 @@
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
-import { SCHEMA_VERSION } from '@tokenleak/core';
+import { buildCommonsExport, buildCommonsPromptExport, buildMoreStats, SCHEMA_VERSION } from '@tokenleak/core';
 import {
   CursorAuthError,
   resolveCursorSetupStatus,
@@ -9,6 +9,7 @@ import {
   validateCursorSession,
 } from '@tokenleak/registry';
 import { computeAchievements } from '@tokenleak/renderers';
+import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
   loadAllData,
@@ -162,6 +163,27 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   }
 
   return output;
+}
+
+function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
+  const output = buildTokenleakOutput(state);
+  if (!output || !state.data) return null;
+
+  const scopedProviders = state.data.providers.map((provider) => {
+    const filteredEvents = provider.events?.filter(
+      (event) => event.date >= output.dateRange.since && event.date <= output.dateRange.until,
+    );
+    const filteredDaily = provider.daily.filter(
+      (entry) => entry.date >= output.dateRange.since && entry.date <= output.dateRange.until,
+    );
+    return { ...provider, events: filteredEvents, daily: filteredDaily };
+  });
+
+  return {
+    ...output,
+    providers: scopedProviders,
+    more: buildMoreStats(scopedProviders, output.dateRange),
+  };
 }
 
 function resetCursorSetupForm(state: AppState): void {
@@ -506,9 +528,9 @@ function setScrollOffset(state: AppState, value: number): void {
   }
 }
 
-/** Handle export actions (p/w/l keys in export view) */
+/** Handle export actions (p/w/l/a keys in export view) */
 async function handleExport(
-  key: 'p' | 'w' | 'l',
+  key: 'p' | 'w' | 'l' | 'a',
   state: AppState,
   renderer: CliRenderer,
 ): Promise<void> {
@@ -555,9 +577,23 @@ async function handleExport(
       const { startWrappedLiveServer } = await import('@tokenleak/renderers');
       const { port } = await startWrappedLiveServer(output);
       state.exportStatus = `Live server running at http://localhost:${port} (Ctrl+C to stop)`;
+    } else if (key === 'a') {
+      state.exportStatus = 'Copying LLM prompt...';
+      render(state, renderer);
+
+      const scopedOutput = buildWindowScopedTokenleakOutput(state);
+      if (!scopedOutput) {
+        throw new Error('No data loaded');
+      }
+      const prompt = buildCommonsPromptExport(buildCommonsExport(scopedOutput));
+      await copyTextToClipboard(prompt);
+      state.exportStatus = 'Copied LLM analysis prompt to clipboard';
     }
   } catch (err: unknown) {
-    state.exportStatus = `Error: ${err instanceof Error ? err.message : String(err)}`;
+    const message = err instanceof Error ? err.message : String(err);
+    state.exportStatus = key === 'a'
+      ? `Error: ${message}. CLI fallback: tokenleak commons prompt --output tokenleak-llm-prompt.md`
+      : `Error: ${message}`;
   }
 
   render(state, renderer);
@@ -671,8 +707,8 @@ export async function main(): Promise<void> {
         return true;
       }
 
-      // Export view actions: p/w/l
-      if (state.selectedView === 'export' && (sequence === 'p' || sequence === 'w' || sequence === 'l')) {
+      // Export view actions: p/w/l/a
+      if (state.selectedView === 'export' && (sequence === 'p' || sequence === 'w' || sequence === 'l' || sequence === 'a')) {
         handleExport(sequence, state, renderer);
         return true;
       }

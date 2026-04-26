@@ -74,7 +74,7 @@ export function buildStatusBar(state: AppState) {
   } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped' || state.selectedView === 'nutrition') {
     keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
-    keys = `${nav}  p:png  w:wrapped  l:live  r:refresh${cursorHint}  ${helpHint}  q:quit`;
+    keys = `${nav}  p:png  w:wrapped  l:live  a:LLM prompt  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else {
     keys = `${nav}  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   }

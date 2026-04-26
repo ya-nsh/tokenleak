@@ -38,6 +38,7 @@ import {
 } from './interactive';
 import {
   writeFileSync,
+  readFileSync,
   unlinkSync,
   mkdirSync,
   existsSync,
@@ -807,6 +808,61 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('tokenleak focus');
     expect(stdout).toContain('deep-work score');
     expect(stdout).toContain('--format <format>');
+  });
+
+  test('commons --help exits with code 0 and lists prompt export', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'commons', '--help'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('tokenleak commons');
+    expect(stdout).toContain('commons prompt');
+    expect(stdout).toContain('--clipboard');
+  });
+
+  test('commons prompt writes an LLM-ready markdown prompt', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+    const outputDir = mkdtempSync(join(tmpdir(), 'tokenleak-commons-prompt-'));
+    const outputPath = join(outputDir, 'prompt.md');
+
+    try {
+      const proc = Bun.spawn(
+        ['bun', cliPath, 'commons', 'prompt', '--provider', 'pi', '--output', outputPath],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
+      const exitCode = await proc.exited;
+      const stderr = await new Response(proc.stderr).text();
+
+      expect(exitCode, stderr).toBe(0);
+      expect(existsSync(outputPath)).toBe(true);
+      const rendered = readFileSync(outputPath, 'utf-8');
+      expect(rendered).toContain('# Tokenleak LLM Analysis Prompt');
+      expect(rendered).toContain('## Privacy Guarantees');
+      expect(rendered).toContain('"containsPrompts": false');
+    } finally {
+      cleanup();
+      rmSync(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  test('commons export rejects invalid day counts with a clear error', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'commons', 'export', '--days', 'nope', '--provider', 'pi'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('--days must be a positive number');
   });
 
   test('waste is not exposed as a standalone command', async () => {
