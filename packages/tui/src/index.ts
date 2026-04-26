@@ -51,6 +51,20 @@ import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel, REPLAY_MAX_CONTENT_WIDTH, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
+import type { ReplayPlaybackView } from './panels/replay.js';
+import {
+  REPLAY_PLAYBACK_TICK_MS,
+  computePlaybackSummary,
+  enterReplayPlayback,
+  exitReplayPlayback,
+  jumpReplayCursorToBlockBoundary,
+  jumpReplayCursorToInteresting,
+  setReplayPlaybackSpeed,
+  stepReplayCursor,
+  tickReplayPlayback,
+  toggleReplayPlayback,
+} from './lib/replay-playback.js';
+import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
@@ -329,6 +343,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           toggleReplayBlock(state, blockIndex);
           render(state, renderer);
         },
+        buildReplayPlaybackView(state),
       );
     case 'nutrition':
       if (!hasWindowData) {
@@ -630,7 +645,185 @@ function resetReplayInteraction(state: AppState): void {
   state.replayScrollOffset = 0;
   state.replaySelectedBlockIndex = 0;
   state.replayExpandedBlockIndex = null;
+  exitReplayPlayback(state);
+  stopReplayPlaybackTimer();
 }
+
+let replayPlaybackTimer: ReturnType<typeof setInterval> | null = null;
+
+function startReplayPlaybackTimer(): void {
+  if (replayPlaybackTimer !== null) return;
+  replayPlaybackTimer = setInterval(() => {
+    if (!currentState.replayPlaybackActive) {
+      stopReplayPlaybackTimer();
+      return;
+    }
+    const advanced = tickReplayPlayback(currentState);
+    if (!advanced) {
+      stopReplayPlaybackTimer();
+    }
+    render(currentState, currentRenderer);
+  }, REPLAY_PLAYBACK_TICK_MS);
+}
+
+function stopReplayPlaybackTimer(): void {
+  if (replayPlaybackTimer !== null) {
+    clearInterval(replayPlaybackTimer);
+    replayPlaybackTimer = null;
+  }
+}
+
+/**
+ * Replay playback / step-mode keyboard dispatch. Returns true when the
+ * sequence was consumed. Activates only on the replay view.
+ *
+ * Mode entry/exit is bound to `s` so the rest of the TUI's keymap is
+ * unaffected. Once in playback mode we intercept playback-specific keys
+ * (n/p step, N/P block, i/I interesting, space play/pause, 1/2/3 speed,
+ * Home/End jump, Esc exit) and let everything else (q, view switches,
+ * date shift via h/l, j/k block selection) fall through to the regular
+ * handlers downstream.
+ */
+function handleReplayPlaybackInput(
+  sequence: string,
+  state: AppState,
+  renderer: CliRenderer,
+): boolean {
+  if (state.selectedView !== 'replay') return false;
+  const events = state.cachedReplayReport?.events;
+
+  // Toggle entry from overview mode.
+  if (state.replayCursorEventIndex === null) {
+    if (sequence === 's' && events && events.length > 0) {
+      enterReplayPlayback(state);
+      render(state, renderer);
+      return true;
+    }
+    return false;
+  }
+
+  // We're in playback mode from here on.
+  if (!events || events.length === 0) {
+    exitReplayPlayback(state);
+    stopReplayPlaybackTimer();
+    render(state, renderer);
+    return true;
+  }
+
+  // Exit
+  if (sequence === 's' || isEscapeKeySequence(sequence)) {
+    exitReplayPlayback(state);
+    stopReplayPlaybackTimer();
+    render(state, renderer);
+    return true;
+  }
+
+  // Step controls
+  if (sequence === 'n' || sequence === '\x1b[C') {
+    pauseReplayPlaybackIfRunning(state);
+    stepReplayCursor(state, 1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'p' || sequence === '\x1b[D') {
+    pauseReplayPlaybackIfRunning(state);
+    stepReplayCursor(state, -1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'N') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToBlockBoundary(state, 1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'P') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToBlockBoundary(state, -1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'i') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToInteresting(state, 1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'I') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToInteresting(state, -1);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === '\x1b[H' || sequence === '\x1bOH') {
+    pauseReplayPlaybackIfRunning(state);
+    state.replayCursorEventIndex = 0;
+    state.replaySelectedBlockIndex = 0;
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === '\x1b[F' || sequence === '\x1bOF') {
+    pauseReplayPlaybackIfRunning(state);
+    state.replayCursorEventIndex = events.length - 1;
+    state.replaySelectedBlockIndex = state.cachedReplayReport!.flowBlocks.length > 0
+      ? state.cachedReplayReport!.flowBlocks.length - 1
+      : 0;
+    render(state, renderer);
+    return true;
+  }
+
+  // Play / pause
+  if (sequence === ' ') {
+    const active = toggleReplayPlayback(state);
+    if (active) {
+      // If we're at the end, restart from the beginning.
+      if (state.replayCursorEventIndex! >= events.length - 1) {
+        state.replayCursorEventIndex = 0;
+      }
+      startReplayPlaybackTimer();
+    } else {
+      stopReplayPlaybackTimer();
+    }
+    render(state, renderer);
+    return true;
+  }
+
+  // Speed selection
+  if (sequence === '1' || sequence === '2' || sequence === '3') {
+    const speedMap: Record<string, ReplayPlaybackSpeed> = { '1': 60, '2': 240, '3': 600 };
+    setReplayPlaybackSpeed(state, speedMap[sequence]);
+    render(state, renderer);
+    return true;
+  }
+
+  // Pass through everything else (q, j/k, h/l, view switches, etc.)
+  return false;
+}
+
+function pauseReplayPlaybackIfRunning(state: AppState): void {
+  if (state.replayPlaybackActive) {
+    state.replayPlaybackActive = false;
+    stopReplayPlaybackTimer();
+  }
+}
+
+function buildReplayPlaybackView(state: AppState): ReplayPlaybackView | null {
+  const report = state.cachedReplayReport;
+  if (!report || state.replayCursorEventIndex === null || report.events.length === 0) {
+    return null;
+  }
+  const summary = computePlaybackSummary(report, state.replayCursorEventIndex);
+  if (!summary) return null;
+  const totalDayCost = report.events.reduce((s, e) => s + e.cost, 0);
+  return {
+    cursorIndex: summary.cursorIndex,
+    active: state.replayPlaybackActive,
+    speed: state.replayPlaybackSpeed,
+    summary,
+    totalDayCost,
+  };
+}
+
 
 function resetReceiptsInteraction(state: AppState): void {
   state.receiptsScrollOffset = 0;
@@ -1086,6 +1279,10 @@ export async function main(): Promise<void> {
 
   renderer.addInputHandler((sequence: string) => {
     if (handleCursorSetupInput(sequence, state, renderer)) {
+      return true;
+    }
+
+    if (handleReplayPlaybackInput(sequence, state, renderer)) {
       return true;
     }
 
