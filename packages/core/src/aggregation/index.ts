@@ -12,6 +12,8 @@ export { buildMoreStats, computeModelMixShift } from './more';
 export { buildExplainReport } from './explain';
 export { buildFocusReport } from './focus';
 export { buildReplayReport } from './replay';
+export { buildNutritionReport } from './nutrition';
+export { collectGitOutcomeSignals } from './nutrition-git';
 export { clusterPrompts, tokenBigrams } from './prompt-clusters';
 export type { PromptCluster, ClusterOptions } from './prompt-clusters';
 export { buildReceipt } from './receipt-lines';

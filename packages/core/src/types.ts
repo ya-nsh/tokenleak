@@ -364,6 +364,48 @@ export interface ReplayReport {
   summary: ReplayDaySummary;
 }
 
+export interface NutritionOutcomeSignal {
+  repoRoot: string;
+  commits: number;
+  changedFiles: number;
+  changedLines: number;
+}
+
+export interface NutritionRepoSummary {
+  repoRoot: string | null;
+  label: string;
+  providers: string[];
+  models: string[];
+  sessions: number;
+  tokens: number;
+  cost: number;
+  commits: number;
+  changedFiles: number;
+  changedLines: number;
+  tokensPerCommit: number | null;
+  costPerCommit: number | null;
+  tokensPerChangedLine: number | null;
+  costPerChangedLine: number | null;
+}
+
+export interface NutritionReport {
+  method: string;
+  dateRange: DateRange;
+  totals: {
+    tokens: number;
+    cost: number;
+    commits: number;
+    changedFiles: number;
+    changedLines: number;
+    tokensPerCommit: number | null;
+    costPerCommit: number | null;
+    tokensPerChangedLine: number | null;
+    costPerChangedLine: number | null;
+  };
+  repos: NutritionRepoSummary[];
+  missingOutcomeRepos: string[];
+}
+
 export interface ModelMixShiftEntry {
   model: string;
   currentShare: number;

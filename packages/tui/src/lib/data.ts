@@ -7,6 +7,8 @@ import type {
   ExplainReport,
   FocusReport,
   MoreStats,
+  NutritionOutcomeSignal,
+  NutritionReport,
   ProviderData,
   Receipt,
   ReceiptLine,
@@ -20,8 +22,10 @@ import {
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
+  buildNutritionReport,
   buildReceipt,
   buildReplayReport,
+  collectGitOutcomeSignals,
   compareRanges,
   dayOfWeekBreakdown,
   mergeProviderData,
@@ -45,6 +49,8 @@ export interface TimeWindowData {
   label: string;
   days: number;
   stats: AggregatedStats;
+  dateRange: DateRange;
+  nutritionOutcomeSignals: NutritionOutcomeSignal[];
 }
 
 export interface TuiData {
@@ -117,15 +123,30 @@ export async function loadAllData(): Promise<TuiData> {
     { label: '90D', days: 90 },
   ];
 
-  const windows: TimeWindowData[] = windowConfigs.map(({ label, days }) => {
+  const windows: TimeWindowData[] = [];
+
+  for (const { label, days } of windowConfigs) {
     const since = daysAgoStr(days - 1); // trailing N days including today
+    const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
     const stats = aggregate(filtered, today);
-    return { label, days, stats };
-  });
+    const events = providers.flatMap((provider) =>
+      (provider.events ?? []).filter((event) => event.date >= dateRange.since && event.date <= dateRange.until),
+    );
+    const nutritionOutcomeSignals = await collectGitOutcomeSignals(events, dateRange);
+    windows.push({ label, days, stats, dateRange, nutritionOutcomeSignals });
+  }
 
   // Add all-time window
-  windows.push({ label: 'ALL', days: 0, stats: allTimeStats });
+  const allEvents = providers.flatMap((provider) => provider.events ?? []);
+  const allNutritionOutcomeSignals = await collectGitOutcomeSignals(allEvents, allTimeRange);
+  windows.push({
+    label: 'ALL',
+    days: 0,
+    stats: allTimeStats,
+    dateRange: allTimeRange,
+    nutritionOutcomeSignals: allNutritionOutcomeSignals,
+  });
 
   return {
     providers,
@@ -212,6 +233,21 @@ export function ensureFocusReport(state: AppState): FocusReport | null {
 
   const report = buildFocusReport(filtered);
   state.cachedFocusReport = report;
+  return report;
+}
+
+/** Lazily compute and cache the NutritionReport (window-dependent) */
+export function ensureNutritionReport(state: AppState): NutritionReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedNutritionReport) return state.cachedNutritionReport;
+
+  const window = state.data.windows[state.selectedWindowIndex];
+  const scoped = getScopedWindowData(state);
+  if (!window || !scoped) return null;
+
+  const events = scoped.scopedProviders.flatMap((provider) => provider.events ?? []);
+  const report = buildNutritionReport(events, window.nutritionOutcomeSignals, window.dateRange);
+  state.cachedNutritionReport = report;
   return report;
 }
 

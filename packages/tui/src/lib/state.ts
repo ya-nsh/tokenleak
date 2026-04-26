@@ -1,8 +1,8 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, Receipt, ReceiptCategory } from '@tokenleak/core';
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, NutritionReport, Receipt, ReceiptCategory } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay' | 'receipts';
+export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay' | 'nutrition' | 'receipts';
 export type SortMode = 'cost' | 'tokens';
 export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
@@ -19,6 +19,7 @@ export interface AppState {
   explainDate: string | null;       // YYYY-MM-DD, defaults to peak day
   focusScrollOffset: number;
   advisorScrollOffset: number;
+  nutritionScrollOffset: number;
   compareScrollOffset: number;
 
   // matrix pages
@@ -60,6 +61,7 @@ export interface AppState {
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
   cachedReplayReport: ReplayReport | null;
+  cachedNutritionReport: NutritionReport | null;
   cachedReceipt: Receipt | null;
 }
 
@@ -77,6 +79,7 @@ export function createInitialState(): AppState {
     explainDate: null,
     focusScrollOffset: 0,
     advisorScrollOffset: 0,
+    nutritionScrollOffset: 0,
     compareScrollOffset: 0,
     matrixPage: 0,
     showHelp: false,
@@ -102,6 +105,7 @@ export function createInitialState(): AppState {
     cachedCompareOutput: null,
     cachedMoreStats: null,
     cachedReplayReport: null,
+    cachedNutritionReport: null,
     cachedReceipt: null,
   };
 }

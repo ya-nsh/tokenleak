@@ -19,6 +19,7 @@ import {
   ensureCompareOutput,
   ensureMoreStats,
   ensureReplayReport,
+  ensureNutritionReport,
   ensureReceipt,
   deriveReceiptLines,
 } from './lib/data.js';
@@ -38,6 +39,7 @@ import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel } from './panels/replay.js';
+import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
@@ -109,6 +111,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         state.replayExpandedBlocks,
         state.replayScrollOffset,
       );
+    case 'nutrition':
+      return createNutritionPanel(state, ensureNutritionReport(state));
     case 'wrapped': {
       const output = buildTokenleakOutput(state);
       const achievements = output ? computeAchievements(output) : [];
@@ -186,6 +190,7 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.modelScrollOffset = 0;
   state.advisorScrollOffset = 0;
   state.focusScrollOffset = 0;
+  state.nutritionScrollOffset = 0;
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
   state.replayScrollOffset = 0;
@@ -306,6 +311,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.modelScrollOffset = 0;
     currentState.advisorScrollOffset = 0;
     currentState.focusScrollOffset = 0;
+    currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
     currentState.replayScrollOffset = 0;
@@ -367,6 +373,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedExplainReport = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedNutritionReport = null;
   state.cachedReceipt = null;
   state.receiptsScrollOffset = 0;
   state.receiptsExpandedLineIndex = null;
@@ -384,6 +391,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedCompareOutput = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedNutritionReport = null;
   state.cachedReceipt = null;
 }
 
@@ -417,15 +425,16 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '7': 'export',
   '8': 'wrapped',
   '9': 'replay',
+  '0': 'nutrition',
   'R': 'receipts',
 };
 
 const VIEW_ORDER: ViewMode[] = [
-  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay', 'receipts',
+  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay', 'nutrition', 'receipts',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay', 'receipts']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay', 'nutrition', 'receipts']);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
@@ -441,6 +450,8 @@ function getScrollableItemCount(state: AppState): number {
       return 30; // approximate content rows
     case 'replay':
       return ensureReplayReport(state)?.flowBlocks.length ?? 0;
+    case 'nutrition':
+      return Math.min(ensureNutritionReport(state)?.repos.length ?? 0, 30);
     case 'receipts': {
       const receipt = ensureReceipt(state);
       if (!receipt) return 0;
@@ -458,6 +469,7 @@ function getVisibleCount(view: ViewMode): number {
     case 'compare': return 6;
     case 'wrapped': return 20;
     case 'replay': return 15;
+    case 'nutrition': return NUTRITION_VISIBLE_ROWS;
     case 'receipts': return 12;
     default: return 10;
   }
@@ -470,6 +482,7 @@ function getScrollOffset(state: AppState): number {
     case 'compare': return state.compareScrollOffset;
     case 'wrapped': return state.wrappedScrollOffset;
     case 'replay': return state.replayScrollOffset;
+    case 'nutrition': return state.nutritionScrollOffset;
     case 'receipts': return state.receiptsScrollOffset;
     default: return 0;
   }
@@ -482,6 +495,7 @@ function setScrollOffset(state: AppState, value: number): void {
     case 'compare': state.compareScrollOffset = value; break;
     case 'wrapped': state.wrappedScrollOffset = value; break;
     case 'replay': state.replayScrollOffset = value; break;
+    case 'nutrition': state.nutritionScrollOffset = value; break;
     case 'receipts': state.receiptsScrollOffset = value; break;
   }
 }
@@ -644,7 +658,7 @@ export async function main(): Promise<void> {
         return true;
       }
 
-      // 1-8: switch view
+      // 1-9/0: switch view
       const viewMode = VIEW_KEYS[sequence];
       if (viewMode) {
         handleViewSwitch(viewMode);

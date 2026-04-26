@@ -75,6 +75,7 @@ export function createHelpPanel() {
           ['7', 'Export'],
           ['8', 'Wrapped'],
           ['9', 'Replay'],
+          ['0', 'AI ROI'],
           ['R', 'Receipts'],
           ['?', 'Help'],
         ]),

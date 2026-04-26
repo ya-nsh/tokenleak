@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
 import { defineCommand, runMain } from 'citty';
 import { writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import {
   VERSION,
   DEFAULT_DAYS,
   SCHEMA_VERSION,
   aggregate,
   analyzeEfficiency,
+  buildNutritionReport,
+  collectGitOutcomeSignals,
   buildExplainReport,
   buildFocusReport,
   buildReplayReport,
@@ -17,6 +20,7 @@ import {
 import type {
   DateRange,
   FocusReport,
+  NutritionReport,
   RenderOptions,
   TokenleakOutput,
   ProviderData,
@@ -159,6 +163,7 @@ function buildHelpText(): string {
     '  tokenleak [flags]',
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
+    '  tokenleak nutrition [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
     '  tokenleak cursor <command>',
@@ -166,6 +171,7 @@ function buildHelpText(): string {
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
+    '  nutrition              Estimate token cost per local Git outcome signal',
     '  replay [date]          Replay a day\'s session timeline (defaults to today)',
     '  receipts               Itemized receipt of spend by prompt behavior',
     '  cursor                 Manage Cursor auth and cache sync',
@@ -217,6 +223,8 @@ function buildHelpText(): string {
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
+    '  tokenleak nutrition --days 30',
+    '  tokenleak nutrition --format json --output nutrition.json',
     '  tokenleak replay',
     '  tokenleak replay 2026-03-10 --format json',
     '',
@@ -262,6 +270,40 @@ function buildFocusHelpText(): string {
   ].join('\n');
 }
 
+function buildNutritionHelpText(): string {
+  return [
+    `tokenleak nutrition ${VERSION}`,
+    'Estimate outcome-adjacent AI coding value by joining token usage with read-only local Git signals.',
+    '',
+    'Usage:',
+    '  tokenleak nutrition [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file and infer format from extension',
+    '  -w, --width <number>    Terminal render width',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --claude            Only include Claude Code',
+    '      --codex             Only include Codex',
+    '      --cursor           Only include Cursor',
+    '      --pi                Only include Pi',
+    '      --open-code         Only include OpenCode',
+    '      --all-providers     Ignore provider filters and use every available provider',
+    '      --list-providers    Show registered providers and aliases',
+    '      --no-color          Disable ANSI colors in terminal output',
+    '      --help              Show this help',
+    '      --version           Show version information',
+    '',
+    'Examples:',
+    '  tokenleak nutrition --days 30',
+    '  tokenleak nutrition --format json --output nutrition.json',
+    '',
+  ].join('\n');
+}
+
 function buildVersionText(): string {
   return `tokenleak ${VERSION}\nschema ${SCHEMA_VERSION}\n`;
 }
@@ -297,6 +339,10 @@ export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: bo
 
   if (cliArgs['subcommand'] === 'focus') {
     return 'Focus report generated.';
+  }
+
+  if (cliArgs['subcommand'] === 'nutrition') {
+    return 'Nutrition label generated.';
   }
 
   if (cliArgs['subcommand'] === 'cursor') {
@@ -1098,6 +1144,146 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
   lines.push(dim('Stk = project streak (consecutive days)  Density = tokens per hour', noColor));
 
   return lines.join('\n');
+}
+
+function resolveTerminalJsonFormat(
+  commandName: string,
+  cliArgs: Record<string, unknown>,
+): 'json' | 'terminal' {
+  if (typeof cliArgs['format'] === 'string') {
+    const format = cliArgs['format'];
+    if (format === 'json' || format === 'terminal') {
+      return format;
+    }
+
+    throw new TokenleakError(`tokenleak ${commandName} only supports --format terminal or --format json`);
+  }
+
+  if (typeof cliArgs['output'] === 'string') {
+    const inferred = inferFormatFromPath(cliArgs['output']);
+    if (inferred === 'json') {
+      return 'json';
+    }
+  }
+
+  return 'terminal';
+}
+
+function formatNullableNumber(value: number | null, digits: number = 0): string {
+  if (value === null) {
+    return '-';
+  }
+
+  return value.toLocaleString('en-US', {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+}
+
+function formatNullableCost(value: number | null): string {
+  return value === null ? '-' : `$${value.toFixed(4)}`;
+}
+
+function renderNutritionReport(report: NutritionReport, width: number, noColor: boolean): string {
+  const termWidth = Math.max(80, width || 80);
+  const lines = [
+    bold('Tokenleak Nutrition Label', noColor),
+    report.method,
+    '',
+    `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
+    `Tokens: ${report.totals.tokens.toLocaleString('en-US')}  Cost: $${report.totals.cost.toFixed(4)}  Commits: ${report.totals.commits.toLocaleString('en-US')}  Changed lines: ${report.totals.changedLines.toLocaleString('en-US')}`,
+    `Per commit: ${formatNullableNumber(report.totals.tokensPerCommit, 0)} tokens / ${formatNullableCost(report.totals.costPerCommit)}`,
+    `Per changed line: ${formatNullableNumber(report.totals.tokensPerChangedLine, 1)} tokens / ${formatNullableCost(report.totals.costPerChangedLine)}`,
+    '',
+  ];
+
+  if (report.repos.length === 0) {
+    lines.push('No event-level usage data found for nutrition analysis.');
+    return lines.join('\n');
+  }
+
+  const headers = ['Repo', 'Tokens', 'Cost', 'Commits', 'Lines', 'Tok/Commit', '$/Commit'];
+  const rows = report.repos.map((repo) => [
+    repo.label,
+    repo.tokens.toLocaleString('en-US'),
+    `$${repo.cost.toFixed(4)}`,
+    repo.commits.toLocaleString('en-US'),
+    repo.changedLines.toLocaleString('en-US'),
+    formatNullableNumber(repo.tokensPerCommit),
+    formatNullableCost(repo.costPerCommit),
+  ]);
+
+  const fixedWidths = [22, 12, 10, 9, 10, 12, 10];
+  const totalWidth = fixedWidths.reduce((sum, value) => sum + value, 0) + headers.length + 1;
+  const repoWidth = Math.max(12, fixedWidths[0]! - Math.max(0, totalWidth - termWidth));
+  const widths = [repoWidth, ...fixedWidths.slice(1)];
+
+  function row(cells: string[]): string {
+    return `|${cells.map((cell, index) => ` ${truncateCell(cell, widths[index]! - 2).padEnd(widths[index]! - 2)} `).join('|')}|`;
+  }
+
+  lines.push(row(headers));
+  lines.push(`|${widths.map((colWidth) => '-'.repeat(colWidth)).join('|')}|`);
+  for (const cells of rows) {
+    lines.push(row(cells));
+  }
+
+  if (report.missingOutcomeRepos.length > 0) {
+    lines.push('');
+    lines.push(dim(
+      `No Git outcome signal for ${report.missingOutcomeRepos.length} repo(s): ${report.missingOutcomeRepos.map((repo) => basename(repo)).join(', ')}`,
+      noColor,
+    ));
+  }
+
+  return lines.join('\n');
+}
+
+async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveTerminalJsonFormat('nutrition', cliArgs);
+
+  if (config.allProviders && (
+    config.provider ||
+    config.claude ||
+    config.codex ||
+    config.cursor ||
+    config.pi ||
+    config.openCode
+  )) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  if (config.listProviders) {
+    const registry = createRegistry();
+    const providers = registry.getAll();
+    const availabilityResults = await Promise.all(
+      providers.map(async (provider) => [provider.name, await provider.isAvailable()] as const),
+    );
+    process.stdout.write(buildProviderList(providers, new Map(availabilityResults)));
+    return;
+  }
+
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+  const available = await selectAvailableProviders(config);
+  const output = await loadTokenleakData(available, dateRange);
+  const events = output.providers.flatMap((provider) => provider.events ?? []);
+  const outcomeSignals = await collectGitOutcomeSignals(events, dateRange);
+  const report = buildNutritionReport(events, outcomeSignals, dateRange);
+
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderNutritionReport(report, config.width, config.noColor);
+
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else {
+    process.stdout.write(`${rendered}\n`);
+  }
 }
 
 export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
@@ -2305,6 +2491,115 @@ const focusMain = defineCommand({
   },
 });
 
+const nutritionMain = defineCommand({
+  meta: {
+    name: 'nutrition',
+    version: VERSION,
+    description: 'Estimate token cost per local Git outcome signal',
+  },
+  args: {
+    format: {
+      type: 'string',
+      alias: 'f',
+      description: 'Output format: terminal, json',
+    },
+    since: {
+      type: 'string',
+      alias: 's',
+      description: 'Start date (YYYY-MM-DD)',
+    },
+    until: {
+      type: 'string',
+      alias: 'u',
+      description: 'End date (YYYY-MM-DD), defaults to today',
+    },
+    days: {
+      type: 'string',
+      alias: 'd',
+      description: `Number of days to look back (default: ${DEFAULT_DAYS}, overridden by --since)`,
+    },
+    output: {
+      type: 'string',
+      alias: 'o',
+      description: 'Output file path',
+    },
+    width: {
+      type: 'string',
+      alias: 'w',
+      description: 'Terminal width (default: 80)',
+    },
+    noColor: {
+      type: 'boolean',
+      description: 'Disable ANSI colors',
+      default: false,
+    },
+    provider: {
+      type: 'string',
+      alias: 'p',
+      description: 'Filter to specific provider(s), comma-separated',
+    },
+    claude: {
+      type: 'boolean',
+      description: 'Shortcut for --provider claude-code',
+      default: false,
+    },
+    codex: {
+      type: 'boolean',
+      description: 'Shortcut for --provider codex',
+      default: false,
+    },
+    cursor: {
+      type: 'boolean',
+      description: 'Shortcut for --provider cursor',
+      default: false,
+    },
+    pi: {
+      type: 'boolean',
+      description: 'Shortcut for --provider pi',
+      default: false,
+    },
+    openCode: {
+      type: 'boolean',
+      description: 'Shortcut for --provider open-code',
+      default: false,
+    },
+    allProviders: {
+      type: 'boolean',
+      description: 'Ignore provider filters and use every available provider',
+      default: false,
+    },
+    listProviders: {
+      type: 'boolean',
+      description: 'List registered providers and aliases',
+      default: false,
+    },
+  },
+  async run({ args }) {
+    try {
+      const cliArgs: Record<string, unknown> = {};
+      if (args.format !== undefined) cliArgs['format'] = args.format;
+      if (args.since !== undefined) cliArgs['since'] = args.since;
+      if (args.until !== undefined) cliArgs['until'] = args.until;
+      if (args.days !== undefined) cliArgs['days'] = Number(args.days);
+      if (args.output !== undefined) cliArgs['output'] = args.output;
+      if (args.width !== undefined) cliArgs['width'] = Number(args.width);
+      if (args.noColor) cliArgs['noColor'] = true;
+      if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+      if (args.claude) cliArgs['claude'] = true;
+      if (args.codex) cliArgs['codex'] = true;
+      if (args.cursor) cliArgs['cursor'] = true;
+      if (args.pi) cliArgs['pi'] = true;
+      if (args.openCode) cliArgs['openCode'] = true;
+      if (args.allProviders) cliArgs['allProviders'] = true;
+      if (args.listProviders) cliArgs['listProviders'] = true;
+
+      await runNutrition(cliArgs);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  },
+});
+
 // Only run when executed directly, not when imported by tests
 const isDirectExecution =
   typeof Bun !== 'undefined'
@@ -2372,6 +2667,23 @@ if (isDirectExecution) {
     }
 
     await runMain(focusMain);
+    process.exit(0);
+  }
+  if (argv[0] === 'nutrition') {
+    const nutritionArgv = argv.slice(1);
+    process.argv = [...process.argv.slice(0, 2), ...nutritionArgv];
+
+    if (nutritionArgv.includes('--help') || nutritionArgv.includes('-h')) {
+      process.stdout.write(buildNutritionHelpText());
+      process.exit(0);
+    }
+
+    if (nutritionArgv.includes('--version') || nutritionArgv.includes('-v')) {
+      process.stdout.write(buildVersionText());
+      process.exit(0);
+    }
+
+    await runMain(nutritionMain);
     process.exit(0);
   }
   if (argv[0] === 'cursor') {
