@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -19,7 +19,7 @@ function tempDir(name: string): string {
 }
 
 describe('provider parity providers', () => {
-  it('loads Gemini session JSON and splits cached input', async () => {
+  it('loads Gemini session JSON without subtracting cache-exclusive input', async () => {
     const root = tempDir('gemini');
     const sessionDir = join(root, 'abc', 'chats');
     mkdirSync(sessionDir, { recursive: true });
@@ -30,7 +30,7 @@ describe('provider parity providers', () => {
           message_type: 'gemini',
           timestamp: '2026-02-10T12:00:00.000Z',
           model: 'gemini-2.5-pro',
-          tokens: { input: 120, output: 30, cached: 20, thoughts: 5 },
+          tokens: { input: 120, output: 30, cached: 20, thoughts: 5, total: 175 },
         },
       ],
     }));
@@ -39,10 +39,57 @@ describe('provider parity providers', () => {
 
     expect(data.provider).toBe('gemini');
     expect(data.daily).toHaveLength(1);
+    expect(data.daily[0]!.inputTokens).toBe(120);
+    expect(data.daily[0]!.cacheReadTokens).toBe(20);
+    expect(data.daily[0]!.outputTokens).toBe(35);
+    expect(data.daily[0]!.totalTokens).toBe(175);
+    expect(data.events?.[0]?.sessionId).toBe('gemini-session');
+  });
+
+  it('splits Gemini session cached input when total shows inclusive input', async () => {
+    const root = tempDir('gemini-inclusive');
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, 'chat.json'), JSON.stringify({
+      sessionId: 'gemini-inclusive-session',
+      messages: [
+        {
+          message_type: 'gemini',
+          timestamp: '2026-02-10T12:00:00.000Z',
+          model: 'gemini-2.5-pro',
+          tokens: { input: 120, output: 30, cached: 20, thoughts: 5, total: 155 },
+        },
+      ],
+    }));
+
+    const data = await new GeminiProvider(root).load(RANGE);
+
     expect(data.daily[0]!.inputTokens).toBe(100);
     expect(data.daily[0]!.cacheReadTokens).toBe(20);
     expect(data.daily[0]!.outputTokens).toBe(35);
-    expect(data.events?.[0]?.sessionId).toBe('gemini-session');
+    expect(data.daily[0]!.totalTokens).toBe(155);
+  });
+
+  it('loads Gemini headless stats token fields', async () => {
+    const root = tempDir('gemini-stats');
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, 'stats.json'), JSON.stringify({
+      model: 'gemini-2.5-pro',
+      timestamp: '2026-02-10T12:00:00.000Z',
+      stats: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cached_tokens: 5,
+        thoughts_tokens: 3,
+      },
+    }));
+
+    const data = await new GeminiProvider(root).load(RANGE);
+
+    expect(data.provider).toBe('gemini');
+    expect(data.totalTokens).toBe(123);
+    expect(data.daily[0]!.inputTokens).toBe(95);
+    expect(data.daily[0]!.outputTokens).toBe(23);
+    expect(data.daily[0]!.cacheReadTokens).toBe(5);
   });
 
   it('loads Copilot OTEL chat spans and ignores non-chat spans', async () => {
@@ -129,6 +176,35 @@ describe('provider parity providers', () => {
     expect(data.daily).toHaveLength(1);
     expect(data.totalTokens).toBe(135);
     expect(data.totalCost).toBe(0.02);
+  });
+
+  it('uses file mtime for Amp message usage when thread created is missing', async () => {
+    const root = tempDir('amp-message-only');
+    mkdirSync(root, { recursive: true });
+    const file = join(root, 'T-no-created.json');
+    writeFileSync(file, JSON.stringify({
+      id: 'amp-message-only',
+      messages: [
+        {
+          role: 'assistant',
+          messageId: 1,
+          usage: {
+            model: 'claude-sonnet-4',
+            inputTokens: 10,
+            outputTokens: 2,
+          },
+        },
+      ],
+    }));
+    const mtime = new Date('2026-02-10T12:00:00.000Z');
+    utimesSync(file, mtime, mtime);
+
+    const data = await new AmpProvider(root).load(RANGE);
+
+    expect(data.provider).toBe('amp');
+    expect(data.daily).toHaveLength(1);
+    expect(data.totalTokens).toBe(12);
+    expect(data.events?.[0]?.date).toBe('2026-02-10');
   });
 
   it('loads Qwen assistant usage metadata', async () => {

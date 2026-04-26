@@ -8,6 +8,7 @@ import {
   buildProviderData,
   collectFiles,
   extractDate,
+  fileModifiedTimestamp,
   nonNegativeNumber,
   objectValue,
   safeNumber,
@@ -127,7 +128,7 @@ function parseAmpFile(file: string, range: DateRange): LocalUsageRecord[] {
   }
 
   const sessionId = stringValue(thread['id']) ?? stringValue(thread['threadId']) ?? file;
-  const created = timestampToIso(thread['created']) ?? timestampToIso(thread['createdAt']) ?? new Date(0).toISOString();
+  const created = timestampToIso(thread['created']) ?? timestampToIso(thread['createdAt']) ?? fileModifiedTimestamp(file);
   const threadCreatedMs = Date.parse(created);
   const ledgerRecords: AmpRecordCandidate[] = [];
   const messageRecords: AmpRecordCandidate[] = [];

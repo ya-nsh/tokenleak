@@ -50,6 +50,99 @@ function splitInputAndCache(input: number, cached: number): { input: number; cac
   };
 }
 
+function splitSessionInputAndCache(
+  input: number,
+  cached: number,
+  output: number,
+  reasoning: number,
+  tool: number,
+  total: number | null,
+): { input: number; cacheRead: number } {
+  const normalizedInput = Math.max(0, input);
+  const cacheRead = Math.max(0, cached);
+  if (total === null) {
+    return { input: normalizedInput, cacheRead };
+  }
+
+  const inclusiveTotal = normalizedInput + Math.max(0, output) + Math.max(0, reasoning) + Math.max(0, tool);
+  const exclusiveTotal = inclusiveTotal + cacheRead;
+  if (cacheRead > 0 && total === inclusiveTotal && total !== exclusiveTotal) {
+    return splitInputAndCache(normalizedInput, cacheRead);
+  }
+
+  return { input: normalizedInput, cacheRead };
+}
+
+function usageRecordFromTokenFields(
+  fields: Record<string, unknown>,
+  model: string,
+  sessionId: string,
+  timestamp: string,
+  cacheInclusiveInput: boolean,
+): LocalUsageRecord | null {
+  const date = extractDate(timestamp);
+  if (!date) {
+    return null;
+  }
+
+  const input =
+    nonNegativeNumber(fields['promptTokenCount']) ||
+    nonNegativeNumber(fields['prompt_token_count']) ||
+    nonNegativeNumber(fields['prompt']) ||
+    nonNegativeNumber(fields['input']) ||
+    nonNegativeNumber(fields['input_tokens']) ||
+    nonNegativeNumber(fields['prompt_tokens']);
+  const output =
+    nonNegativeNumber(fields['candidatesTokenCount']) ||
+    nonNegativeNumber(fields['candidates_token_count']) ||
+    nonNegativeNumber(fields['candidates']) ||
+    nonNegativeNumber(fields['output']) ||
+    nonNegativeNumber(fields['output_tokens']) ||
+    nonNegativeNumber(fields['candidates_tokens']);
+  const reasoning =
+    nonNegativeNumber(fields['thoughtsTokenCount']) ||
+    nonNegativeNumber(fields['thoughts_token_count']) ||
+    nonNegativeNumber(fields['thoughts_tokens']) ||
+    nonNegativeNumber(fields['thoughts']) ||
+    nonNegativeNumber(fields['reasoning']) ||
+    nonNegativeNumber(fields['reasoning_tokens']);
+  const tool = nonNegativeNumber(fields['tool']) || nonNegativeNumber(fields['toolTokenCount']);
+  const cached =
+    nonNegativeNumber(fields['cachedContentTokenCount']) ||
+    nonNegativeNumber(fields['cached_content_token_count']) ||
+    nonNegativeNumber(fields['cached']) ||
+    nonNegativeNumber(fields['cached_tokens']);
+  const total =
+    nonNegativeNumber(fields['total']) ||
+    nonNegativeNumber(fields['totalTokenCount']) ||
+    nonNegativeNumber(fields['total_tokens']);
+  const normalized = cacheInclusiveInput
+    ? splitInputAndCache(input, cached)
+    : splitSessionInputAndCache(
+      input,
+      cached,
+      output,
+      reasoning,
+      tool,
+      total > 0 ? total : null,
+    );
+  const totalTokens = normalized.input + output + reasoning + tool + normalized.cacheRead;
+  if (totalTokens === 0) {
+    return null;
+  }
+
+  return {
+    date,
+    timestamp,
+    model,
+    inputTokens: normalized.input,
+    outputTokens: output + reasoning + tool,
+    cacheReadTokens: normalized.cacheRead,
+    cacheWriteTokens: 0,
+    sessionId,
+  };
+}
+
 function parseUsageMetadata(
   value: Record<string, unknown>,
   fallbackModel: string | null,
@@ -76,50 +169,48 @@ function parseUsageMetadata(
     timestampToIso(value['createdAt']) ??
     timestampToIso(value['created_at']) ??
     fallbackTimestamp;
-  const date = extractDate(timestamp);
-  if (!date) {
-    return null;
-  }
-
-  const input =
-    nonNegativeNumber(usage['promptTokenCount']) ||
-    nonNegativeNumber(usage['prompt_token_count']) ||
-    nonNegativeNumber(usage['input']) ||
-    nonNegativeNumber(usage['input_tokens']);
-  const output =
-    nonNegativeNumber(usage['candidatesTokenCount']) ||
-    nonNegativeNumber(usage['candidates_token_count']) ||
-    nonNegativeNumber(usage['output']) ||
-    nonNegativeNumber(usage['output_tokens']);
-  const reasoning =
-    nonNegativeNumber(usage['thoughtsTokenCount']) ||
-    nonNegativeNumber(usage['thoughts_token_count']) ||
-    nonNegativeNumber(usage['thoughts']) ||
-    nonNegativeNumber(usage['reasoning']);
-  const tool = nonNegativeNumber(usage['tool']) || nonNegativeNumber(usage['toolTokenCount']);
-  const cached =
-    nonNegativeNumber(usage['cachedContentTokenCount']) ||
-    nonNegativeNumber(usage['cached_content_token_count']) ||
-    nonNegativeNumber(usage['cached']);
-  const normalized = splitInputAndCache(input, cached);
-  const totalTokens = normalized.input + output + reasoning + tool + normalized.cacheRead;
-  if (totalTokens === 0) {
-    return null;
-  }
-
-  return {
-    date,
-    timestamp,
+  return usageRecordFromTokenFields(
+    usage,
     model,
-    inputTokens: normalized.input,
-    outputTokens: output + reasoning + tool,
-    cacheReadTokens: normalized.cacheRead,
-    cacheWriteTokens: 0,
-    sessionId:
-      stringValue(value['sessionId']) ??
+    stringValue(value['sessionId']) ??
       stringValue(value['session_id']) ??
       fallbackSessionId,
-  };
+    timestamp,
+    true,
+  );
+}
+
+function parseStatsRecords(
+  stats: Record<string, unknown>,
+  fallbackModel: string | null,
+  sessionId: string,
+  timestamp: string,
+): LocalUsageRecord[] {
+  const models = objectValue(stats['models']);
+  if (models) {
+    const records: LocalUsageRecord[] = [];
+    for (const [model, data] of Object.entries(models)) {
+      const modelData = objectValue(data);
+      const tokens = objectValue(modelData?.['tokens']);
+      if (!tokens) continue;
+      const record = usageRecordFromTokenFields(tokens, model, sessionId, timestamp, true);
+      if (record) {
+        records.push(record);
+      }
+    }
+    if (records.length > 0) {
+      return records;
+    }
+  }
+
+  const direct = usageRecordFromTokenFields(
+    stats,
+    fallbackModel ?? 'unknown',
+    sessionId,
+    timestamp,
+    true,
+  );
+  return direct ? [direct] : [];
 }
 
 function parseSessionJson(file: string, baseDir: string, range: DateRange): LocalUsageRecord[] {
@@ -135,7 +226,12 @@ function parseSessionJson(file: string, baseDir: string, range: DateRange): Loca
     return [];
   }
 
-  const fallbackTimestamp = timestampToIso(root['lastUpdated']) ?? fileModifiedTimestamp(file);
+  const fallbackTimestamp =
+    timestampToIso(root['lastUpdated']) ??
+    timestampToIso(root['timestamp']) ??
+    timestampToIso(root['created_at']) ??
+    timestampToIso(root['createdAt']) ??
+    fileModifiedTimestamp(file);
   const sessionId =
     stringValue(root['sessionId']) ??
     stringValue(root['session_id']) ??
@@ -170,7 +266,17 @@ function parseSessionJson(file: string, baseDir: string, range: DateRange): Loca
       const output = nonNegativeNumber(tokens['output']);
       const reasoning = nonNegativeNumber(tokens['thoughts']) || nonNegativeNumber(tokens['reasoning']);
       const tool = nonNegativeNumber(tokens['tool']);
-      const normalized = splitInputAndCache(input, nonNegativeNumber(tokens['cached']));
+      const normalized = splitSessionInputAndCache(
+        input,
+        nonNegativeNumber(tokens['cached']),
+        output,
+        reasoning,
+        tool,
+        nonNegativeNumber(tokens['total']) ||
+          nonNegativeNumber(tokens['totalTokenCount']) ||
+          nonNegativeNumber(tokens['total_tokens']) ||
+          null,
+      );
       const totalTokens = normalized.input + output + reasoning + tool + normalized.cacheRead;
       if (totalTokens === 0) {
         continue;
@@ -201,9 +307,10 @@ function parseSessionJson(file: string, baseDir: string, range: DateRange): Loca
 
   const stats = objectValue(root['stats']);
   if (stats) {
-    const directStats = parseUsageMetadata(stats, stringValue(root['model']), sessionId, fallbackTimestamp);
-    if (directStats && isInRange(directStats.date, range)) {
-      records.push(directStats);
+    for (const directStats of parseStatsRecords(stats, stringValue(root['model']), sessionId, fallbackTimestamp)) {
+      if (isInRange(directStats.date, range)) {
+        records.push(directStats);
+      }
     }
   }
 
@@ -239,6 +346,22 @@ async function parseJsonlFile(file: string, baseDir: string, range: DateRange): 
       );
       if (usageRecord && isInRange(usageRecord.date, range)) {
         records.push(usageRecord);
+      }
+
+      const stats = objectValue(value['stats']);
+      if (stats) {
+        for (const statsRecord of parseStatsRecords(
+          stats,
+          currentModel,
+          currentSessionId,
+          timestampToIso(value['timestamp']) ??
+            timestampToIso(value['created_at']) ??
+            fallbackTimestamp,
+        )) {
+          if (isInRange(statsRecord.date, range)) {
+            records.push(statsRecord);
+          }
+        }
       }
     }
   } catch {
