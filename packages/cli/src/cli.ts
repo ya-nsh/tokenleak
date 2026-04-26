@@ -60,6 +60,7 @@ import {
   renderAdvisorView,
   startLiveServer,
   startWrappedLiveServer,
+  startReplayLiveServer,
   colorize256,
   bold256,
   dim,
@@ -293,6 +294,7 @@ function buildHelpText(): string {
     '  tokenleak nutrition --format json --output nutrition.json',
     '  tokenleak replay',
     '  tokenleak replay 2026-03-10 --format json',
+    '  tokenleak replay 2026-03-10 --interactive',
     '',
     'Version:',
     `  CLI ${VERSION}`,
@@ -2052,6 +2054,22 @@ function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string
         cliArgs['noColor'] = true;
         index += 1;
         break;
+      case '--interactive':
+      case '-i':
+        cliArgs['interactive'] = true;
+        index += 1;
+        break;
+      case '--open':
+        cliArgs['open'] = true;
+        index += 1;
+        break;
+      case '--port':
+        if (argv[index + 1] === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        cliArgs['port'] = Number(argv[index + 1]!);
+        index += 2;
+        break;
       default:
         throw new TokenleakError(`Unknown replay flag "${arg}"`);
     }
@@ -2324,7 +2342,8 @@ function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'termin
 
 async function runReplay(date: string, cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
-  const format = resolveReplayFormat(cliArgs);
+  const interactive = cliArgs['interactive'] === true;
+  const format = interactive ? 'terminal' : resolveReplayFormat(cliArgs);
 
   if (
     config.allProviders &&
@@ -2348,6 +2367,45 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   const replayOutput = await loadTokenleakData(available, replayRange);
   emitProviderWarnings(replayOutput.providers, 'Warning');
   const report = buildReplayReport(replayOutput.providers, date);
+
+  if (interactive) {
+    const ignored: string[] = [];
+    if (cliArgs['format']) ignored.push('--format');
+    if (cliArgs['output']) ignored.push('--output');
+    if (cliArgs['width']) ignored.push('--width');
+    if (ignored.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignored.join(', ')} ignored when --interactive is set.\n`,
+      );
+    }
+
+    const rawPort = cliArgs['port'];
+    const port = typeof rawPort === 'number' && Number.isFinite(rawPort) ? rawPort : undefined;
+    const { port: actualPort, stop } = await startReplayLiveServer(report, port !== undefined ? { port } : {});
+
+    if (cliArgs['open'] === true) {
+      try {
+        await openFile(`http://localhost:${String(actualPort)}/`);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`Warning: could not auto-open browser: ${detail}\n`);
+      }
+    }
+
+    process.stderr.write('Press Ctrl+C to stop the replay server.\n');
+    await new Promise<void>((resolve) => {
+      const onExit = () => {
+        process.stderr.write('\nShutting down replay server...\n');
+        stop();
+        resolve();
+      };
+      process.on('SIGINT', onExit);
+      process.on('SIGTERM', onExit);
+    });
+    process.exit(0);
+    return;
+  }
+
   const rendered =
     format === 'json'
       ? JSON.stringify(report, null, 2)

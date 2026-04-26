@@ -131,6 +131,9 @@ tokenleak explain 2026-03-10 --format json
 tokenleak replay
 tokenleak replay 2026-03-10 --format json
 
+# Open the interactive replay scrub UI in your browser
+tokenleak replay 2026-03-10 --interactive
+
 # Rank deep-work sessions
 tokenleak focus
 tokenleak focus --provider codex --days 30
@@ -169,6 +172,10 @@ tokenleak replay
 # Replay a specific day with JSON output
 tokenleak replay 2026-03-10 --format json --output replay.json
 
+# Open the day in an interactive browser scrub UI
+tokenleak replay 2026-03-10 --interactive
+tokenleak replay 2026-03-10 --interactive --open --port 4567
+
 # Estimate AI ROI from token usage and local Git output
 tokenleak nutrition --days 30
 
@@ -178,7 +185,7 @@ tokenleak nutrition --format json --output ai-roi.json
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
-- `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today.
+- `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI on `http://localhost:3567` — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
 
 ### Cursor commands
@@ -480,7 +487,7 @@ Subcommands:
 - `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
 - `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
 - `tokenleak commons export` writes anonymized aggregate JSON; `tokenleak commons prompt` writes or copies a Markdown prompt for external LLM analysis; `tokenleak commons inspect <file>` validates a commons JSON export before sharing.
-- `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today.
+- `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today. Add `-i`/`--interactive` to launch a local browser scrub UI on port 3567 (override with `--port`); add `--open` to auto-open the browser. `--format`, `--output`, and `--width` are ignored in interactive mode.
 - `tokenleak cursor --help` prints the Cursor auth/cache command help text.
 - `tokenleak explain --help`, `tokenleak focus --help`, `tokenleak commons --help`, and `tokenleak replay --help` print the subcommand-specific help text.
 

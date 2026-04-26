@@ -199,6 +199,9 @@ export function buildReplayHelpText(): string {
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',
     '      --no-color          Accepted for parity with terminal output',
+    '  -i, --interactive       Open the replay in a browser scrub UI on http://localhost:3567',
+    '      --port <number>     Override the starting port for --interactive (default 3567)',
+    '      --open              When combined with --interactive, auto-open the browser',
     '      --help              Show replay help',
     '',
     'Examples:',
@@ -206,6 +209,8 @@ export function buildReplayHelpText(): string {
     '  tokenleak replay 2026-03-10',
     '  tokenleak replay 2026-03-10 --format json',
     '  tokenleak replay --provider claude --output replay.json',
+    '  tokenleak replay 2026-03-10 --interactive',
+    '  tokenleak replay --interactive --open',
     '',
   ].join('\n');
 }
