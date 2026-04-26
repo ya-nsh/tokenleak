@@ -9,6 +9,8 @@ const HEATMAP_SLOTS = 48;
 export const REPLAY_MAX_CONTENT_WIDTH = 78;
 const REPLAY_EVENT_DETAIL_LIMIT = 4;
 export const REPLAY_VISIBLE_BLOCKS = 8;
+/** Tighter list during playback so the events-near-cursor section fits. */
+export const REPLAY_VISIBLE_BLOCKS_PLAYBACK = 3;
 const PLAYBACK_EVENT_LIST_BEFORE = 2;
 const PLAYBACK_EVENT_LIST_AFTER = 4;
 
@@ -270,20 +272,50 @@ function renderPlaybackEventList(report: ReplayReport, playback: ReplayPlaybackV
 }
 
 function renderPlaybackHelp(contentWidth: number) {
-  const line1 = ' [n/p] step  [N/P] block  [i] interesting  [home/end] jump';
-  const line2 = ' [space] play/pause  [1/2/3] speed  [s/esc] exit playback';
+  // One row only — opentui flex compresses sibling rows when content overflows
+  // the parent height. Two-line help collapsed onto each other in a real
+  // terminal screenshot; keep it lean so the panel never overruns.
+  const line = ' [n/p] step · [N/P] block · [i] interesting · [space] play · [1/2/3] speed · [s] exit';
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: truncate(line1, contentWidth), fg: COLORS.dimWhite }),
-    Text({ content: truncate(line2, contentWidth), fg: COLORS.dimWhite }),
+    Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),
   );
 }
 
 function renderOverviewHelp(contentWidth: number) {
-  const line = ' [s] enter step/playback mode  ([n/p] step events, [space] play, [i] jump to interesting)';
+  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting · [b] open browser';
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),
+  );
+}
+
+/**
+ * Big "press [b] to open the interactive browser scrub" banner. Always
+ * shown above the playback header in BOTH overview and playback modes —
+ * the browser experience is the better one for visual scrubbing and we
+ * want it discoverable from anywhere on this view.
+ *
+ * When `liveServerPort` is set, swaps to a one-line success state.
+ */
+function renderBrowserBanner(contentWidth: number, liveServerPort: number | null) {
+  if (liveServerPort !== null) {
+    const status = ` ✓ browser open at http://localhost:${liveServerPort}/  ·  press [b] again to re-open`;
+    return Box(
+      { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+      Text({ content: truncate(status, contentWidth), fg: COLORS.green, attributes: BOLD }),
+    );
+  }
+  const inner = '  ▶  press [b] to open the interactive browser scrub  ⟶';
+  const innerWidth = Math.min(contentWidth - 2, 60);
+  const top = '╭' + '─'.repeat(innerWidth) + '╮';
+  const middle = '│' + truncate(inner.padEnd(innerWidth), innerWidth) + '│';
+  const bottom = '╰' + '─'.repeat(innerWidth) + '╯';
+  return Box(
+    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: top, fg: COLORS.green }),
+    Text({ content: middle, fg: COLORS.green, attributes: BOLD }),
+    Text({ content: bottom, fg: COLORS.green }),
   );
 }
 
@@ -296,6 +328,7 @@ export function createReplayPanel(
   contentWidth: number = REPLAY_MAX_CONTENT_WIDTH,
   onToggleBlock?: ReplayToggleHandler,
   playback: ReplayPlaybackView | null = null,
+  liveServerPort: number | null = null,
 ) {
   const dateLabel = replayDate ? formatShortDate(replayDate) : '—';
 
@@ -316,14 +349,20 @@ export function createReplayPanel(
         attributes: BOLD,
       }),
       Text({ content: '', fg: COLORS.dimWhite }),
+      renderBrowserBanner(contentWidth, liveServerPort),
+      Text({ content: '', fg: COLORS.dimWhite }),
       Text({ content: 'No data available for this date', fg: COLORS.dimWhite }),
     );
   }
 
+  // Playback mode trims the panel: dropping the pulse chart + day summary
+  // and shrinking the flow-block list keeps total rows ≲ 22 so opentui's
+  // flex layout never compresses sibling Text rows on top of each other.
+  const visibleBlocks = playback ? REPLAY_VISIBLE_BLOCKS_PLAYBACK : REPLAY_VISIBLE_BLOCKS;
   const totalCost = report.events.reduce((sum, e) => sum + e.cost, 0);
-  const safeOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, report.flowBlocks.length - REPLAY_VISIBLE_BLOCKS)));
+  const safeOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, report.flowBlocks.length - visibleBlocks)));
   const blockCards = report.flowBlocks
-    .slice(safeOffset, safeOffset + REPLAY_VISIBLE_BLOCKS)
+    .slice(safeOffset, safeOffset + visibleBlocks)
     .map((block) => renderFlowBlockCard(
       block,
       block.blockIndex === selectedBlockIndex,
@@ -357,6 +396,8 @@ export function createReplayPanel(
       { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({ content: `Total: ${formatCost(totalCost)}`, fg: COLORS.green }),
     ),
+    Text({ content: '', fg: COLORS.dimWhite }),
+    renderBrowserBanner(contentWidth, liveServerPort),
   ];
   if (playbackHeader) {
     children.push(Text({ content: '', fg: COLORS.dimWhite }));
@@ -381,10 +422,12 @@ export function createReplayPanel(
     children.push(Text({ content: '', fg: COLORS.dimWhite }));
     children.push(playbackEvents);
   }
-  children.push(Text({ content: '', fg: COLORS.dimWhite }));
-  children.push(renderPulseChart(report.tokenVelocity));
-  children.push(Text({ content: '', fg: COLORS.dimWhite }));
-  children.push(renderDaySummary(report, contentWidth));
+  if (!playback) {
+    children.push(Text({ content: '', fg: COLORS.dimWhite }));
+    children.push(renderPulseChart(report.tokenVelocity));
+    children.push(Text({ content: '', fg: COLORS.dimWhite }));
+    children.push(renderDaySummary(report, contentWidth));
+  }
   children.push(Text({ content: '', fg: COLORS.dimWhite }));
   children.push(help);
 
