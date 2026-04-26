@@ -43,7 +43,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 
 - **Overview** — heatmap, stats, providers, and top models
 - **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
-- **Advisor** — model efficiency recommendations with projected savings
+- **Advisor** — model efficiency recommendations, projected savings, and waste-pattern recipes
 - **Focus** — deep-work session rankings scored by duration, density, and streaks
 - **Explain** — narrative day-by-day usage breakdown
 - **Compare** — side-by-side period comparison with deltas
@@ -336,11 +336,13 @@ tokenleak --advisor
 tokenleak --advisor --days 30 --claude
 ```
 
-The advisor detects three types of opportunities:
+The advisor detects optimization opportunities:
 
 - **Model downgrades** — identifies expensive models used for short outputs and suggests cheaper alternatives with concrete $/month savings
 - **Cache optimization** — flags low cache hit rates and poor reuse ratios
 - **Usage patterns** — warns about model concentration risk, cost trend increases, and burst days
+
+In the TUI Advisor view, the same screen also includes **Waste Patterns**: deterministic findings such as context drag, burst spikes, wasted cache writes, and model-switch churn. Each finding includes severity, evidence, estimated savings where defensible, and a concrete local recipe for what to try next.
 
 Each recommendation includes current cost, projected cost, monthly savings, and a confidence level (high/medium/low). The advisor is also available as a `get_efficiency_advice` tool in the MCP server.
 
@@ -397,7 +399,7 @@ tokenleak --format json --upload gist
 
 ### TUI dashboard (default)
 
-In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 8 views with keyboard and mouse navigation:
+In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 8 views with keyboard and mouse navigation. The Advisor view includes both savings recommendations and waste-pattern recipes.
 
 Latest OpenTUI screenshots from the current dashboard build:
 

@@ -10,6 +10,7 @@ import type {
   ProviderData,
   ReplayReport,
   TokenleakOutput,
+  WasteReport,
 } from '@tokenleak/core';
 import {
   aggregate,
@@ -18,6 +19,7 @@ import {
   buildFocusReport,
   buildMoreStats,
   buildReplayReport,
+  buildWasteReport,
   compareRanges,
   dayOfWeekBreakdown,
   mergeProviderData,
@@ -187,6 +189,31 @@ export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
 
   const report = analyzeEfficiency(output, MODEL_PRICING);
   state.cachedAdvisorReport = report;
+  return report;
+}
+
+/** Lazily compute and cache Waste taxonomy findings for the Advisor view */
+export function ensureWasteReport(state: AppState): WasteReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedWasteReport) return state.cachedWasteReport;
+
+  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
+  if (!windowStats) return null;
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const output: TokenleakOutput = {
+    schemaVersion: SCHEMA_VERSION,
+    generated: new Date().toISOString(),
+    dateRange: scoped.windowRange,
+    providers: scoped.scopedProviders,
+    aggregated: windowStats,
+    more: ensureMoreStats(state),
+  };
+
+  const report = buildWasteReport(output);
+  state.cachedWasteReport = report;
   return report;
 }
 

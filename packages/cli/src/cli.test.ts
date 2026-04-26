@@ -781,6 +781,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--more');
     expect(stdout).toContain('tokenleak explain <date>');
     expect(stdout).toContain('focus');
+    expect(stdout).not.toContain('tokenleak waste');
     expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
@@ -797,6 +798,18 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('tokenleak focus');
     expect(stdout).toContain('deep-work score');
     expect(stdout).toContain('--format <format>');
+  });
+
+  test('waste is not exposed as a standalone command', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'waste', '--help'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('Advisor view for Waste Patterns');
   });
 
   test('--version prints version', async () => {

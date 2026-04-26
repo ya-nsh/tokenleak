@@ -19,6 +19,7 @@ import {
   ensureCompareOutput,
   ensureMoreStats,
   ensureReplayReport,
+  ensureWasteReport,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -90,7 +91,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     case 'matrix':
       return createMatrixView(state);
     case 'advisor':
-      return createAdvisorPanel(state, ensureAdvisorReport(state));
+      return createAdvisorPanel(state, ensureAdvisorReport(state), ensureWasteReport(state));
     case 'focus':
       return createFocusPanel(state, ensureFocusReport(state));
     case 'explain':
@@ -354,6 +355,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedExplainReport = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedWasteReport = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -366,6 +368,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedCompareOutput = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
+  state.cachedWasteReport = null;
 }
 
 /** Navigate replay date forward or backward by one day */
@@ -410,7 +413,10 @@ const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrap
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
     case 'advisor':
-      return ensureAdvisorReport(state)?.recommendations.length ?? 0;
+      return (
+        (ensureAdvisorReport(state)?.recommendations.length ?? 0) +
+        (ensureWasteReport(state)?.findings.length ?? 0)
+      );
     case 'focus': {
       const report = ensureFocusReport(state);
       return Math.min(report?.entries.length ?? 0, 20);

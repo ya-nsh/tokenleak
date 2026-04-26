@@ -1,4 +1,4 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport } from '@tokenleak/core';
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, WasteReport } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
@@ -53,6 +53,7 @@ export interface AppState {
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
   cachedReplayReport: ReplayReport | null;
+  cachedWasteReport: WasteReport | null;
 }
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
@@ -90,5 +91,6 @@ export function createInitialState(): AppState {
     cachedCompareOutput: null,
     cachedMoreStats: null,
     cachedReplayReport: null,
+    cachedWasteReport: null,
   };
 }

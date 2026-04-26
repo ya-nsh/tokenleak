@@ -1,5 +1,5 @@
 import { Box, Text } from '@opentui/core';
-import type { AdvisorReport, AdvisorRecommendation } from '@tokenleak/core';
+import type { AdvisorReport, AdvisorRecommendation, WasteFinding, WasteReport } from '@tokenleak/core';
 import { formatCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
@@ -47,7 +47,63 @@ function renderRecommendation(rec: AdvisorRecommendation) {
   );
 }
 
-export function createAdvisorPanel(state: AppState, report: AdvisorReport | null) {
+function severityColor(severity: WasteFinding['severity']): string {
+  if (severity === 'high') return COLORS.red;
+  if (severity === 'medium') return COLORS.amber;
+  return COLORS.dimWhite;
+}
+
+function categoryLabel(category: WasteFinding['category']): string {
+  return category.split('-').map((part) => part[0]!.toUpperCase() + part.slice(1)).join(' ');
+}
+
+function formatSavings(value: number | null): string {
+  return value === null ? 'not estimated' : `${formatCost(value)}/mo`;
+}
+
+function renderWasteFinding(finding: WasteFinding) {
+  const recipe = finding.recipes[0];
+  const scope = [finding.provider, finding.model].filter(Boolean).join(' / ');
+
+  return Box(
+    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Box(
+      { flexDirection: 'row', width: '100%' },
+      Text({
+        content: `\u25B8 ${categoryLabel(finding.category)}: ${finding.title}`,
+        fg: COLORS.white,
+        attributes: BOLD,
+      }),
+      Text({ content: '  ', fg: COLORS.dimWhite }),
+      Text({
+        content: `[${finding.severity.toUpperCase()}]`,
+        fg: severityColor(finding.severity),
+        attributes: BOLD,
+      }),
+    ),
+    Text({
+      content: `  Evidence: ${finding.evidence}`,
+      fg: COLORS.dimWhite,
+    }),
+    Text({
+      content: `  Savings: ${formatSavings(finding.estimatedMonthlySavings)}${scope ? `  Scope: ${scope}` : ''}`,
+      fg: COLORS.dimWhite,
+    }),
+    recipe
+      ? Text({
+          content: `  Recipe: ${recipe.title} - ${recipe.detail}`,
+          fg: COLORS.cyan,
+        })
+      : Text({ content: '', fg: COLORS.dimWhite }),
+    Text({ content: '', fg: COLORS.dimWhite }),
+  );
+}
+
+export function createAdvisorPanel(
+  state: AppState,
+  report: AdvisorReport | null,
+  wasteReport: WasteReport | null,
+) {
   if (!report) {
     return Box(
       {
@@ -66,9 +122,14 @@ export function createAdvisorPanel(state: AppState, report: AdvisorReport | null
   }
 
   const recs = report.recommendations;
-  const maxOffset = Math.max(0, recs.length - VISIBLE_ROWS);
+  const wasteFindings = wasteReport?.findings ?? [];
+  const items = [
+    ...recs.map((rec) => ({ type: 'recommendation' as const, rec })),
+    ...wasteFindings.map((finding) => ({ type: 'waste' as const, finding })),
+  ];
+  const maxOffset = Math.max(0, items.length - VISIBLE_ROWS);
   const offset = Math.min(state.advisorScrollOffset, maxOffset);
-  const visibleRecs = recs.slice(offset, offset + VISIBLE_ROWS);
+  const visibleItems = items.slice(offset, offset + VISIBLE_ROWS);
 
   const summaryRow = Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
@@ -89,15 +150,20 @@ export function createAdvisorPanel(state: AppState, report: AdvisorReport | null
     }),
   );
 
-  const recNodes = recs.length === 0
-    ? [Text({ content: '  No optimization opportunities detected', fg: COLORS.dimWhite })]
-    : visibleRecs.map((r) => renderRecommendation(r));
+  const visibleRecNodes = visibleItems
+    .filter((item) => item.type === 'recommendation')
+    .map((item) => renderRecommendation(item.rec));
+  const visibleWasteNodes = visibleItems
+    .filter((item) => item.type === 'waste')
+    .map((item) => renderWasteFinding(item.finding));
+  const showSavingsSection = visibleRecNodes.length > 0 || recs.length === 0;
+  const showWasteSection = visibleWasteNodes.length > 0 || wasteFindings.length === 0;
 
   const scrollIndicators: ReturnType<typeof Text>[] = [];
   if (offset > 0) {
     scrollIndicators.push(Text({ content: `  ${offset} more above`, fg: COLORS.dimWhite }));
   }
-  const below = recs.length - offset - visibleRecs.length;
+  const below = items.length - offset - visibleItems.length;
   if (below > 0) {
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
@@ -113,7 +179,24 @@ export function createAdvisorPanel(state: AppState, report: AdvisorReport | null
     Text({ content: ' Advisor ', fg: COLORS.amber, attributes: BOLD }),
     summaryRow,
     Text({ content: '', fg: COLORS.dimWhite }),
-    ...recNodes,
+    ...(showSavingsSection ? [Text({ content: ' Savings Recommendations ', fg: COLORS.amber, attributes: BOLD })] : []),
+    ...(visibleRecNodes.length > 0
+      ? visibleRecNodes
+      : recs.length === 0
+        ? [Text({ content: '  No optimization opportunities detected', fg: COLORS.dimWhite })]
+        : []),
+    ...(showWasteSection ? [Text({ content: ' Waste Patterns ', fg: COLORS.amber, attributes: BOLD })] : []),
+    ...(showWasteSection && wasteReport && !wasteReport.enoughEvidence
+      ? [Text({
+          content: '  Not enough event-level data for confident waste taxonomy yet.',
+          fg: COLORS.dimWhite,
+        })]
+      : []),
+    ...(visibleWasteNodes.length > 0
+      ? visibleWasteNodes
+      : wasteFindings.length === 0
+        ? [Text({ content: '  No deterministic waste patterns detected', fg: COLORS.dimWhite })]
+        : []),
     ...scrollIndicators,
   );
 }
