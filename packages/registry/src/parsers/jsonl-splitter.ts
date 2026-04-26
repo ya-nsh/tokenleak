@@ -1,4 +1,6 @@
 import { MAX_JSONL_RECORD_BYTES } from '@tokenleak/core';
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 
 /**
  * Returns the maximum allowed record size in bytes.
@@ -24,38 +26,38 @@ function getMaxRecordBytes(): number {
  * objects. Blank lines are skipped. Oversized or malformed records cause an
  * error that includes the file path and 1-based line number.
  */
-export async function* splitJsonlRecords(
-  filePath: string,
-): AsyncGenerator<unknown> {
+export async function* splitJsonlRecords(filePath: string): AsyncGenerator<unknown> {
   const maxBytes = getMaxRecordBytes();
+  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const lines = createInterface({
+    input: stream,
+    crlfDelay: Infinity,
+  });
 
-  const file = Bun.file(filePath);
-  const text = await file.text();
-  const lines = text.split('\n');
+  try {
+    for await (const line of lines) {
+      // Skip blank lines and lines that are only whitespace/null bytes
+      if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
+        continue;
+      }
 
-  let lineNumber = 0;
+      const byteLength = Buffer.byteLength(line, 'utf8');
+      if (byteLength > maxBytes) {
+        // Skip oversized records instead of crashing — real-world JSONL files
+        // can have corrupted entries
+        continue;
+      }
 
-  for (const line of lines) {
-    lineNumber++;
-
-    // Skip blank lines and lines that are only whitespace/null bytes
-    if (line.trim() === '' || /^\x00+$/.test(line) || !/[^\x00]/.test(line)) {
-      continue;
+      try {
+        yield JSON.parse(line) as unknown;
+      } catch {
+        // Skip malformed JSON lines — real-world log files can have corrupted
+        // entries (null bytes, partial writes, etc.)
+        continue;
+      }
     }
-
-    const byteLength = new TextEncoder().encode(line).byteLength;
-    if (byteLength > maxBytes) {
-      // Skip oversized records instead of crashing — real-world JSONL files
-      // can have corrupted entries
-      continue;
-    }
-
-    try {
-      yield JSON.parse(line) as unknown;
-    } catch {
-      // Skip malformed JSON lines — real-world log files can have corrupted
-      // entries (null bytes, partial writes, etc.)
-      continue;
-    }
+  } finally {
+    lines.close();
+    stream.destroy();
   }
 }

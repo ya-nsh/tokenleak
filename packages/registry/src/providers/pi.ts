@@ -14,7 +14,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCostBreakdown } from '../models/cost';
-import { isInRange } from '../utils';
+import { isInRange, mapWithConcurrency } from '../utils';
 
 const PROVIDER_NAME = 'pi';
 const DISPLAY_NAME = 'Pi';
@@ -61,7 +61,7 @@ async function collectJsonlFiles(dir: string): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await collectJsonlFiles(fullPath));
+      files.push(...(await collectJsonlFiles(fullPath)));
     } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
       files.push(fullPath);
     }
@@ -92,9 +92,7 @@ function toIsoTimestamp(value: unknown): string | null {
   return null;
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
+function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
   if (!pricing) {
     return undefined;
   }
@@ -207,10 +205,7 @@ function getRecordCost(record: PiUsageRecord): number {
 
 function toUsageEvent(record: PiUsageRecord): UsageEvent {
   const totalTokens =
-    record.inputTokens +
-    record.outputTokens +
-    record.cacheReadTokens +
-    record.cacheWriteTokens;
+    record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
   const pricing = toCachePricing(
     estimateCostBreakdown(
       record.normalizedModel,
@@ -336,24 +331,31 @@ export class PiProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const sessionsDir = getSessionsDir(this.agentDir);
     const files = await collectJsonlFiles(sessionsDir);
-    const records: PiUsageRecord[] = [];
-
-    for (const file of files) {
+    const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
+      const records: PiUsageRecord[] = [];
       let projectId: string | undefined;
       const sessionId = relative(sessionsDir, file).split(sep).join('/');
 
-      for await (const record of splitJsonlRecords(file)) {
-        if (isSessionHeader(record)) {
-          projectId = typeof record.cwd === 'string' && record.cwd.trim() ? record.cwd : projectId;
-          continue;
-        }
+      try {
+        for await (const record of splitJsonlRecords(file)) {
+          if (isSessionHeader(record)) {
+            projectId =
+              typeof record.cwd === 'string' && record.cwd.trim() ? record.cwd : projectId;
+            continue;
+          }
 
-        const usage = parseUsageRecord(record, projectId, sessionId);
-        if (usage !== null && isInRange(usage.date, range)) {
-          records.push(usage);
+          const usage = parseUsageRecord(record, projectId, sessionId);
+          if (usage !== null && isInRange(usage.date, range)) {
+            records.push(usage);
+          }
         }
+      } catch {
+        return [];
       }
-    }
+
+      return records;
+    });
+    const records = recordsByFile.flat();
 
     return buildProviderData(records);
   }

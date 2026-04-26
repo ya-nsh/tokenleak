@@ -35,9 +35,7 @@ export function buildHeader(
   renderer: CliRenderer,
   onViewSwitch?: ViewSwitchCallback,
 ) {
-  const costStr = state.data
-    ? formatCost(state.data.allTimeStats.totalCost)
-    : '$...';
+  const costStr = state.data ? formatCost(state.data.allTimeStats.totalCost) : '$...';
 
   const windowIdx = state.selectedWindowIndex;
   const stats = state.data?.windows[windowIdx]?.stats;
@@ -67,8 +65,8 @@ export function buildHeader(
     }
   }
 
-  // View mode indicators — each is a clickable Box. Inactive tabs keep their
-  // shortcut key visible; the active tab uses only the label inside the highlight.
+  // View mode indicators — each is a clickable Box. Keyboard shortcuts stay in
+  // the help panel so the tab row remains clean.
   const viewParts: ReturnType<typeof Box>[] = [];
   for (const v of VIEWS) {
     const isActive = state.selectedView === v.mode;
@@ -84,11 +82,7 @@ export function buildHeader(
         ]
       : [
           Text({
-            content: v.key,
-            fg: COLORS.amber,
-          }),
-          Text({
-            content: `${v.label} `,
+            content: ` ${v.label} `,
             fg: COLORS.dimWhite,
           }),
         ];
@@ -98,7 +92,9 @@ export function buildHeader(
         {
           flexDirection: 'row',
           onMouseDown: onViewSwitch
-            ? () => { onViewSwitch(viewMode); }
+            ? () => {
+                onViewSwitch(viewMode);
+              }
             : undefined,
         },
         ...children,

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun src/bin.ts",
     "build": "tsc",
+    "test": "bun test",
     "check": "tsc --noEmit"
   },
   "dependencies": {

@@ -17,6 +17,9 @@ import type {
   UsageEvent,
   WasteReport,
 } from '@tokenleak/core';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import {
   aggregate,
   analyzeEfficiency,
@@ -47,11 +50,16 @@ import {
 import type { AppState } from './state.js';
 import { WINDOW_DAYS } from './state.js';
 
+const TUI_CACHE_VERSION = 1;
+const TUI_CACHE_FILENAME = 'tui-data-v1.json';
+const scopedWindowCache = new WeakMap<TuiData, Map<string, ScopedWindowData>>();
+
 export interface TimeWindowData {
   label: string;
   days: number;
   stats: AggregatedStats;
   dateRange: DateRange;
+  daily?: DailyUsage[];
   nutritionOutcomeSignals: NutritionOutcomeSignal[];
 }
 
@@ -62,6 +70,109 @@ export interface TuiData {
   dateRange: DateRange;
   mergedDaily: DailyUsage[];
   cursorSetupStatus: CursorSetupStatus;
+}
+
+export interface ScopedWindowData {
+  windowRange: DateRange;
+  scopedProviders: ProviderData[];
+  events: UsageEvent[];
+}
+
+interface CachedTuiDataEnvelope {
+  version: number;
+  generatedAt: string;
+  data: TuiData;
+}
+
+export interface LoadAllDataOptions {
+  attemptCursorSync?: boolean;
+}
+
+function defaultCacheDir(): string {
+  try {
+    return join(homedir(), '.cache', 'tokenleak');
+  } catch {
+    return join(tmpdir(), 'tokenleak-cache');
+  }
+}
+
+export function getTuiDataCachePath(): string {
+  return process.env['TOKENLEAK_TUI_CACHE_PATH'] ?? join(defaultCacheDir(), TUI_CACHE_FILENAME);
+}
+
+function isCursorSetupStatus(value: unknown): value is CursorSetupStatus {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const status = value as Record<string, unknown>;
+  return (
+    typeof status['state'] === 'string' &&
+    typeof status['hasCredentials'] === 'boolean' &&
+    typeof status['hasCache'] === 'boolean'
+  );
+}
+
+function isTuiData(value: unknown): value is TuiData {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const data = value as Record<string, unknown>;
+  return (
+    Array.isArray(data['providers']) &&
+    typeof data['allTimeStats'] === 'object' &&
+    data['allTimeStats'] !== null &&
+    Array.isArray(data['windows']) &&
+    typeof data['dateRange'] === 'object' &&
+    data['dateRange'] !== null &&
+    Array.isArray(data['mergedDaily']) &&
+    isCursorSetupStatus(data['cursorSetupStatus'])
+  );
+}
+
+export function readCachedTuiData(): TuiData | null {
+  const path = getTuiDataCachePath();
+  try {
+    if (!existsSync(path)) {
+      return null;
+    }
+
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as CachedTuiDataEnvelope;
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      parsed.version !== TUI_CACHE_VERSION ||
+      !isTuiData(parsed.data)
+    ) {
+      return null;
+    }
+
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedTuiData(data: TuiData): void {
+  const path = getTuiDataCachePath();
+  const tmpPath = `${path}.tmp-${process.pid}`;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    const envelope: CachedTuiDataEnvelope = {
+      version: TUI_CACHE_VERSION,
+      generatedAt: new Date().toISOString(),
+      data,
+    };
+    writeFileSync(tmpPath, `${JSON.stringify(envelope)}\n`, 'utf8');
+    renameSync(tmpPath, path);
+  } catch {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {
+      // Best effort cache cleanup only.
+    }
+  }
 }
 
 function todayStr(): string {
@@ -86,9 +197,11 @@ function createRegistry(): ProviderRegistry {
   return registry;
 }
 
-/** Load all provider data and compute aggregations for multiple time windows */
-export async function loadAllData(): Promise<TuiData> {
-  const cursorSetupStatus = await resolveCursorSetupStatus({ attemptSync: true });
+/** Load all provider data and compute aggregations for multiple time windows. */
+export async function loadAllData(options: LoadAllDataOptions = {}): Promise<TuiData> {
+  const cursorSetupStatus = await resolveCursorSetupStatus({
+    attemptSync: options.attemptCursorSync ?? false,
+  });
   const registry = createRegistry();
   const today = todayStr();
 
@@ -132,22 +245,17 @@ export async function loadAllData(): Promise<TuiData> {
     const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
     const stats = aggregate(filtered, today);
-    const events = providers.flatMap((provider) =>
-      (provider.events ?? []).filter((event) => event.date >= dateRange.since && event.date <= dateRange.until),
-    );
-    const nutritionOutcomeSignals = await collectGitOutcomeSignals(events, dateRange);
-    windows.push({ label, days, stats, dateRange, nutritionOutcomeSignals });
+    windows.push({ label, days, stats, dateRange, daily: filtered, nutritionOutcomeSignals: [] });
   }
 
   // Add all-time window
-  const allEvents = providers.flatMap((provider) => provider.events ?? []);
-  const allNutritionOutcomeSignals = await collectGitOutcomeSignals(allEvents, allTimeRange);
   windows.push({
     label: 'ALL',
     days: 0,
     stats: allTimeStats,
     dateRange: allTimeRange,
-    nutritionOutcomeSignals: allNutritionOutcomeSignals,
+    daily: allMerged,
+    nutritionOutcomeSignals: [],
   });
 
   return {
@@ -160,8 +268,24 @@ export async function loadAllData(): Promise<TuiData> {
   };
 }
 
+export async function loadNutritionOutcomeSignalsForWindow(
+  state: AppState,
+): Promise<NutritionOutcomeSignal[]> {
+  const scoped = getScopedWindowData(state);
+  if (!state.data || !scoped) {
+    return [];
+  }
+
+  return collectGitOutcomeSignals(scoped.events, scoped.windowRange);
+}
+
 /** Get daily usage data filtered to a specific time window */
 export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsage[] {
+  const cachedDaily = data.windows[windowIndex]?.daily;
+  if (cachedDaily) {
+    return cachedDaily;
+  }
+
   const today = todayStr();
   const days = WINDOW_DAYS[windowIndex];
 
@@ -173,24 +297,64 @@ export function getDailyForWindow(data: TuiData, windowIndex: number): DailyUsag
   return data.mergedDaily.filter((d) => d.date >= since && d.date <= today);
 }
 
-/** Build window-scoped date range and providers for the selected window */
-function getScopedWindowData(state: AppState): { windowRange: DateRange; scopedProviders: ProviderData[] } | null {
-  if (!state.data || state.data.windows.length === 0) return null;
+function flattenProviderEvents(providers: ProviderData[]): UsageEvent[] {
+  const events: UsageEvent[] = [];
+  for (const provider of providers) {
+    if (provider.events) {
+      events.push(...provider.events);
+    }
+  }
+  return events;
+}
+
+function scopedWindowKey(state: AppState, windowRange: DateRange): string {
+  return `${state.selectedWindowIndex}:${windowRange.since}..${windowRange.until}`;
+}
+
+/** Build and cache window-scoped date range, providers, and events for the selected window. */
+export function getScopedWindowData(state: AppState): ScopedWindowData | null {
+  const data = state.data;
+  if (!data || data.windows.length === 0) return null;
+
   const days = WINDOW_DAYS[state.selectedWindowIndex];
-  const today = todayStr();
+  const selectedWindow = data.windows[state.selectedWindowIndex];
+  const windowRange = selectedWindow?.dateRange ?? data.dateRange;
+  const key = scopedWindowKey(state, windowRange);
+  let cacheForData = scopedWindowCache.get(data);
+  if (!cacheForData) {
+    cacheForData = new Map();
+    scopedWindowCache.set(data, cacheForData);
+  }
 
-  const windowRange: DateRange = days && days > 0
-    ? { since: daysAgoStr(days - 1), until: today }
-    : state.data.dateRange;
+  const cached = cacheForData.get(key);
+  if (cached) {
+    return cached;
+  }
 
-  const scopedProviders: ProviderData[] = state.data.providers.map((p) => {
-    if (!days || !p.events) return p;
-    const filteredEvents = p.events.filter((e) => e.date >= windowRange.since && e.date <= windowRange.until);
-    const filteredDaily = p.daily?.filter((d) => d.date >= windowRange.since && d.date <= windowRange.until);
-    return { ...p, events: filteredEvents, daily: filteredDaily };
-  });
+  const scopedProviders: ProviderData[] =
+    days && days > 0
+      ? data.providers.map((provider) => {
+          const filteredEvents = provider.events?.filter(
+            (event) => event.date >= windowRange.since && event.date <= windowRange.until,
+          );
+          const filteredDaily = provider.daily.filter(
+            (day) => day.date >= windowRange.since && day.date <= windowRange.until,
+          );
+          return {
+            ...provider,
+            daily: filteredDaily,
+            events: filteredEvents,
+          };
+        })
+      : data.providers;
+  const scoped: ScopedWindowData = {
+    windowRange,
+    scopedProviders,
+    events: flattenProviderEvents(scopedProviders),
+  };
 
-  return { windowRange, scopedProviders };
+  cacheForData.set(key, scoped);
+  return scoped;
 }
 
 /** Lazily compute and cache the AdvisorReport (window-dependent) */
@@ -247,18 +411,10 @@ export function ensureFocusReport(state: AppState): FocusReport | null {
   if (!state.data) return null;
   if (state.cachedFocusReport) return state.cachedFocusReport;
 
-  const allEvents = state.data.providers.flatMap((p) => p.events ?? []);
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
 
-  // Filter events to the selected time window
-  const days = WINDOW_DAYS[state.selectedWindowIndex];
-  let filtered = allEvents;
-  if (days && days > 0) {
-    const since = daysAgoStr(days - 1);
-    const today = todayStr();
-    filtered = allEvents.filter((e) => e.date >= since && e.date <= today);
-  }
-
-  const report = buildFocusReport(filtered);
+  const report = buildFocusReport(scoped.events);
   state.cachedFocusReport = report;
   return report;
 }
@@ -272,8 +428,11 @@ export function ensureNutritionReport(state: AppState): NutritionReport | null {
   const scoped = getScopedWindowData(state);
   if (!window || !scoped) return null;
 
-  const events = scoped.scopedProviders.flatMap((provider) => provider.events ?? []);
-  const report = buildNutritionReport(events, window.nutritionOutcomeSignals, window.dateRange);
+  const report = buildNutritionReport(
+    scoped.events,
+    window.nutritionOutcomeSignals,
+    window.dateRange,
+  );
   state.cachedNutritionReport = report;
   return report;
 }
@@ -335,7 +494,8 @@ export function deriveReceiptLines(
   sortMode: AppState['receiptsSortMode'],
   filter: AppState['receiptsCategoryFilter'],
 ): ReceiptLine[] {
-  const filtered = filter === null ? receipt.lines : receipt.lines.filter((l) => l.category === filter);
+  const filtered =
+    filter === null ? receipt.lines : receipt.lines.filter((l) => l.category === filter);
   const sorted = [...filtered];
   if (sortMode === 'qty') {
     sorted.sort((a, b) => b.quantity - a.quantity);
@@ -352,20 +512,10 @@ export function ensureReceipt(state: AppState): Receipt | null {
   if (!state.data) return null;
   if (state.cachedReceipt) return state.cachedReceipt;
 
-  const allEvents: UsageEvent[] = state.data.providers.flatMap((p) => p.events ?? []);
-  const days = WINDOW_DAYS[state.selectedWindowIndex];
-  let filtered = allEvents;
-  let range: DateRange;
-  if (days && days > 0) {
-    const since = daysAgoStr(days - 1);
-    const until = todayStr();
-    filtered = allEvents.filter((e) => e.date >= since && e.date <= until);
-    range = { since, until };
-  } else {
-    range = state.data.dateRange;
-  }
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
 
-  const receipt = buildReceipt(filtered, range);
+  const receipt = buildReceipt(scoped.events, scoped.windowRange);
   state.cachedReceipt = receipt;
   return receipt;
 }

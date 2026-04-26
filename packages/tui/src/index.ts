@@ -1,7 +1,7 @@
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
-import { buildCommonsExport, buildCommonsPromptExport, buildMoreStats, SCHEMA_VERSION } from '@tokenleak/core';
+import { buildCommonsExport, buildCommonsPromptExport, SCHEMA_VERSION } from '@tokenleak/core';
 import {
   CursorAuthError,
   resolveCursorSetupStatus,
@@ -13,6 +13,9 @@ import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
   loadAllData,
+  loadNutritionOutcomeSignalsForWindow,
+  readCachedTuiData,
+  writeCachedTuiData,
   getDailyForWindow,
   ensureAdvisorReport,
   ensureFocusReport,
@@ -24,6 +27,7 @@ import {
   ensureNutritionReport,
   ensureReceipt,
   deriveReceiptLines,
+  getScopedWindowData,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -53,6 +57,131 @@ function clearRoot(renderer: CliRenderer): void {
   for (const child of children) {
     renderer.root.remove(child.id);
   }
+}
+
+function createDeferredPanel(title: string, message: string, isError: boolean = false) {
+  return Box(
+    {
+      flexDirection: 'column',
+      width: '100%',
+      flexGrow: 1,
+      borderStyle: 'single',
+      borderColor: isError ? COLORS.red : COLORS.dimWhite,
+      paddingLeft: 1,
+      paddingRight: 1,
+    },
+    Text({ content: ` ${title} `, fg: isError ? COLORS.red : COLORS.amber, attributes: BOLD }),
+    Text({ content: '', fg: COLORS.dimWhite }),
+    Text({ content: message, fg: isError ? COLORS.red : COLORS.dimWhite }),
+  );
+}
+
+function clearViewTaskState(state: AppState): void {
+  state.viewTasks.pendingKeys.clear();
+  state.viewTasks.errors = {};
+  state.viewTasks.activeLabel = null;
+}
+
+function windowTaskKey(state: AppState): string {
+  const window = state.data?.windows[state.selectedWindowIndex];
+  if (!window) {
+    return `window:${state.selectedWindowIndex}`;
+  }
+
+  return `${state.selectedWindowIndex}:${window.dateRange.since}..${window.dateRange.until}`;
+}
+
+function ensureExplainDate(state: AppState): string {
+  if (!state.explainDate) {
+    const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
+    state.explainDate = windowStats?.peakDay?.date ?? new Date().toISOString().slice(0, 10);
+  }
+
+  return state.explainDate;
+}
+
+function getSelectedViewTaskKey(state: AppState, view: ViewMode = state.selectedView): string {
+  const base = windowTaskKey(state);
+  switch (view) {
+    case 'advisor':
+      return `advisor:${base}`;
+    case 'focus':
+      return `focus:${base}`;
+    case 'explain':
+      return `explain:${base}:${ensureExplainDate(state)}`;
+    case 'compare':
+      return `compare:${base}`;
+    case 'matrix':
+      return `matrix-more:${base}:page-${state.matrixPage}`;
+    case 'wrapped':
+      return `wrapped:${base}`;
+    case 'replay':
+      return `replay:${base}:${state.replayDate ?? new Date().toISOString().slice(0, 10)}`;
+    case 'nutrition':
+      return `nutrition:${base}`;
+    case 'receipts':
+      return `receipts:${base}`;
+    default:
+      return `${view}:${base}`;
+  }
+}
+
+function scheduleViewTask(
+  state: AppState,
+  renderer: CliRenderer,
+  key: string,
+  label: string,
+  compute: () => Promise<void> | void,
+): void {
+  if (state.viewTasks.pendingKeys.has(key)) {
+    state.viewTasks.activeLabel = label;
+    return;
+  }
+
+  state.viewTasks.pendingKeys.add(key);
+  delete state.viewTasks.errors[key];
+  state.viewTasks.activeLabel = label;
+
+  setTimeout(() => {
+    void (async () => {
+      try {
+        if (getSelectedViewTaskKey(state) !== key) {
+          return;
+        }
+
+        await compute();
+      } catch (error: unknown) {
+        state.viewTasks.errors[key] = error instanceof Error ? error.message : String(error);
+      } finally {
+        state.viewTasks.pendingKeys.delete(key);
+        if (getSelectedViewTaskKey(state) === key) {
+          state.viewTasks.activeLabel = null;
+          render(state, renderer);
+        }
+      }
+    })();
+  }, 0);
+}
+
+function deferredPanelForTask(
+  state: AppState,
+  renderer: CliRenderer,
+  key: string,
+  label: string,
+  compute: () => Promise<void> | void,
+) {
+  const error = state.viewTasks.errors[key];
+  if (error) {
+    return createDeferredPanel(label, `Could not load ${label}: ${error}`, true);
+  }
+
+  scheduleViewTask(state, renderer, key, label, compute);
+  return createDeferredPanel(label, `Loading ${label}...`);
+}
+
+function nutritionWindowKey(state: AppState): string | null {
+  const window = state.data?.windows[state.selectedWindowIndex];
+  return window ? `${window.dateRange.since}..${window.dateRange.until}` : null;
 }
 
 function buildContent(state: AppState, renderer: CliRenderer) {
@@ -85,6 +214,11 @@ function buildContent(state: AppState, renderer: CliRenderer) {
 
   const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
   const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
+  const hasWindowData = Boolean(state.data?.windows[state.selectedWindowIndex]);
+
+  if (!state.data && state.selectedView !== 'overview' && state.selectedView !== 'export') {
+    return createDeferredPanel('Loading', 'Loading usage data...');
+  }
 
   switch (state.selectedView) {
     case 'overview':
@@ -95,45 +229,158 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         createModelList(state, windowStats),
       );
     case 'matrix':
+      if (hasWindowData && state.matrixPage > 0 && !state.cachedMoreStats) {
+        const key = getSelectedViewTaskKey(state, 'matrix');
+        return deferredPanelForTask(state, renderer, key, 'Matrix', () => {
+          ensureMoreStats(state);
+        });
+      }
       return createMatrixView(state);
     case 'advisor':
-      return createAdvisorPanel(state, ensureAdvisorReport(state), ensureWasteReport(state));
+      if (!hasWindowData) {
+        return createAdvisorPanel(state, null, null);
+      }
+      if (!state.cachedAdvisorReport || !state.cachedWasteReport) {
+        const key = getSelectedViewTaskKey(state, 'advisor');
+        return deferredPanelForTask(state, renderer, key, 'Advisor', () => {
+          ensureAdvisorReport(state);
+          ensureWasteReport(state);
+        });
+      }
+      return createAdvisorPanel(state, state.cachedAdvisorReport, state.cachedWasteReport);
     case 'focus':
-      return createFocusPanel(state, ensureFocusReport(state));
+      if (!hasWindowData) {
+        return createFocusPanel(state, null);
+      }
+      if (!state.cachedFocusReport) {
+        const key = getSelectedViewTaskKey(state, 'focus');
+        return deferredPanelForTask(state, renderer, key, 'Focus Sessions', () => {
+          ensureFocusReport(state);
+        });
+      }
+      return createFocusPanel(state, state.cachedFocusReport);
     case 'explain':
-      return createExplainPanel(ensureExplainReport(state), state.explainDate);
+      if (!hasWindowData) {
+        return createExplainPanel(null, state.explainDate);
+      }
+      ensureExplainDate(state);
+      if (!state.cachedExplainReport || state.cachedExplainReport.date !== state.explainDate) {
+        const key = getSelectedViewTaskKey(state, 'explain');
+        return deferredPanelForTask(state, renderer, key, 'Explain', () => {
+          ensureExplainReport(state);
+        });
+      }
+      return createExplainPanel(state.cachedExplainReport, state.explainDate);
     case 'compare':
-      return createComparePanel(state, ensureCompareOutput(state));
+      if (!hasWindowData) {
+        return createComparePanel(state, null);
+      }
+      if (!state.cachedCompareOutput) {
+        const key = getSelectedViewTaskKey(state, 'compare');
+        return deferredPanelForTask(state, renderer, key, 'Compare', () => {
+          ensureCompareOutput(state);
+        });
+      }
+      return createComparePanel(state, state.cachedCompareOutput);
     case 'export':
       return createExportPanel(state);
     case 'replay':
+      if (!hasWindowData) {
+        return createReplayPanel(
+          null,
+          state.replayDate,
+          state.replayExpandedBlocks,
+          state.replayScrollOffset,
+        );
+      }
+      if (!state.replayDate) {
+        state.replayDate = new Date().toISOString().slice(0, 10);
+      }
+      if (!state.cachedReplayReport || state.cachedReplayReport.date !== state.replayDate) {
+        const key = getSelectedViewTaskKey(state, 'replay');
+        return deferredPanelForTask(state, renderer, key, 'Replay', () => {
+          ensureReplayReport(state);
+        });
+      }
       return createReplayPanel(
-        ensureReplayReport(state),
+        state.cachedReplayReport,
         state.replayDate,
         state.replayExpandedBlocks,
         state.replayScrollOffset,
       );
     case 'nutrition':
-      return createNutritionPanel(state, ensureNutritionReport(state));
+      if (!hasWindowData) {
+        return createNutritionPanel(state, null);
+      }
+      if (!state.cachedNutritionReport) {
+        const key = getSelectedViewTaskKey(state, 'nutrition');
+        return deferredPanelForTask(state, renderer, key, 'AI ROI', async () => {
+          state.nutritionSignalsLoading = true;
+          try {
+            const signals = await loadNutritionOutcomeSignalsForWindow(state);
+            if (getSelectedViewTaskKey(state, 'nutrition') !== key) {
+              return;
+            }
+            const window = state.data?.windows[state.selectedWindowIndex];
+            if (window) {
+              window.nutritionOutcomeSignals = signals;
+            }
+            state.cachedNutritionReport = null;
+            const signalKey = nutritionWindowKey(state);
+            if (signalKey) {
+              state.nutritionSignalsLoadedKeys.add(signalKey);
+            }
+            ensureNutritionReport(state);
+          } finally {
+            state.nutritionSignalsLoading = false;
+          }
+        });
+      }
+      return createNutritionPanel(state, state.cachedNutritionReport);
     case 'wrapped': {
-      const output = buildTokenleakOutput(state);
+      if (hasWindowData && !state.cachedMoreStats) {
+        const key = getSelectedViewTaskKey(state, 'wrapped');
+        return deferredPanelForTask(state, renderer, key, 'Wrapped', () => {
+          ensureMoreStats(state);
+        });
+      }
+      const output = buildTokenleakOutput(state, { computeMore: false });
       const achievements = output ? computeAchievements(output) : [];
-      const providers = state.data?.providers.map((p) => ({
-        displayName: p.displayName,
-        totalTokens: p.totalTokens,
-        totalCost: p.totalCost,
-      })) ?? [];
-      return createWrappedPanel(windowStats, achievements, providers, state.wrappedScrollOffset, ensureMoreStats(state));
+      const providers =
+        state.data?.providers.map((p) => ({
+          displayName: p.displayName,
+          totalTokens: p.totalTokens,
+          totalCost: p.totalCost,
+        })) ?? [];
+      return createWrappedPanel(
+        windowStats,
+        achievements,
+        providers,
+        state.wrappedScrollOffset,
+        state.cachedMoreStats,
+      );
     }
     case 'receipts':
-      return createReceiptsPanel(state, ensureReceipt(state));
+      if (!hasWindowData) {
+        return createReceiptsPanel(state, null);
+      }
+      if (!state.cachedReceipt) {
+        const key = getSelectedViewTaskKey(state, 'receipts');
+        return deferredPanelForTask(state, renderer, key, 'Receipts', () => {
+          ensureReceipt(state);
+        });
+      }
+      return createReceiptsPanel(state, state.cachedReceipt);
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
 }
 
 /** Build a TokenleakOutput from current state for renderers */
-function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
+function buildTokenleakOutput(
+  state: AppState,
+  options: { computeMore?: boolean } = {},
+): TokenleakOutput | null {
   if (!state.data || state.data.windows.length === 0) return null;
   const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
   if (!windowStats) return null;
@@ -142,12 +389,20 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   const days = WINDOW_DAYS[state.selectedWindowIndex];
   const today = new Date().toISOString().slice(0, 10);
 
-  const dateRange = days && days > 0
-    ? { since: (() => { const d = new Date(); d.setDate(d.getDate() - (days - 1)); return d.toISOString().slice(0, 10); })(), until: today }
-    : state.data.dateRange;
+  const dateRange =
+    days && days > 0
+      ? {
+          since: (() => {
+            const d = new Date();
+            d.setDate(d.getDate() - (days - 1));
+            return d.toISOString().slice(0, 10);
+          })(),
+          until: today,
+        }
+      : state.data.dateRange;
 
   // Attach more stats if available for achievements that need hourOfDay
-  const more = ensureMoreStats(state);
+  const more = options.computeMore ? ensureMoreStats(state) : state.cachedMoreStats;
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -166,23 +421,14 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
 }
 
 function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
-  const output = buildTokenleakOutput(state);
+  const output = buildTokenleakOutput(state, { computeMore: true });
   if (!output || !state.data) return null;
-
-  const scopedProviders = state.data.providers.map((provider) => {
-    const filteredEvents = provider.events?.filter(
-      (event) => event.date >= output.dateRange.since && event.date <= output.dateRange.until,
-    );
-    const filteredDaily = provider.daily.filter(
-      (entry) => entry.date >= output.dateRange.since && entry.date <= output.dateRange.until,
-    );
-    return { ...provider, events: filteredEvents, daily: filteredDaily };
-  });
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
 
   return {
     ...output,
-    providers: scopedProviders,
-    more: buildMoreStats(scopedProviders, output.dateRange),
+    providers: scoped.scopedProviders,
   };
 }
 
@@ -207,7 +453,10 @@ function closeCursorSetup(state: AppState): void {
   state.cursorSetupSubmitting = false;
 }
 
-function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof loadAllData>>): void {
+function applyLoadedData(
+  state: AppState,
+  freshData: Awaited<ReturnType<typeof loadAllData>>,
+): void {
   state.data = freshData;
   state.isLoading = false;
   state.modelScrollOffset = 0;
@@ -224,19 +473,27 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.receiptsExpandedLineIndex = null;
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
+  state.nutritionSignalsLoading = false;
+  state.nutritionSignalsLoadedKeys.clear();
+  clearViewTaskState(state);
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
 
-async function reloadAllData(state: AppState, renderer: CliRenderer, failurePrefix?: string): Promise<void> {
+async function reloadAllData(
+  state: AppState,
+  renderer: CliRenderer,
+  failurePrefix?: string,
+): Promise<void> {
   state.isLoading = true;
   invalidateAllCaches(state);
   state.exportStatus = null;
   render(state, renderer);
 
   try {
-    const freshData = await loadAllData();
+    const freshData = await loadAllData({ attemptCursorSync: true });
     applyLoadedData(state, freshData);
+    writeCachedTuiData(freshData);
   } catch (err: unknown) {
     state.isLoading = false;
     state.exportStatus = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
@@ -343,6 +600,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.receiptsSortMode = 'cost';
     currentState.receiptsCategoryFilter = null;
     currentState.replayExpandedBlocks = new Set();
+    currentState.viewTasks.activeLabel = null;
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
       currentState.matrixPage = 0;
@@ -372,9 +630,8 @@ function focusCursorSetupField(state: AppState, renderer: CliRenderer): void {
     return;
   }
 
-  const targetId = state.cursorSetupField === 'label'
-    ? CURSOR_SETUP_LABEL_INPUT_ID
-    : CURSOR_SETUP_TOKEN_INPUT_ID;
+  const targetId =
+    state.cursorSetupField === 'label' ? CURSOR_SETUP_LABEL_INPUT_ID : CURSOR_SETUP_TOKEN_INPUT_ID;
   const target = renderer.root.findDescendantById(targetId);
   if (target) {
     target.focus();
@@ -405,6 +662,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
+  clearViewTaskState(state);
 }
 
 /** Null all caches (used on refresh) */
@@ -418,6 +676,9 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  state.nutritionSignalsLoading = false;
+  state.nutritionSignalsLoadedKeys.clear();
+  clearViewTaskState(state);
 }
 
 /** Navigate replay date forward or backward by one day */
@@ -451,39 +712,56 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '8': 'wrapped',
   '9': 'replay',
   '0': 'nutrition',
-  'R': 'receipts',
+  R: 'receipts',
 };
 
 const VIEW_ORDER: ViewMode[] = [
-  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay', 'nutrition', 'receipts',
+  'overview',
+  'matrix',
+  'advisor',
+  'focus',
+  'explain',
+  'compare',
+  'export',
+  'wrapped',
+  'replay',
+  'nutrition',
+  'receipts',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay', 'nutrition', 'receipts']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>([
+  'advisor',
+  'focus',
+  'compare',
+  'wrapped',
+  'replay',
+  'nutrition',
+  'receipts',
+]);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
     case 'advisor':
       return (
-        (ensureAdvisorReport(state)?.recommendations.length ?? 0) +
-        (ensureWasteReport(state)?.findings.length ?? 0)
+        (state.cachedAdvisorReport?.recommendations.length ?? 0) +
+        (state.cachedWasteReport?.findings.length ?? 0)
       );
-    case 'focus': {
-      const report = ensureFocusReport(state);
-      return Math.min(report?.entries.length ?? 0, 20);
-    }
+    case 'focus':
+      return Math.min(state.cachedFocusReport?.entries.length ?? 0, 20);
     case 'compare':
       return 6; // fixed metric rows
     case 'wrapped':
       return 30; // approximate content rows
     case 'replay':
-      return ensureReplayReport(state)?.flowBlocks.length ?? 0;
+      return state.cachedReplayReport?.flowBlocks.length ?? 0;
     case 'nutrition':
-      return Math.min(ensureNutritionReport(state)?.repos.length ?? 0, 30);
+      return Math.min(state.cachedNutritionReport?.repos.length ?? 0, 30);
     case 'receipts': {
-      const receipt = ensureReceipt(state);
+      const receipt = state.cachedReceipt;
       if (!receipt) return 0;
-      return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter).length;
+      return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter)
+        .length;
     }
     default:
       return 0;
@@ -492,39 +770,69 @@ function getScrollableItemCount(state: AppState): number {
 
 function getVisibleCount(view: ViewMode): number {
   switch (view) {
-    case 'advisor': return ADVISOR_VISIBLE_ITEMS;
-    case 'focus': return 12;
-    case 'compare': return 6;
-    case 'wrapped': return 20;
-    case 'replay': return 15;
-    case 'nutrition': return NUTRITION_VISIBLE_ROWS;
-    case 'receipts': return 12;
-    default: return 10;
+    case 'advisor':
+      return ADVISOR_VISIBLE_ITEMS;
+    case 'focus':
+      return 12;
+    case 'compare':
+      return 6;
+    case 'wrapped':
+      return 20;
+    case 'replay':
+      return 15;
+    case 'nutrition':
+      return NUTRITION_VISIBLE_ROWS;
+    case 'receipts':
+      return 12;
+    default:
+      return 10;
   }
 }
 
 function getScrollOffset(state: AppState): number {
   switch (state.selectedView) {
-    case 'advisor': return state.advisorScrollOffset;
-    case 'focus': return state.focusScrollOffset;
-    case 'compare': return state.compareScrollOffset;
-    case 'wrapped': return state.wrappedScrollOffset;
-    case 'replay': return state.replayScrollOffset;
-    case 'nutrition': return state.nutritionScrollOffset;
-    case 'receipts': return state.receiptsScrollOffset;
-    default: return 0;
+    case 'advisor':
+      return state.advisorScrollOffset;
+    case 'focus':
+      return state.focusScrollOffset;
+    case 'compare':
+      return state.compareScrollOffset;
+    case 'wrapped':
+      return state.wrappedScrollOffset;
+    case 'replay':
+      return state.replayScrollOffset;
+    case 'nutrition':
+      return state.nutritionScrollOffset;
+    case 'receipts':
+      return state.receiptsScrollOffset;
+    default:
+      return 0;
   }
 }
 
 function setScrollOffset(state: AppState, value: number): void {
   switch (state.selectedView) {
-    case 'advisor': state.advisorScrollOffset = value; break;
-    case 'focus': state.focusScrollOffset = value; break;
-    case 'compare': state.compareScrollOffset = value; break;
-    case 'wrapped': state.wrappedScrollOffset = value; break;
-    case 'replay': state.replayScrollOffset = value; break;
-    case 'nutrition': state.nutritionScrollOffset = value; break;
-    case 'receipts': state.receiptsScrollOffset = value; break;
+    case 'advisor':
+      state.advisorScrollOffset = value;
+      break;
+    case 'focus':
+      state.focusScrollOffset = value;
+      break;
+    case 'compare':
+      state.compareScrollOffset = value;
+      break;
+    case 'wrapped':
+      state.wrappedScrollOffset = value;
+      break;
+    case 'replay':
+      state.replayScrollOffset = value;
+      break;
+    case 'nutrition':
+      state.nutritionScrollOffset = value;
+      break;
+    case 'receipts':
+      state.receiptsScrollOffset = value;
+      break;
   }
 }
 
@@ -534,7 +842,7 @@ async function handleExport(
   state: AppState,
   renderer: CliRenderer,
 ): Promise<void> {
-  const output = buildTokenleakOutput(state);
+  const output = buildTokenleakOutput(state, { computeMore: true });
   if (!output) {
     state.exportStatus = 'Error: No data loaded';
     render(state, renderer);
@@ -591,12 +899,53 @@ async function handleExport(
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    state.exportStatus = key === 'a'
-      ? `Error: ${message}. CLI fallback: tokenleak commons prompt --output tokenleak-llm-prompt.md`
-      : `Error: ${message}`;
+    state.exportStatus =
+      key === 'a'
+        ? `Error: ${message}. CLI fallback: tokenleak commons prompt --output tokenleak-llm-prompt.md`
+        : `Error: ${message}`;
   }
 
   render(state, renderer);
+}
+
+async function loadFreshDataInBackground(state: AppState, renderer: CliRenderer): Promise<void> {
+  state.isLoading = state.data === null;
+  render(state, renderer);
+
+  try {
+    const freshData = await loadAllData({ attemptCursorSync: false });
+    applyLoadedData(state, freshData);
+    writeCachedTuiData(freshData);
+  } catch (err: unknown) {
+    state.isLoading = false;
+    state.exportStatus = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  render(state, renderer);
+}
+
+async function syncCursorInBackground(
+  state: AppState,
+  renderer: CliRenderer,
+  options: { reloadData?: boolean } = {},
+): Promise<void> {
+  try {
+    const status = await resolveCursorSetupStatus({ attemptSync: true });
+    if (state.data) {
+      state.data.cursorSetupStatus = status;
+    }
+    state.cursorSetupStatusOverride = status;
+    render(state, renderer);
+
+    if (options.reloadData !== false && status.state === 'ready') {
+      const freshData = await loadAllData({ attemptCursorSync: false });
+      applyLoadedData(state, freshData);
+      writeCachedTuiData(freshData);
+      render(state, renderer);
+    }
+  } catch {
+    // Cursor sync is opportunistic during boot; explicit refresh surfaces errors.
+  }
 }
 
 export async function main(): Promise<void> {
@@ -613,284 +962,260 @@ export async function main(): Promise<void> {
   // Show loading state immediately
   render(state, renderer);
 
-  try {
-    const data = await loadAllData();
-    applyLoadedData(state, data);
+  const cachedData = readCachedTuiData();
+  if (cachedData) {
+    applyLoadedData(state, cachedData);
     render(state, renderer);
+  }
 
-    renderer.addInputHandler((sequence: string) => {
-      if (handleCursorSetupInput(sequence, state, renderer)) {
-        return true;
+  void (async () => {
+    if (cachedData) {
+      await syncCursorInBackground(state, renderer, { reloadData: false });
+      await loadFreshDataInBackground(state, renderer);
+      return;
+    }
+
+    await loadFreshDataInBackground(state, renderer);
+    await syncCursorInBackground(state, renderer);
+  })();
+
+  renderer.addInputHandler((sequence: string) => {
+    if (handleCursorSetupInput(sequence, state, renderer)) {
+      return true;
+    }
+
+    // Help toggle: ? key
+    if (sequence === '?') {
+      state.showHelp = !state.showHelp;
+      render(state, renderer);
+      return true;
+    }
+
+    // Escape closes help
+    if (sequence === '\x1b' && state.showHelp) {
+      state.showHelp = false;
+      render(state, renderer);
+      return true;
+    }
+
+    // While help is shown, only ?, Escape, and q are handled
+    if (state.showHelp) {
+      if (sequence === 'q') {
+        renderer.destroy();
+        process.exit(0);
       }
-
-      // Help toggle: ? key
-      if (sequence === '?') {
-        state.showHelp = !state.showHelp;
-        render(state, renderer);
-        return true;
-      }
-
-      // Escape closes help
-      if (sequence === '\x1b' && state.showHelp) {
-        state.showHelp = false;
-        render(state, renderer);
-        return true;
-      }
-
-      // While help is shown, only ?, Escape, and q are handled
-      if (state.showHelp) {
-        if (sequence === 'q') {
-          renderer.destroy();
-          process.exit(0);
-        }
-        if (sequence === 'c') {
-          return tryOpenCursorSetup(state, renderer);
-        }
-        return false;
-      }
-
       if (sequence === 'c') {
         return tryOpenCursorSetup(state, renderer);
       }
-
-      // Tab or >: next time window
-      if (sequence === '\t' || sequence === '>') {
-        state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
-        state.modelScrollOffset = 0;
-        invalidateWindowCaches(state);
-        render(state, renderer);
-        return true;
-      }
-
-      // Shift+Tab or <: prev time window
-      if (sequence === '\x1b[Z' || sequence === '<') {
-        state.selectedWindowIndex =
-          (state.selectedWindowIndex - 1 + WINDOW_LABELS.length) % WINDOW_LABELS.length;
-        state.modelScrollOffset = 0;
-        invalidateWindowCaches(state);
-        render(state, renderer);
-        return true;
-      }
-
-      // Right arrow: next view
-      if (sequence === '\x1b[C') {
-        const idx = VIEW_ORDER.indexOf(state.selectedView);
-        const next = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length]!;
-        handleViewSwitch(next);
-        return true;
-      }
-
-      // Left arrow: prev view
-      if (sequence === '\x1b[D') {
-        const idx = VIEW_ORDER.indexOf(state.selectedView);
-        const prev = VIEW_ORDER[(idx - 1 + VIEW_ORDER.length) % VIEW_ORDER.length]!;
-        handleViewSwitch(prev);
-        return true;
-      }
-
-      // Matrix page navigation: , or [ = prev page, . or ] = next page
-      if ((sequence === ',' || sequence === '[') && state.selectedView === 'matrix') {
-        state.matrixPage = Math.max(0, state.matrixPage - 1);
-        render(state, renderer);
-        return true;
-      }
-      if ((sequence === '.' || sequence === ']') && state.selectedView === 'matrix') {
-        state.matrixPage = Math.min(3, state.matrixPage + 1);
-        render(state, renderer);
-        return true;
-      }
-
-      // 1-9/0: switch view
-      const viewMode = VIEW_KEYS[sequence];
-      if (viewMode) {
-        handleViewSwitch(viewMode);
-        return true;
-      }
-
-      // Export view actions: p/w/l/a
-      if (state.selectedView === 'export' && (sequence === 'p' || sequence === 'w' || sequence === 'l' || sequence === 'a')) {
-        handleExport(sequence, state, renderer);
-        return true;
-      }
-
-      // j / Down: scroll down (overview model list or scrollable views)
-      if (sequence === 'j' || sequence === '\x1b[B') {
-        if (state.selectedView === 'overview') {
-          const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
-          const modelCount = windowStats?.topModels.length ?? 0;
-          const visibleCount = 10;
-          const maxOffset = Math.max(0, modelCount - visibleCount);
-          if (state.modelScrollOffset < maxOffset) {
-            state.modelScrollOffset++;
-            render(state, renderer);
-          }
-          return true;
-        }
-        if (SCROLLABLE_VIEWS.has(state.selectedView)) {
-          const itemCount = getScrollableItemCount(state);
-          const visibleCount = getVisibleCount(state.selectedView);
-          const maxOffset = Math.max(0, itemCount - visibleCount);
-          const current = getScrollOffset(state);
-          if (current < maxOffset) {
-            setScrollOffset(state, current + 1);
-            render(state, renderer);
-          }
-          return true;
-        }
-        return false;
-      }
-
-      // k / Up: scroll up
-      if (sequence === 'k' || sequence === '\x1b[A') {
-        if (state.selectedView === 'overview') {
-          if (state.modelScrollOffset > 0) {
-            state.modelScrollOffset--;
-            render(state, renderer);
-          }
-          return true;
-        }
-        if (SCROLLABLE_VIEWS.has(state.selectedView)) {
-          const current = getScrollOffset(state);
-          if (current > 0) {
-            setScrollOffset(state, current - 1);
-            render(state, renderer);
-          }
-          return true;
-        }
-        return false;
-      }
-
-      // h: prev day (explain/replay view)
-      if (sequence === 'h' && state.selectedView === 'explain') {
-        shiftExplainDate(state, -1);
-        render(state, renderer);
-        return true;
-      }
-      if (sequence === 'h' && state.selectedView === 'replay') {
-        shiftReplayDate(state, -1);
-        render(state, renderer);
-        return true;
-      }
-
-      // l: next day (explain/replay view)
-      if (sequence === 'l' && state.selectedView === 'explain') {
-        shiftExplainDate(state, 1);
-        render(state, renderer);
-        return true;
-      }
-      if (sequence === 'l' && state.selectedView === 'replay') {
-        shiftReplayDate(state, 1);
-        render(state, renderer);
-        return true;
-      }
-
-      // Enter: expand/collapse flow blocks (replay view)
-      if (sequence === '\r' && state.selectedView === 'replay') {
-        const blockIndex = state.replayScrollOffset;
-        if (state.replayExpandedBlocks.has(blockIndex)) {
-          state.replayExpandedBlocks.delete(blockIndex);
-        } else {
-          state.replayExpandedBlocks.add(blockIndex);
-        }
-        render(state, renderer);
-        return true;
-      }
-
-      // Enter: expand/collapse sample prompts for the top visible line (receipts view)
-      if (sequence === '\r' && state.selectedView === 'receipts') {
-        const target = state.receiptsScrollOffset;
-        state.receiptsExpandedLineIndex =
-          state.receiptsExpandedLineIndex === target ? null : target;
-        render(state, renderer);
-        return true;
-      }
-
-      // o: cycle sort mode (receipts view)
-      if (sequence === 'o' && state.selectedView === 'receipts') {
-        const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
-        const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
-        state.receiptsSortMode = order[nextIndex]!;
-        state.receiptsScrollOffset = 0;
-        state.receiptsExpandedLineIndex = null;
-        render(state, renderer);
-        return true;
-      }
-
-      // f: cycle category filter through encountered categories + null (receipts view)
-      if (sequence === 'f' && state.selectedView === 'receipts') {
-        const receipt = state.cachedReceipt;
-        if (!receipt || receipt.lines.length === 0) {
-          return true;
-        }
-        const categories = Array.from(new Set(receipt.lines.map((l) => l.category)));
-        const current = state.receiptsCategoryFilter;
-        const currentIndex = current === null ? -1 : categories.indexOf(current);
-        const nextIndex = currentIndex + 1;
-        state.receiptsCategoryFilter =
-          nextIndex >= categories.length ? null : categories[nextIndex]!;
-        state.receiptsScrollOffset = 0;
-        state.receiptsExpandedLineIndex = null;
-        render(state, renderer);
-        return true;
-      }
-
-      // s: toggle sort mode
-      if (sequence === 's') {
-        state.sortMode = state.sortMode === 'cost' ? 'tokens' : 'cost';
-        state.modelScrollOffset = 0;
-        render(state, renderer);
-        return true;
-      }
-
-      // r: refresh data
-      if (sequence === 'r') {
-        void reloadAllData(state, renderer);
-        return true;
-      }
-
-      // q: quit
-      if (sequence === 'q') {
-        renderer.destroy();
-        process.exit(0);
-      }
-
       return false;
-    });
-  } catch (err: unknown) {
-    clearRoot(renderer);
-    renderer.root.add(
-      Box(
-        {
-          flexDirection: 'column',
-          width: '100%',
-          height: '100%',
-          backgroundColor: COLORS.bg,
-          justifyContent: 'center',
-          alignItems: 'center',
-        },
-        Text({
-          content: 'TOKENLEAK TUI',
-          fg: COLORS.amber,
-          attributes: BOLD,
-        }),
-        Text({
-          content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          fg: COLORS.red,
-        }),
-        Text({
-          content: 'Press q to quit',
-          fg: COLORS.dimWhite,
-        }),
-      ),
-    );
-    renderer.requestRender();
+    }
 
-    renderer.addInputHandler((sequence: string) => {
-      if (sequence === 'q') {
-        renderer.destroy();
-        process.exit(0);
+    if (sequence === 'c') {
+      return tryOpenCursorSetup(state, renderer);
+    }
+
+    // Tab or >: next time window
+    if (sequence === '\t' || sequence === '>') {
+      state.selectedWindowIndex = (state.selectedWindowIndex + 1) % WINDOW_LABELS.length;
+      state.modelScrollOffset = 0;
+      invalidateWindowCaches(state);
+      render(state, renderer);
+      return true;
+    }
+
+    // Shift+Tab or <: prev time window
+    if (sequence === '\x1b[Z' || sequence === '<') {
+      state.selectedWindowIndex =
+        (state.selectedWindowIndex - 1 + WINDOW_LABELS.length) % WINDOW_LABELS.length;
+      state.modelScrollOffset = 0;
+      invalidateWindowCaches(state);
+      render(state, renderer);
+      return true;
+    }
+
+    // Right arrow: next view
+    if (sequence === '\x1b[C') {
+      const idx = VIEW_ORDER.indexOf(state.selectedView);
+      const next = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length]!;
+      handleViewSwitch(next);
+      return true;
+    }
+
+    // Left arrow: prev view
+    if (sequence === '\x1b[D') {
+      const idx = VIEW_ORDER.indexOf(state.selectedView);
+      const prev = VIEW_ORDER[(idx - 1 + VIEW_ORDER.length) % VIEW_ORDER.length]!;
+      handleViewSwitch(prev);
+      return true;
+    }
+
+    // Matrix page navigation: , or [ = prev page, . or ] = next page
+    if ((sequence === ',' || sequence === '[') && state.selectedView === 'matrix') {
+      state.matrixPage = Math.max(0, state.matrixPage - 1);
+      render(state, renderer);
+      return true;
+    }
+    if ((sequence === '.' || sequence === ']') && state.selectedView === 'matrix') {
+      state.matrixPage = Math.min(3, state.matrixPage + 1);
+      render(state, renderer);
+      return true;
+    }
+
+    // 1-9/0: switch view
+    const viewMode = VIEW_KEYS[sequence];
+    if (viewMode) {
+      handleViewSwitch(viewMode);
+      return true;
+    }
+
+    // Export view actions: p/w/l/a
+    if (
+      state.selectedView === 'export' &&
+      (sequence === 'p' || sequence === 'w' || sequence === 'l' || sequence === 'a')
+    ) {
+      handleExport(sequence, state, renderer);
+      return true;
+    }
+
+    // j / Down: scroll down (overview model list or scrollable views)
+    if (sequence === 'j' || sequence === '\x1b[B') {
+      if (state.selectedView === 'overview') {
+        const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
+        const modelCount = windowStats?.topModels.length ?? 0;
+        const visibleCount = 10;
+        const maxOffset = Math.max(0, modelCount - visibleCount);
+        if (state.modelScrollOffset < maxOffset) {
+          state.modelScrollOffset++;
+          render(state, renderer);
+        }
+        return true;
+      }
+      if (SCROLLABLE_VIEWS.has(state.selectedView)) {
+        const itemCount = getScrollableItemCount(state);
+        const visibleCount = getVisibleCount(state.selectedView);
+        const maxOffset = Math.max(0, itemCount - visibleCount);
+        const current = getScrollOffset(state);
+        if (current < maxOffset) {
+          setScrollOffset(state, current + 1);
+          render(state, renderer);
+        }
+        return true;
       }
       return false;
-    });
-  }
+    }
+
+    // k / Up: scroll up
+    if (sequence === 'k' || sequence === '\x1b[A') {
+      if (state.selectedView === 'overview') {
+        if (state.modelScrollOffset > 0) {
+          state.modelScrollOffset--;
+          render(state, renderer);
+        }
+        return true;
+      }
+      if (SCROLLABLE_VIEWS.has(state.selectedView)) {
+        const current = getScrollOffset(state);
+        if (current > 0) {
+          setScrollOffset(state, current - 1);
+          render(state, renderer);
+        }
+        return true;
+      }
+      return false;
+    }
+
+    // h: prev day (explain/replay view)
+    if (sequence === 'h' && state.selectedView === 'explain') {
+      shiftExplainDate(state, -1);
+      render(state, renderer);
+      return true;
+    }
+    if (sequence === 'h' && state.selectedView === 'replay') {
+      shiftReplayDate(state, -1);
+      render(state, renderer);
+      return true;
+    }
+
+    // l: next day (explain/replay view)
+    if (sequence === 'l' && state.selectedView === 'explain') {
+      shiftExplainDate(state, 1);
+      render(state, renderer);
+      return true;
+    }
+    if (sequence === 'l' && state.selectedView === 'replay') {
+      shiftReplayDate(state, 1);
+      render(state, renderer);
+      return true;
+    }
+
+    // Enter: expand/collapse flow blocks (replay view)
+    if (sequence === '\r' && state.selectedView === 'replay') {
+      const blockIndex = state.replayScrollOffset;
+      if (state.replayExpandedBlocks.has(blockIndex)) {
+        state.replayExpandedBlocks.delete(blockIndex);
+      } else {
+        state.replayExpandedBlocks.add(blockIndex);
+      }
+      render(state, renderer);
+      return true;
+    }
+
+    // Enter: expand/collapse sample prompts for the top visible line (receipts view)
+    if (sequence === '\r' && state.selectedView === 'receipts') {
+      const target = state.receiptsScrollOffset;
+      state.receiptsExpandedLineIndex = state.receiptsExpandedLineIndex === target ? null : target;
+      render(state, renderer);
+      return true;
+    }
+
+    // o: cycle sort mode (receipts view)
+    if (sequence === 'o' && state.selectedView === 'receipts') {
+      const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
+      const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
+      state.receiptsSortMode = order[nextIndex]!;
+      state.receiptsScrollOffset = 0;
+      state.receiptsExpandedLineIndex = null;
+      render(state, renderer);
+      return true;
+    }
+
+    // f: cycle category filter through encountered categories + null (receipts view)
+    if (sequence === 'f' && state.selectedView === 'receipts') {
+      const receipt = state.cachedReceipt;
+      if (!receipt || receipt.lines.length === 0) {
+        return true;
+      }
+      const categories = Array.from(new Set(receipt.lines.map((l) => l.category)));
+      const current = state.receiptsCategoryFilter;
+      const currentIndex = current === null ? -1 : categories.indexOf(current);
+      const nextIndex = currentIndex + 1;
+      state.receiptsCategoryFilter = nextIndex >= categories.length ? null : categories[nextIndex]!;
+      state.receiptsScrollOffset = 0;
+      state.receiptsExpandedLineIndex = null;
+      render(state, renderer);
+      return true;
+    }
+
+    // s: toggle sort mode
+    if (sequence === 's') {
+      state.sortMode = state.sortMode === 'cost' ? 'tokens' : 'cost';
+      state.modelScrollOffset = 0;
+      render(state, renderer);
+      return true;
+    }
+
+    // r: refresh data
+    if (sequence === 'r') {
+      void reloadAllData(state, renderer);
+      return true;
+    }
+
+    // q: quit
+    if (sequence === 'q') {
+      renderer.destroy();
+      process.exit(0);
+    }
+
+    return false;
+  });
 }

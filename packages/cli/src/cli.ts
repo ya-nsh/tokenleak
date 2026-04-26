@@ -39,18 +39,43 @@ import {
   initPricing,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
-import { JsonRenderer, SvgRenderer, TerminalRenderer, PngRenderer, renderWrappedPng, renderReceiptSvg, renderReceiptPng, renderAdvisorView, startLiveServer, startWrappedLiveServer, colorize256, bold256, dim, bold } from '@tokenleak/renderers';
+import {
+  JsonRenderer,
+  SvgRenderer,
+  TerminalRenderer,
+  PngRenderer,
+  renderWrappedPng,
+  renderReceiptSvg,
+  renderReceiptPng,
+  renderAdvisorView,
+  startLiveServer,
+  startWrappedLiveServer,
+  colorize256,
+  bold256,
+  dim,
+  bold,
+} from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
 import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
-import { buildCursorHelpText, hasCursorUsageCache, isCursorLoggedIn, runCursorCommand, shouldSyncCursorForRun } from './cursor.js';
+import {
+  buildCursorHelpText,
+  hasCursorUsageCache,
+  isCursorLoggedIn,
+  runCursorCommand,
+  shouldSyncCursorForRun,
+} from './cursor.js';
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildReplayHelpText, renderReplayTerminal } from './replay.js';
-import { buildReceiptsHelpText, collectEventsForReceipt, renderReceiptTerminal } from './receipts.js';
+import {
+  buildReceiptsHelpText,
+  collectEventsForReceipt,
+  renderReceiptTerminal,
+} from './receipts.js';
 import { buildCliArgTokens } from './flags.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
@@ -112,7 +137,7 @@ interface ProviderLoadConfig extends ProviderFilterConfig {
 }
 
 interface FocusConfig extends ProviderLoadConfig {
-  format: typeof FOCUS_FORMAT_VALUES[number];
+  format: (typeof FOCUS_FORMAT_VALUES)[number];
   output: string | null;
   width: number;
   noColor: boolean;
@@ -177,7 +202,7 @@ function buildHelpText(): string {
     '  focus                  Rank sessions by deep-work score',
     '  commons                Export or inspect anonymized aggregate usage data',
     '  nutrition              Estimate token cost per local Git outcome signal',
-    '  replay [date]          Replay a day\'s session timeline (defaults to today)',
+    "  replay [date]          Replay a day's session timeline (defaults to today)",
     '  receipts               Itemized receipt of spend by prompt behavior',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
@@ -366,14 +391,20 @@ function normalizeCliArg(arg: string): string {
   return flagMap[arg] ?? arg;
 }
 
-export function buildInteractiveSummary(cliArgs: Record<string, unknown>, ok: boolean, exitCode: number): string {
+export function buildInteractiveSummary(
+  cliArgs: Record<string, unknown>,
+  ok: boolean,
+  exitCode: number,
+): string {
   if (!ok) {
     return `Command exited with code ${exitCode}.`;
   }
 
   if (typeof cliArgs['output'] === 'string') {
     const outputPath = cliArgs['output'];
-    const format = String(cliArgs['format'] ?? inferFormatFromPath(outputPath) ?? 'output').toUpperCase();
+    const format = String(
+      cliArgs['format'] ?? inferFormatFromPath(outputPath) ?? 'output',
+    ).toUpperCase();
     return `${format} written to ${outputPath}.`;
   }
 
@@ -431,7 +462,11 @@ async function executeInteractiveCommand(
       };
     }
 
-    const command = [process.execPath, cliPath, ...(request.argv ?? buildCliArgTokens(request.args))];
+    const command = [
+      process.execPath,
+      cliPath,
+      ...(request.argv ?? buildCliArgTokens(request.args)),
+    ];
 
     if (request.executionMode === 'inherit') {
       const proc = Bun.spawn(command, {
@@ -539,15 +574,18 @@ function createRegistry(): ProviderRegistry {
   return registry;
 }
 
-function validateProviderSelection(config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig): void {
-  if (config.allProviders && (
-    config.provider ||
-    config.claude ||
-    config.codex ||
-    config.cursor ||
-    config.pi ||
-    config.openCode
-  )) {
+function validateProviderSelection(
+  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
+): void {
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 }
@@ -560,7 +598,9 @@ async function selectAvailableProviders(
   const requestedProviders = getRequestedProviders(config);
   const requestedCursor = requestedProviders.has(PROVIDER_SHORTCUTS.cursor);
   if (requestedCursor && !isCursorLoggedIn() && !hasCursorUsageCache()) {
-    throw new TokenleakError('Cursor is selected but not authenticated. Run `tokenleak cursor login` first.');
+    throw new TokenleakError(
+      'Cursor is selected but not authenticated. Run `tokenleak cursor login` first.',
+    );
   }
   const cursorSync = await shouldSyncCursorForRun(config);
   if (cursorSync.attempted && cursorSync.error) {
@@ -577,7 +617,10 @@ async function selectAvailableProviders(
   let available = await registry.getAvailable();
 
   if (!config.allProviders && requestedProviders.size > 0) {
-    if (config.provider && (config.claude || config.codex || config.cursor || config.pi || config.openCode)) {
+    if (
+      config.provider &&
+      (config.claude || config.codex || config.cursor || config.pi || config.openCode)
+    ) {
       process.stderr.write(
         `Combining provider filters: ${Array.from(requestedProviders).join(', ')}\n`,
       );
@@ -592,9 +635,10 @@ export function resolveTabbedDashboardProviderConfig(
   opts: Pick<TabbedDashboardOptions, 'providerNames'>,
 ): Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig {
   return {
-    provider: opts.providerNames && opts.providerNames.length > 0
-      ? opts.providerNames.join(',')
-      : undefined,
+    provider:
+      opts.providerNames && opts.providerNames.length > 0
+        ? opts.providerNames.join(',')
+        : undefined,
     claude: false,
     codex: false,
     cursor: false,
@@ -631,7 +675,7 @@ async function loadProviderDataForRange(
   dateRange: DateRange;
   providerDataList: ProviderData[];
 }> {
-  const resolvedProviders = available ?? await selectAvailableProviders(config);
+  const resolvedProviders = available ?? (await selectAvailableProviders(config));
   const availableProviders = resolvedProviders;
   if (availableProviders.length === 0) {
     throw new TokenleakError('No provider data found');
@@ -656,7 +700,7 @@ async function loadProviderDataForRange(
 }
 
 /** Infer format from output file extension. */
-export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[number] | null {
+export function inferFormatFromPath(filePath: string): (typeof FORMAT_VALUES)[number] | null {
   const ext = filePath.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'json':
@@ -672,8 +716,8 @@ export function inferFormatFromPath(filePath: string): typeof FORMAT_VALUES[numb
 
 /** Resolve effective config by merging config file, env vars, and CLI flags. */
 export function resolveConfig(cliArgs: Record<string, unknown>): {
-  format: typeof FORMAT_VALUES[number];
-  theme: typeof THEME_VALUES[number];
+  format: (typeof FORMAT_VALUES)[number];
+  theme: (typeof THEME_VALUES)[number];
   since?: string;
   until?: string;
   days: number;
@@ -701,8 +745,8 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   const fileConfig = loadConfig();
   const envConfig = loadEnvOverrides();
 
-  type Format = typeof FORMAT_VALUES[number];
-  type Theme = typeof THEME_VALUES[number];
+  type Format = (typeof FORMAT_VALUES)[number];
+  type Theme = (typeof THEME_VALUES)[number];
 
   // Defaults
   const merged: {
@@ -773,10 +817,10 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   const result: ReturnType<typeof resolveConfig> = { ...merged };
 
   if (cliArgs['format'] !== undefined) {
-    result.format = cliArgs['format'] as typeof FORMAT_VALUES[number];
+    result.format = cliArgs['format'] as (typeof FORMAT_VALUES)[number];
   }
   if (cliArgs['theme'] !== undefined) {
-    result.theme = cliArgs['theme'] as typeof THEME_VALUES[number];
+    result.theme = cliArgs['theme'] as (typeof THEME_VALUES)[number];
   }
   if (cliArgs['since'] !== undefined) {
     result.since = cliArgs['since'] as string;
@@ -881,8 +925,11 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
     listProviders: false,
   };
 
-  if (fileConfig.format && FOCUS_FORMAT_VALUES.includes(fileConfig.format as typeof FOCUS_FORMAT_VALUES[number])) {
-    merged.format = fileConfig.format as typeof FOCUS_FORMAT_VALUES[number];
+  if (
+    fileConfig.format &&
+    FOCUS_FORMAT_VALUES.includes(fileConfig.format as (typeof FOCUS_FORMAT_VALUES)[number])
+  ) {
+    merged.format = fileConfig.format as (typeof FOCUS_FORMAT_VALUES)[number];
   }
   if (fileConfig.days !== undefined) merged.days = fileConfig.days;
   if (fileConfig.width !== undefined) merged.width = fileConfig.width;
@@ -890,9 +937,9 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
 
   if (
     envConfig.format &&
-    FOCUS_FORMAT_VALUES.includes(envConfig.format as typeof FOCUS_FORMAT_VALUES[number])
+    FOCUS_FORMAT_VALUES.includes(envConfig.format as (typeof FOCUS_FORMAT_VALUES)[number])
   ) {
-    merged.format = envConfig.format as typeof FOCUS_FORMAT_VALUES[number];
+    merged.format = envConfig.format as (typeof FOCUS_FORMAT_VALUES)[number];
   }
   if (envConfig.days !== undefined) merged.days = envConfig.days;
 
@@ -900,12 +947,12 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
 
   if (cliArgs['format'] !== undefined) {
     const format = cliArgs['format'] as string;
-    if (!FOCUS_FORMAT_VALUES.includes(format as typeof FOCUS_FORMAT_VALUES[number])) {
+    if (!FOCUS_FORMAT_VALUES.includes(format as (typeof FOCUS_FORMAT_VALUES)[number])) {
       throw new TokenleakError(
         `Unsupported focus format: "${format}". Available: ${FOCUS_FORMAT_VALUES.join(', ')}`,
       );
     }
-    result.format = format as typeof FOCUS_FORMAT_VALUES[number];
+    result.format = format as (typeof FOCUS_FORMAT_VALUES)[number];
   }
   if (cliArgs['since'] !== undefined) {
     result.since = cliArgs['since'] as string;
@@ -1022,16 +1069,16 @@ function formatFocusDensity(tokensPerHour: number): string {
 
 const PROVIDER_COLORS: Record<string, number> = {
   'claude-code': 179, // amber
-  codex: 71,          // green
-  cursor: 78,         // spring green
-  pi: 73,             // cyan/teal
-  'open-code': 68,    // indigo/steel blue
+  codex: 71, // green
+  cursor: 78, // spring green
+  pi: 73, // cyan/teal
+  'open-code': 68, // indigo/steel blue
 };
 
 function colorScore(value: number, text: string, noColor: boolean): string {
-  if (value >= 8) return colorize256(text, 71, noColor);   // green
-  if (value >= 5) return colorize256(text, 179, noColor);  // yellow/amber
-  if (value >= 3) return colorize256(text, 73, noColor);   // cyan
+  if (value >= 8) return colorize256(text, 71, noColor); // green
+  if (value >= 5) return colorize256(text, 179, noColor); // yellow/amber
+  if (value >= 3) return colorize256(text, 73, noColor); // cyan
   return dim(text, noColor);
 }
 
@@ -1041,7 +1088,7 @@ function colorDuration(durationMs: number | null, text: string, noColor: boolean
 }
 
 function colorDensity(tokensPerHour: number, text: string, noColor: boolean): string {
-  if (tokensPerHour > 30_000) return colorize256(text, 71, noColor);  // green
+  if (tokensPerHour > 30_000) return colorize256(text, 71, noColor); // green
   if (tokensPerHour > 15_000) return colorize256(text, 179, noColor); // yellow
   return dim(text, noColor);
 }
@@ -1130,7 +1177,11 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
   const border = (ch: string) => colorize256(ch, 245, noColor);
 
   function hLine(left: string, mid: string, right: string): string {
-    return border(left) + colWidths.map((w) => border('\u2500'.repeat(w))).join(border(mid)) + border(right);
+    return (
+      border(left) +
+      colWidths.map((w) => border('\u2500'.repeat(w))).join(border(mid)) +
+      border(right)
+    );
   }
 
   function tableRow(cells: string[]): string {
@@ -1151,12 +1202,18 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
       const paddedText = truncated.padEnd(inner);
       // Colorize based on column
       switch (c) {
-        case 0: return ` ${colorScore(entry.score, paddedText, noColor)} `;
-        case 1: return ` ${colorDuration(entry.durationMs, paddedText, noColor)} `;
-        case 2: return ` ${colorDensity(entry.tokensPerHour, paddedText, noColor)} `;
-        case 3: return ` ${colorStreak(entry.streak, paddedText, noColor)} `;
-        case 4: return ` ${colorProvider(entry.provider, paddedText, noColor)} `;
-        default: return ` ${paddedText} `;
+        case 0:
+          return ` ${colorScore(entry.score, paddedText, noColor)} `;
+        case 1:
+          return ` ${colorDuration(entry.durationMs, paddedText, noColor)} `;
+        case 2:
+          return ` ${colorDensity(entry.tokensPerHour, paddedText, noColor)} `;
+        case 3:
+          return ` ${colorStreak(entry.streak, paddedText, noColor)} `;
+        case 4:
+          return ` ${colorProvider(entry.provider, paddedText, noColor)} `;
+        default:
+          return ` ${paddedText} `;
       }
     });
     return border('\u2502') + padded.join(border('\u2502')) + border('\u2502');
@@ -1200,7 +1257,9 @@ function resolveTerminalJsonFormat(
       return format;
     }
 
-    throw new TokenleakError(`tokenleak ${commandName} only supports --format terminal or --format json`);
+    throw new TokenleakError(
+      `tokenleak ${commandName} only supports --format terminal or --format json`,
+    );
   }
 
   if (typeof cliArgs['output'] === 'string') {
@@ -1274,10 +1333,12 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
 
   if (report.missingOutcomeRepos.length > 0) {
     lines.push('');
-    lines.push(dim(
-      `No Git outcome signal for ${report.missingOutcomeRepos.length} repo(s): ${report.missingOutcomeRepos.map((repo) => basename(repo)).join(', ')}`,
-      noColor,
-    ));
+    lines.push(
+      dim(
+        `No Git outcome signal for ${report.missingOutcomeRepos.length} repo(s): ${report.missingOutcomeRepos.map((repo) => basename(repo)).join(', ')}`,
+        noColor,
+      ),
+    );
   }
 
   return lines.join('\n');
@@ -1287,14 +1348,15 @@ async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const format = resolveTerminalJsonFormat('nutrition', cliArgs);
 
-  if (config.allProviders && (
-    config.provider ||
-    config.claude ||
-    config.codex ||
-    config.cursor ||
-    config.pi ||
-    config.openCode
-  )) {
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 
@@ -1319,9 +1381,10 @@ async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
   const outcomeSignals = await collectGitOutcomeSignals(events, dateRange);
   const report = buildNutritionReport(events, outcomeSignals, dateRange);
 
-  const rendered = format === 'json'
-    ? JSON.stringify(report, null, 2)
-    : renderNutritionReport(report, config.width, config.noColor);
+  const rendered =
+    format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : renderNutritionReport(report, config.width, config.noColor);
 
   if (config.output) {
     writeFileSync(config.output, rendered);
@@ -1353,9 +1416,14 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
   const events = providerDataList.flatMap((provider) => provider.events ?? []);
 
   if (events.length === 0) {
-    const emptyMsg = config.format === 'json'
-      ? JSON.stringify({ method: 'No event data', entries: [] }, null, 2)
-      : renderFocusReport({ method: 'No event-level data found for focus analysis.', entries: [] }, config.width, config.noColor);
+    const emptyMsg =
+      config.format === 'json'
+        ? JSON.stringify({ method: 'No event data', entries: [] }, null, 2)
+        : renderFocusReport(
+            { method: 'No event-level data found for focus analysis.', entries: [] },
+            config.width,
+            config.noColor,
+          );
     if (config.output) {
       writeFileSync(config.output, emptyMsg);
     } else {
@@ -1366,9 +1434,10 @@ export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> 
 
   const report = buildFocusReport(events);
 
-  const rendered = config.format === 'json'
-    ? JSON.stringify(report, null, 2)
-    : renderFocusReport(report, config.width, config.noColor);
+  const rendered =
+    config.format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : renderFocusReport(report, config.width, config.noColor);
 
   if (config.output) {
     writeFileSync(config.output, rendered);
@@ -1393,6 +1462,12 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  if (!FORMAT_VALUES.includes(config.format)) {
+    throw new TokenleakError(
+      `Format "${config.format}" is not supported. Available formats: json, svg, png, terminal, wrapped`,
+    );
+  }
+
   const dateRange = computeDateRange({
     since: config.since,
     until: config.until,
@@ -1408,7 +1483,9 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     throw new TokenleakError('No provider data found');
   }
   if (config.wrappedLive) {
-    process.stderr.write(`Found ${available.length} provider${available.length > 1 ? 's' : ''}: ${available.map(p => p.name).join(', ')}\n`);
+    process.stderr.write(
+      `Found ${available.length} provider${available.length > 1 ? 's' : ''}: ${available.map((p) => p.name).join(', ')}\n`,
+    );
   }
 
   // Handle --compare mode.
@@ -1490,10 +1567,13 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const stats = aggregate(mergedDaily, dateRange.until);
 
   // Force --more when --advisor is used (needs event data)
-  const needsMore = config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
+  const needsMore =
+    config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
 
   if (config.wrappedLive && needsMore) {
-    process.stderr.write('Computing extended analytics (hourOfDay, sessions, cache, projections)...\n');
+    process.stderr.write(
+      'Computing extended analytics (hourOfDay, sessions, cache, projections)...\n',
+    );
   }
 
   const output: TokenleakOutput = {
@@ -1545,7 +1625,9 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     process.stderr.write(`Wrapped PNG written to ${outputPath}\n`);
 
     if (config.clipboard) {
-      process.stderr.write('Clipboard is not supported for binary PNG output. Use --output to save the file.\n');
+      process.stderr.write(
+        'Clipboard is not supported for binary PNG output. Use --output to save the file.\n',
+      );
     }
     if (config.open) {
       await openFile(outputPath);
@@ -1558,9 +1640,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       const url = await uploadToGist(base64Content, filename, description);
       process.stderr.write(`Uploaded to gist: ${url}\n`);
     } else if (config.upload !== undefined) {
-      throw new TokenleakError(
-        `Unknown upload target "${config.upload}". Supported: gist`,
-      );
+      throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
     }
     return;
   }
@@ -1573,9 +1653,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     if (config.open) ignoredFlags.push('--open');
     if (config.upload) ignoredFlags.push('--upload');
     if (ignoredFlags.length > 0) {
-      process.stderr.write(
-        `Warning: ${ignoredFlags.join(', ')} ignored in --live-server mode.\n`,
-      );
+      process.stderr.write(`Warning: ${ignoredFlags.join(', ')} ignored in --live-server mode.\n`);
     }
 
     const renderOptions: RenderOptions = {
@@ -1680,9 +1758,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     const url = await uploadToGist(text, filename, description);
     process.stderr.write(`Uploaded to gist: ${url}\n`);
   } else if (config.upload !== undefined) {
-    throw new TokenleakError(
-      `Unknown upload target "${config.upload}". Supported: gist`,
-    );
+    throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
   }
 }
 
@@ -1928,15 +2004,16 @@ function parseCommonsExportArgs(
           throw new TokenleakError(`${arg} requires a value`);
         }
         const value = argv[index + 1]!;
-        const key = arg === '--since' || arg === '-s'
-          ? 'since'
-          : arg === '--until' || arg === '-u'
-            ? 'until'
-            : arg === '--days' || arg === '-d'
-              ? 'days'
-              : arg === '--output' || arg === '-o'
-                ? 'output'
-                : 'provider';
+        const key =
+          arg === '--since' || arg === '-s'
+            ? 'since'
+            : arg === '--until' || arg === '-u'
+              ? 'until'
+              : arg === '--days' || arg === '-d'
+                ? 'days'
+                : arg === '--output' || arg === '-o'
+                  ? 'output'
+                  : 'provider';
         if (key === 'days') {
           const days = Number(value);
           if (!Number.isFinite(days) || days <= 0) {
@@ -1997,7 +2074,9 @@ function parseCommonsExportArgs(
 
 function parseCommonsArgs(
   argv: string[],
-): { action: 'export' | 'prompt'; cliArgs: Record<string, unknown> } | { action: 'inspect'; file: string } {
+):
+  | { action: 'export' | 'prompt'; cliArgs: Record<string, unknown> }
+  | { action: 'inspect'; file: string } {
   const action = argv[0];
   if (!action || action === '--help' || action === '-h') {
     return { action: 'export', cliArgs: { help: true } };
@@ -2013,7 +2092,10 @@ function parseCommonsArgs(
   if (action === 'prompt') {
     return {
       action: 'prompt',
-      cliArgs: parseCommonsExportArgs(argv.slice(1), { allowClipboard: true, commandName: 'prompt' }),
+      cliArgs: parseCommonsExportArgs(argv.slice(1), {
+        allowClipboard: true,
+        commandName: 'prompt',
+      }),
     };
   }
 
@@ -2153,14 +2235,15 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   const config = resolveConfig(cliArgs);
   const format = resolveReplayFormat(cliArgs);
 
-  if (config.allProviders && (
-    config.provider ||
-    config.claude ||
-    config.codex ||
-    config.cursor ||
-    config.pi ||
-    config.openCode
-  )) {
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 
@@ -2173,9 +2256,10 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
 
   const replayOutput = await loadTokenleakData(available, replayRange);
   const report = buildReplayReport(replayOutput.providers, date);
-  const rendered = format === 'json'
-    ? JSON.stringify(report, null, 2)
-    : renderReplayTerminal(report, config.width);
+  const rendered =
+    format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : renderReplayTerminal(report, config.width);
 
   if (config.output) {
     writeFileSync(config.output, rendered);
@@ -2208,14 +2292,15 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   const config = resolveConfig(cliArgs);
   const format = resolveExplainFormat(cliArgs);
 
-  if (config.allProviders && (
-    config.provider ||
-    config.claude ||
-    config.codex ||
-    config.cursor ||
-    config.pi ||
-    config.openCode
-  )) {
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 
@@ -2228,9 +2313,10 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
 
   const explainOutput = await loadTokenleakData(available, explainRange);
   const report = buildExplainReport(explainOutput.providers, date);
-  const rendered = format === 'json'
-    ? JSON.stringify(report, null, 2)
-    : renderExplainTerminal(report, config.width);
+  const rendered =
+    format === 'json'
+      ? JSON.stringify(report, null, 2)
+      : renderExplainTerminal(report, config.width);
 
   if (config.output) {
     writeFileSync(config.output, rendered);
@@ -2360,13 +2446,22 @@ export function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
   return cliArgs;
 }
 
-export function inferReceiptsFormat(cliArgs: Record<string, unknown>): 'terminal' | 'svg' | 'png' | 'json' {
+export function inferReceiptsFormat(
+  cliArgs: Record<string, unknown>,
+): 'terminal' | 'svg' | 'png' | 'json' {
   const explicit = cliArgs['format'];
   if (typeof explicit === 'string') {
-    if (explicit === 'terminal' || explicit === 'svg' || explicit === 'png' || explicit === 'json') {
+    if (
+      explicit === 'terminal' ||
+      explicit === 'svg' ||
+      explicit === 'png' ||
+      explicit === 'json'
+    ) {
       return explicit;
     }
-    throw new TokenleakError(`Unknown receipts format "${explicit}" (use terminal, svg, png, or json)`);
+    throw new TokenleakError(
+      `Unknown receipts format "${explicit}" (use terminal, svg, png, or json)`,
+    );
   }
   const output = cliArgs['output'];
   if (typeof output === 'string') {
@@ -2409,26 +2504,30 @@ export function validateReceiptsShareFlags(
 
 async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
-  if (config.allProviders && (
-    config.provider || config.claude || config.codex || config.cursor || config.pi || config.openCode
-  )) {
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
     throw new TokenleakError('--all-providers cannot be combined with provider filters');
   }
 
   const format = inferReceiptsFormat(cliArgs);
   const theme: 'dark' | 'light' = config.theme === 'light' ? 'light' : 'dark';
-  const topLines = typeof cliArgs['top'] === 'number' && Number.isFinite(cliArgs['top'] as number)
-    ? (cliArgs['top'] as number)
-    : undefined;
+  const topLines =
+    typeof cliArgs['top'] === 'number' && Number.isFinite(cliArgs['top'] as number)
+      ? (cliArgs['top'] as number)
+      : undefined;
 
-  validateReceiptsShareFlags(
-    format,
-    {
-      output: config.output ?? null,
-      open: config.open,
-      upload: config.upload,
-    },
-  );
+  validateReceiptsShareFlags(format, {
+    output: config.output ?? null,
+    open: config.open,
+    upload: config.upload,
+  });
 
   const range = computeDateRange({ since: config.since, until: config.until, days: config.days });
   const available = await selectAvailableProviders(config);
@@ -2462,7 +2561,9 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   // Sharing: clipboard
   if (config.clipboard) {
     if (format === 'png') {
-      process.stderr.write('Clipboard is not supported for binary PNG output. Use --output to save the file.\n');
+      process.stderr.write(
+        'Clipboard is not supported for binary PNG output. Use --output to save the file.\n',
+      );
     } else {
       const text = typeof rendered === 'string' ? rendered : rendered.toString('utf-8');
       await copyToClipboard(text);
@@ -2491,8 +2592,7 @@ const main = defineCommand({
   meta: {
     name: 'tokenleak',
     version: VERSION,
-    description:
-      'Visualise your AI coding-assistant token usage across providers',
+    description: 'Visualise your AI coding-assistant token usage across providers',
   },
   args: {
     format: {
@@ -2888,7 +2988,6 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
-  await initPricing();
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   const argv = normalizedArgv;
 
@@ -2906,6 +3005,7 @@ if (isDirectExecution) {
         process.exit(0);
       }
 
+      await initPricing();
       await runExplain(date, cliArgs);
       process.exit(0);
     } catch (error: unknown) {
@@ -2926,6 +3026,7 @@ if (isDirectExecution) {
         process.exit(0);
       }
 
+      await initPricing();
       await runReplay(date, cliArgs);
       process.exit(0);
     } catch (error: unknown) {
@@ -2949,8 +3050,10 @@ if (isDirectExecution) {
       if (parsed.action === 'inspect') {
         runCommonsInspect(parsed.file);
       } else if (parsed.action === 'prompt') {
+        await initPricing();
         await runCommonsPrompt(parsed.cliArgs);
       } else {
+        await initPricing();
         await runCommonsExport(parsed.cliArgs);
       }
       process.exit(0);
@@ -2972,11 +3075,16 @@ if (isDirectExecution) {
       process.exit(0);
     }
 
+    await initPricing();
     await runMain(focusMain);
     process.exit(0);
   }
   if (argv[0] === 'waste') {
-    handleError(new TokenleakError('tokenleak waste is not a standalone command. Open the TUI and use the Advisor view for Waste Patterns.'));
+    handleError(
+      new TokenleakError(
+        'tokenleak waste is not a standalone command. Open the TUI and use the Advisor view for Waste Patterns.',
+      ),
+    );
   }
   if (argv[0] === 'nutrition') {
     const nutritionArgv = argv.slice(1);
@@ -2992,6 +3100,7 @@ if (isDirectExecution) {
       process.exit(0);
     }
 
+    await initPricing();
     await runMain(nutritionMain);
     process.exit(0);
   }
@@ -3028,6 +3137,7 @@ if (isDirectExecution) {
         process.exit(0);
       }
 
+      await initPricing();
       await runReceipts(cliArgs);
       process.exit(0);
     } catch (error: unknown) {
@@ -3046,7 +3156,15 @@ if (isDirectExecution) {
     process.exit(0);
   }
 
-  if (argv.includes('--legacy') && shouldStartInteractiveCli(argv.filter((a) => a !== '--legacy'), Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+  if (
+    argv.includes('--legacy') &&
+    shouldStartInteractiveCli(
+      argv.filter((a) => a !== '--legacy'),
+      Boolean(process.stdin.isTTY),
+      Boolean(process.stdout.isTTY),
+    )
+  ) {
+    void initPricing();
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
       const scopedProviders = await resolveTabbedDashboardProviders(opts);
 
@@ -3057,11 +3175,18 @@ if (isDirectExecution) {
       await startTabbedDashboard(scopedProviders, opts);
     };
 
-    await startInteractiveCli({
-      version: VERSION,
-      helpText: buildHelpText(),
-    }, executeInteractiveCommand, launchTabbed);
-  } else if (shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
+    await startInteractiveCli(
+      {
+        version: VERSION,
+        helpText: buildHelpText(),
+      },
+      executeInteractiveCommand,
+      launchTabbed,
+    );
+  } else if (
+    shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))
+  ) {
+    void initPricing();
     try {
       const { main: startTui } = await import('@tokenleak/tui');
       await startTui();
@@ -3069,6 +3194,7 @@ if (isDirectExecution) {
       handleError(error);
     }
   } else {
+    await initPricing();
     await runMain(main);
   }
 }

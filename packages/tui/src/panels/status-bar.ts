@@ -26,6 +26,21 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
+  if (state.viewTasks.activeLabel) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: `Loading ${state.viewTasks.activeLabel}...`, fg: COLORS.amber }),
+      Text({ content: `Updated ${formatUpdateTime()}`, fg: COLORS.dimWhite }),
+    );
+  }
+
   if (state.showHelp) {
     return Box(
       {
@@ -56,8 +71,8 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const helpHint = '?:help';
-  const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-9/0/R:view`;
+  const helpHint = '?:keys';
+  const nav = `\u2190\u2192:view  tab/\u21E7tab:period`;
   const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
 
   let keys: string;
@@ -71,7 +86,13 @@ export function buildStatusBar(state: AppState) {
     keys = `${nav}  h/l:date  j/k:scroll  enter:expand  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'receipts') {
     keys = `${nav}  j/k:scroll  enter:expand  o:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped' || state.selectedView === 'nutrition') {
+  } else if (
+    state.selectedView === 'advisor' ||
+    state.selectedView === 'focus' ||
+    state.selectedView === 'compare' ||
+    state.selectedView === 'wrapped' ||
+    state.selectedView === 'nutrition'
+  ) {
     keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
     keys = `${nav}  p:png  w:wrapped  l:live  a:LLM prompt  r:refresh${cursorHint}  ${helpHint}  q:quit`;

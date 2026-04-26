@@ -13,7 +13,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCostBreakdown } from '../models/cost';
-import { isInRange } from '../utils';
+import { isInRange, mapWithConcurrency } from '../utils';
 
 const DEFAULT_CONFIG_DIR = join(homedir(), '.claude');
 
@@ -184,14 +184,10 @@ export function extractUserPrompt(record: unknown): string | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null;
 
-  return trimmed.length > MAX_PROMPT_CHARS
-    ? trimmed.slice(0, MAX_PROMPT_CHARS)
-    : trimmed;
+  return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
+function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
   if (!pricing) {
     return undefined;
   }
@@ -309,10 +305,8 @@ export class ClaudeCodeProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const files = collectJsonlFiles(this.baseDir);
-    const allRecords: UsageRecord[] = [];
     const allEvents: UsageEvent[] = [];
-
-    for (const file of files) {
+    const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const latestRecordsByMessageId = new Map<string, UsageRecord>();
       const anonymousRecords: UsageRecord[] = [];
       const relativeFile = relative(this.baseDir, file).split(sep).join('/');
@@ -343,11 +337,12 @@ export class ClaudeCodeProvider implements IProvider {
       } catch {
         // Skip files that fail to parse — corrupted files shouldn't
         // prevent loading data from other files
-        continue;
+        return [];
       }
 
-      allRecords.push(...latestRecordsByMessageId.values(), ...anonymousRecords);
-    }
+      return [...latestRecordsByMessageId.values(), ...anonymousRecords];
+    });
+    const allRecords = recordsByFile.flat();
 
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {

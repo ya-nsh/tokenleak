@@ -1,11 +1,39 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, WasteReport, NutritionReport, Receipt, ReceiptCategory } from '@tokenleak/core';
+import type {
+  AdvisorReport,
+  FocusReport,
+  ExplainReport,
+  CompareOutput,
+  MoreStats,
+  ReplayReport,
+  WasteReport,
+  NutritionReport,
+  Receipt,
+  ReceiptCategory,
+} from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay' | 'nutrition' | 'receipts';
+export type ViewMode =
+  | 'overview'
+  | 'matrix'
+  | 'advisor'
+  | 'focus'
+  | 'explain'
+  | 'compare'
+  | 'export'
+  | 'wrapped'
+  | 'replay'
+  | 'nutrition'
+  | 'receipts';
 export type SortMode = 'cost' | 'tokens';
 export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
+
+export interface ViewTaskState {
+  pendingKeys: Set<string>;
+  errors: Record<string, string>;
+  activeLabel: string | null;
+}
 
 export interface AppState {
   selectedWindowIndex: number; // 0=1D, 1=7D, 2=30D, 3=90D, 4=ALL
@@ -16,14 +44,17 @@ export interface AppState {
   modelScrollOffset: number;
 
   // new view state
-  explainDate: string | null;       // YYYY-MM-DD, defaults to peak day
+  explainDate: string | null; // YYYY-MM-DD, defaults to peak day
   focusScrollOffset: number;
   advisorScrollOffset: number;
   nutritionScrollOffset: number;
+  nutritionSignalsLoading: boolean;
+  nutritionSignalsLoadedKeys: Set<string>;
   compareScrollOffset: number;
+  viewTasks: ViewTaskState;
 
   // matrix pages
-  matrixPage: number;               // 0-3
+  matrixPage: number; // 0-3
 
   // help overlay
   showHelp: boolean;
@@ -32,7 +63,7 @@ export interface AppState {
   wrappedScrollOffset: number;
 
   // export view state
-  exportStatus: string | null;      // status message shown during export
+  exportStatus: string | null; // status message shown during export
 
   // cursor setup modal state
   showCursorSetup: boolean;
@@ -68,10 +99,11 @@ export interface AppState {
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
 export const WINDOW_DAYS = [1, 7, 30, 90, 0] as const;
+export const DEFAULT_WINDOW_INDEX = 1;
 
 export function createInitialState(): AppState {
   return {
-    selectedWindowIndex: 4,       // ALL
+    selectedWindowIndex: DEFAULT_WINDOW_INDEX,
     selectedView: 'overview',
     isLoading: true,
     data: null,
@@ -81,7 +113,14 @@ export function createInitialState(): AppState {
     focusScrollOffset: 0,
     advisorScrollOffset: 0,
     nutritionScrollOffset: 0,
+    nutritionSignalsLoading: false,
+    nutritionSignalsLoadedKeys: new Set(),
     compareScrollOffset: 0,
+    viewTasks: {
+      pendingKeys: new Set(),
+      errors: {},
+      activeLabel: null,
+    },
     matrixPage: 0,
     showHelp: false,
     wrappedScrollOffset: 0,

@@ -13,7 +13,7 @@ import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { estimateCostBreakdown } from '../models/cost';
-import { isInRange } from '../utils';
+import { isInRange, mapWithConcurrency } from '../utils';
 
 /**
  * Shape of a Codex session JSONL response event.
@@ -67,14 +67,8 @@ interface SessionContext {
  * Narrows an unknown parsed JSONL record to a CodexResponseEvent,
  * returning `null` if the record doesn't match the expected shape.
  */
-function parseResponseEvent(
-  record: unknown,
-): CodexResponseEvent | null {
-  if (
-    typeof record !== 'object' ||
-    record === null ||
-    !('type' in record)
-  ) {
+function parseResponseEvent(record: unknown): CodexResponseEvent | null {
+  if (typeof record !== 'object' || record === null || !('type' in record)) {
     return null;
   }
 
@@ -136,9 +130,7 @@ function extractDate(timestamp: string): string | null {
   return match ? match[1]! : null;
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
+function toCachePricing(pricing: ReturnType<typeof estimateCostBreakdown>['pricing']) {
   if (!pricing) {
     return undefined;
   }
@@ -222,10 +214,7 @@ function inferProjectIdFromContext(record: unknown): string | null {
   return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null;
 }
 
-function parseTokenCountUsage(
-  record: unknown,
-  context: SessionContext,
-): CodexUsageRecord | null {
+function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUsageRecord | null {
   if (typeof record !== 'object' || record === null) {
     return null;
   }
@@ -237,11 +226,7 @@ function parseTokenCountUsage(
 
   const timestamp = obj['timestamp'];
   const payload = obj['payload'];
-  if (
-    typeof timestamp !== 'string' ||
-    typeof payload !== 'object' ||
-    payload === null
-  ) {
+  if (typeof timestamp !== 'string' || typeof payload !== 'object' || payload === null) {
     return null;
   }
 
@@ -276,18 +261,14 @@ function parseTokenCountUsage(
     const outputTokens = usageObj['output_tokens'];
     const cachedInputTokens = usageObj['cached_input_tokens'];
 
-    if (
-      typeof inputTokens !== 'number' ||
-      typeof outputTokens !== 'number'
-    ) {
+    if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') {
       return null;
     }
 
     return {
       inputTokens,
       outputTokens,
-      cachedInputTokens:
-        typeof cachedInputTokens === 'number' ? cachedInputTokens : 0,
+      cachedInputTokens: typeof cachedInputTokens === 'number' ? cachedInputTokens : 0,
     };
   };
 
@@ -307,10 +288,7 @@ function parseTokenCountUsage(
     usage = {
       inputTokens: Math.max(0, cumulative.inputTokens - previous.inputTokens),
       outputTokens: Math.max(0, cumulative.outputTokens - previous.outputTokens),
-      cachedInputTokens: Math.max(
-        0,
-        cumulative.cachedInputTokens - previous.cachedInputTokens,
-      ),
+      cachedInputTokens: Math.max(0, cumulative.cachedInputTokens - previous.cachedInputTokens),
     };
     context.previousTotals = cumulative;
   } else if (parseUsage(totalUsage)) {
@@ -331,10 +309,7 @@ function parseTokenCountUsage(
   };
 }
 
-function parseUsageRecord(
-  record: unknown,
-  context: SessionContext,
-): CodexUsageRecord | null {
+function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageRecord | null {
   const inferredProjectId = inferProjectIdFromContext(record);
   if (inferredProjectId) {
     context.projectId = inferredProjectId;
@@ -406,9 +381,8 @@ export class CodexProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
     const files = collectJsonlFiles(this.sessionsDir);
-    const events: UsageEvent[] = [];
-
-    for (const file of files) {
+    const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
+      const fileEvents: UsageEvent[] = [];
       const context: SessionContext = {
         model: 'gpt-5',
         projectId: undefined,
@@ -431,9 +405,7 @@ export class CodexProvider implements IProvider {
           usage.sessionId = relativeFile;
           usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
 
-          const normalizedModel = normalizeModelName(
-            compactModelDateSuffix(usage.model),
-          );
+          const normalizedModel = normalizeModelName(compactModelDateSuffix(usage.model));
           const inputTokens = usage.inputTokens;
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
@@ -445,7 +417,7 @@ export class CodexProvider implements IProvider {
             cacheReadTokens,
             cacheWriteTokens,
           );
-          events.push({
+          fileEvents.push({
             provider: this.name,
             timestamp: usage.timestamp,
             date: usage.date,
@@ -460,38 +432,42 @@ export class CodexProvider implements IProvider {
             sessionId: usage.sessionId,
             projectId: usage.projectId,
           });
-
-          if (!dailyMap.has(usage.date)) {
-            dailyMap.set(usage.date, new Map());
-          }
-          const modelMap = dailyMap.get(usage.date)!;
-
-          if (!modelMap.has(normalizedModel)) {
-            modelMap.set(normalizedModel, {
-              model: normalizedModel,
-              inputTokens: 0,
-              outputTokens: 0,
-              cacheReadTokens: 0,
-              cacheWriteTokens: 0,
-              totalTokens: 0,
-              cost: 0,
-              pricing: toCachePricing(costBreakdown.pricing),
-            });
-          }
-          const breakdown = modelMap.get(normalizedModel)!;
-          breakdown.inputTokens += inputTokens;
-          breakdown.outputTokens += outputTokens;
-          breakdown.cacheReadTokens += cacheReadTokens;
-          breakdown.cacheWriteTokens += cacheWriteTokens;
-          breakdown.totalTokens += inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-          breakdown.cost += costBreakdown.totalCost;
-          if (!breakdown.pricing) {
-            breakdown.pricing = toCachePricing(costBreakdown.pricing);
-          }
         }
       } catch {
         // Skip files that fail to parse
-        continue;
+        return [];
+      }
+      return fileEvents;
+    });
+    const events = eventsByFile.flat();
+
+    for (const event of events) {
+      if (!dailyMap.has(event.date)) {
+        dailyMap.set(event.date, new Map());
+      }
+      const modelMap = dailyMap.get(event.date)!;
+
+      if (!modelMap.has(event.model)) {
+        modelMap.set(event.model, {
+          model: event.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 0,
+          cost: 0,
+          pricing: event.pricing,
+        });
+      }
+      const breakdown = modelMap.get(event.model)!;
+      breakdown.inputTokens += event.inputTokens;
+      breakdown.outputTokens += event.outputTokens;
+      breakdown.cacheReadTokens += event.cacheReadTokens;
+      breakdown.cacheWriteTokens += event.cacheWriteTokens;
+      breakdown.totalTokens += event.totalTokens;
+      breakdown.cost += event.cost;
+      if (!breakdown.pricing) {
+        breakdown.pricing = event.pricing;
       }
     }
 
@@ -500,22 +476,10 @@ export class CodexProvider implements IProvider {
       .map(([date, modelMap]) => {
         const models = [...modelMap.values()];
         const inputTokens = models.reduce((s, m) => s + m.inputTokens, 0);
-        const outputTokens = models.reduce(
-          (s, m) => s + m.outputTokens,
-          0,
-        );
-        const cacheReadTokens = models.reduce(
-          (s, m) => s + m.cacheReadTokens,
-          0,
-        );
-        const cacheWriteTokens = models.reduce(
-          (s, m) => s + m.cacheWriteTokens,
-          0,
-        );
-        const totalTokens = models.reduce(
-          (s, m) => s + m.totalTokens,
-          0,
-        );
+        const outputTokens = models.reduce((s, m) => s + m.outputTokens, 0);
+        const cacheReadTokens = models.reduce((s, m) => s + m.cacheReadTokens, 0);
+        const cacheWriteTokens = models.reduce((s, m) => s + m.cacheWriteTokens, 0);
+        const totalTokens = models.reduce((s, m) => s + m.totalTokens, 0);
         const cost = models.reduce((s, m) => s + m.cost, 0);
 
         return {
