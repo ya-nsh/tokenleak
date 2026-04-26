@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
+See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Gemini**, **GitHub Copilot**, **Amp**, **Qwen**, **Roo Code**, **Kilo Code**, **OpenClaw**, **Hermes**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
 ![Tokenleak OpenTUI overview](./docs/tui-overview.png)
 
@@ -13,12 +13,22 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `claude-code`, `anthropic`, `claude`, `claudecode` | Yes |
 | Codex | `~/.codex/sessions/**/*.jsonl` | `codex`, `openai` | Yes |
 | Cursor | `~/.config/tokenleak/cursor-cache/usage*.csv` after `tokenleak cursor login` | `cursor`, `cursor-ide`, `cursoride` | Yes |
+| Gemini | `~/.gemini/tmp/**/*.{json,jsonl}` | `gemini`, `google` | Yes |
+| GitHub Copilot | `~/.copilot/otel/**/*.jsonl` | `copilot`, `github-copilot`, `copilot-otel` | Yes |
+| Amp | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json` | `amp`, `sourcegraph-amp` | Yes |
+| Qwen | `~/.qwen/projects/**/*.jsonl` | `qwen` | Yes |
+| Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json` | `roo-code`, `roo`, `roocode` | Yes |
+| Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilo`, `kilocode` | Yes |
+| OpenClaw | `~/.openclaw/agents/**/*.jsonl*` | `openclaw`, `open-claw` | Yes |
+| Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes` | Yes |
 | OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
 | Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
 
 - Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
 - Use `CODEX_HOME` to override the Codex base directory.
 - Use `TOKENLEAK_CURSOR_DIR` to override the Cursor credentials/cache directory.
+- Use `TOKENLEAK_GEMINI_DIR`, `TOKENLEAK_COPILOT_OTEL_DIR`, `TOKENLEAK_AMP_DIR`, `TOKENLEAK_QWEN_DIR`, `TOKENLEAK_ROO_CODE_DIR`, `TOKENLEAK_KILO_CODE_DIR`, `TOKENLEAK_OPENCLAW_DIR`, and `TOKENLEAK_HERMES_DIR` to override the new provider data locations.
+- Hermes also honors `HERMES_HOME`.
 - Use `PI_CODING_AGENT_DIR` to override the Pi base directory.
 - See [Provider details](#provider-details) for the parser behavior and per-provider notes.
 
@@ -542,6 +552,84 @@ Reads Cursor usage CSV exports from the local Tokenleak cache. The cache is popu
 | **Provider name** | `cursor`                                              |
 | **Aliases**       | `cursor-ide`, `cursoride`                             |
 
+### Gemini
+
+Reads Gemini CLI session JSON, chat JSON, and JSONL usage records from the local Gemini temp directory.
+
+|                   |                                                             |
+| ----------------- | ----------------------------------------------------------- |
+| **Data location** | `~/.gemini/tmp/**/*.{json,jsonl}`                           |
+| **Override**      | Set `TOKENLEAK_GEMINI_DIR` environment variable             |
+| **Provider name** | `gemini`                                                    |
+| **Aliases**       | `google`                                                    |
+
+### GitHub Copilot
+
+Reads local Copilot OTEL JSONL spans and counts chat spans with `gen_ai.usage.*` token attributes.
+
+|                   |                                                                 |
+| ----------------- | --------------------------------------------------------------- |
+| **Data location** | `~/.copilot/otel/**/*.jsonl`                                    |
+| **Override**      | Set `TOKENLEAK_COPILOT_OTEL_DIR` environment variable           |
+| **Provider name** | `copilot`                                                       |
+| **Aliases**       | `github-copilot`, `copilot-otel`                                |
+
+### Amp
+
+Reads Sourcegraph Amp thread JSON files and combines usage ledger rows with message-level usage without double-counting matching entries.
+
+|                   |                                                                  |
+| ----------------- | ---------------------------------------------------------------- |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json`          |
+| **Override**      | Set `TOKENLEAK_AMP_DIR` environment variable                     |
+| **Provider name** | `amp`                                                            |
+| **Aliases**       | `sourcegraph-amp`                                                |
+
+### Qwen
+
+Reads Qwen CLI project JSONL logs. Assistant records with `usageMetadata` are parsed for prompt, candidate, thought, and cached-content tokens.
+
+|                   |                                                 |
+| ----------------- | ----------------------------------------------- |
+| **Data location** | `~/.qwen/projects/**/*.jsonl`                   |
+| **Override**      | Set `TOKENLEAK_QWEN_DIR` environment variable   |
+| **Provider name** | `qwen`                                          |
+| **Aliases**       | None                                            |
+
+### Roo Code and Kilo Code
+
+Reads VS Code extension task logs from `ui_messages.json` and uses sibling `api_conversation_history.json` metadata to recover the selected model.
+
+|                   |                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| **Roo data**      | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json`         |
+| **Kilo data**     | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json`                 |
+| **Override**      | Set `TOKENLEAK_ROO_CODE_DIR` or `TOKENLEAK_KILO_CODE_DIR` environment variable                   |
+| **Provider names** | `roo-code`, `kilo-code`                                                                          |
+| **Aliases**       | `roo`, `roocode`, `kilo`, `kilocode`                                                             |
+
+### OpenClaw
+
+Reads OpenClaw agent transcripts and optional `sessions.json` indexes. Model-change and model-snapshot records establish the model for assistant usage rows.
+
+|                   |                                                           |
+| ----------------- | --------------------------------------------------------- |
+| **Data location** | `~/.openclaw/agents/**/*.jsonl*`                          |
+| **Override**      | Set `TOKENLEAK_OPENCLAW_DIR` environment variable         |
+| **Provider name** | `openclaw`                                                |
+| **Aliases**       | `open-claw`                                               |
+
+### Hermes
+
+Reads aggregated Hermes Agent session rows from the local SQLite state database.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `${HERMES_HOME:-~/.hermes}/state.db`              |
+| **Override**      | Set `HERMES_HOME` or `TOKENLEAK_HERMES_DIR`       |
+| **Provider name** | `hermes`                                          |
+| **Aliases**       | None                                              |
+
 ### OpenCode
 
 Reads usage data from current OpenCode message storage when available. Falls back to legacy SQLite databases or legacy JSON session files.
@@ -715,6 +803,15 @@ All fields are optional. Only include the ones you want to override.
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
 | `CODEX_HOME` | `~/.codex` | Codex home directory |
 | `TOKENLEAK_CURSOR_DIR` | `~/.config/tokenleak` | Cursor credentials/cache root (`cursor-credentials.json`, `cursor-cache/`) |
+| `TOKENLEAK_GEMINI_DIR` | `~/.gemini/tmp` | Gemini CLI temp/session directory |
+| `TOKENLEAK_COPILOT_OTEL_DIR` | `~/.copilot/otel` | GitHub Copilot OTEL JSONL directory |
+| `TOKENLEAK_AMP_DIR` | `${XDG_DATA_HOME:-~/.local/share}/amp/threads` | Amp thread directory |
+| `TOKENLEAK_QWEN_DIR` | `~/.qwen/projects` | Qwen project log directory |
+| `TOKENLEAK_ROO_CODE_DIR` | VS Code Roo Code task storage | Roo Code task-log directory |
+| `TOKENLEAK_KILO_CODE_DIR` | VS Code Kilo Code task storage | Kilo Code task-log directory |
+| `TOKENLEAK_OPENCLAW_DIR` | `~/.openclaw/agents` | OpenClaw agent transcript directory |
+| `TOKENLEAK_HERMES_DIR` | `~/.hermes` | Hermes directory containing `state.db` |
+| `HERMES_HOME` | `~/.hermes` | Hermes home directory |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | Pi coding agent directory (sessions live under `sessions/`) |
 
 ## What Tokenleak tracks

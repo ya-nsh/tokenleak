@@ -922,8 +922,18 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('claude-code');
     expect(stdout).toContain('codex');
     expect(stdout).toContain('cursor');
+    expect(stdout).toContain('gemini');
+    expect(stdout).toContain('copilot');
+    expect(stdout).toContain('amp');
+    expect(stdout).toContain('qwen');
+    expect(stdout).toContain('roo-code');
+    expect(stdout).toContain('kilo-code');
+    expect(stdout).toContain('openclaw');
+    expect(stdout).toContain('hermes');
     expect(stdout).toContain('pi');
     expect(stdout).toContain('open-code');
+    expect(stdout).toContain('github-copilot');
+    expect(stdout).toContain('sourcegraph-amp');
   });
 
   test('--all-providers with provider filter exits with code 1', async () => {

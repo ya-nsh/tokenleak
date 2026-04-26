@@ -35,6 +35,14 @@ import {
   ClaudeCodeProvider,
   CodexProvider,
   CursorProvider,
+  GeminiProvider,
+  CopilotProvider,
+  AmpProvider,
+  QwenProvider,
+  RooCodeProvider,
+  KiloCodeProvider,
+  OpenClawProvider,
+  HermesProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -113,6 +121,23 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'open-code': 'open-code',
   open_code: 'open-code',
   opencode: 'open-code',
+  gemini: 'gemini',
+  google: 'gemini',
+  copilot: 'copilot',
+  'github-copilot': 'copilot',
+  'copilot-otel': 'copilot',
+  amp: 'amp',
+  'sourcegraph-amp': 'amp',
+  qwen: 'qwen',
+  'roo-code': 'roo-code',
+  roo: 'roo-code',
+  roocode: 'roo-code',
+  'kilo-code': 'kilo-code',
+  kilo: 'kilo-code',
+  kilocode: 'kilo-code',
+  openclaw: 'openclaw',
+  'open-claw': 'openclaw',
+  hermes: 'hermes',
 };
 const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'claude-code': ['anthropic', 'claude', 'claudecode'],
@@ -120,6 +145,12 @@ const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   cursor: ['cursor-ide', 'cursoride'],
   pi: ['pi-mono'],
   'open-code': ['opencode', 'open_code'],
+  gemini: ['google'],
+  copilot: ['github-copilot', 'copilot-otel'],
+  amp: ['sourcegraph-amp'],
+  'roo-code': ['roo', 'roocode'],
+  'kilo-code': ['kilo', 'kilocode'],
+  openclaw: ['open-claw'],
 };
 
 interface ProviderFilterConfig {
@@ -550,6 +581,14 @@ function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
   registry.register(new CursorProvider());
+  registry.register(new GeminiProvider());
+  registry.register(new CopilotProvider());
+  registry.register(new AmpProvider());
+  registry.register(new QwenProvider());
+  registry.register(new RooCodeProvider());
+  registry.register(new KiloCodeProvider());
+  registry.register(new OpenClawProvider());
+  registry.register(new HermesProvider());
   registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
 }

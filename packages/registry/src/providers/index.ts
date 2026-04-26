@@ -1,5 +1,12 @@
 export { ClaudeCodeProvider } from './claude-code';
 export { CodexProvider } from './codex';
 export { CursorProvider } from './cursor';
+export { GeminiProvider } from './gemini';
+export { CopilotProvider } from './copilot';
+export { AmpProvider } from './amp';
+export { QwenProvider } from './qwen';
+export { RooCodeProvider, KiloCodeProvider } from './roo-kilo-code';
+export { OpenClawProvider } from './openclaw';
+export { HermesProvider } from './hermes';
 export { OpenCodeProvider } from './open-code';
 export { PiProvider } from './pi';

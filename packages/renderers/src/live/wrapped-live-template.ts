@@ -54,6 +54,14 @@ const PROVIDER_COLORS: Record<string, string> = {
   openai: '#3a5070',
   codex: '#3a5070',
   google: '#6a2535',
+  gemini: '#4285f4',
+  copilot: '#6e7781',
+  amp: '#ff5a1f',
+  qwen: '#7c3aed',
+  'roo-code': '#0f766e',
+  'kilo-code': '#2563eb',
+  openclaw: '#dc2626',
+  hermes: '#16a34a',
   pi: '#5a4a70',
 };
 

@@ -44,6 +44,14 @@ import {
   ClaudeCodeProvider,
   CodexProvider,
   CursorProvider,
+  GeminiProvider,
+  CopilotProvider,
+  AmpProvider,
+  QwenProvider,
+  RooCodeProvider,
+  KiloCodeProvider,
+  OpenClawProvider,
+  HermesProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -218,6 +226,14 @@ function createRegistry(): ProviderRegistry {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexProvider());
   registry.register(new CursorProvider());
+  registry.register(new GeminiProvider());
+  registry.register(new CopilotProvider());
+  registry.register(new AmpProvider());
+  registry.register(new QwenProvider());
+  registry.register(new RooCodeProvider());
+  registry.register(new KiloCodeProvider());
+  registry.register(new OpenClawProvider());
+  registry.register(new HermesProvider());
   registry.register(new OpenCodeProvider());
   registry.register(new PiProvider());
   return registry;
