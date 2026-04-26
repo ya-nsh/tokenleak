@@ -20,11 +20,39 @@ interface RepoAccumulator {
   cost: number;
 }
 
+function normalizePathLike(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function isSameOrInsidePath(pathLike: string, possibleRoot: string): boolean {
+  const path = normalizePathLike(pathLike);
+  const root = normalizePathLike(possibleRoot);
+  return path === root || path.startsWith(`${root}/`);
+}
+
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
 }
 
-function repoKey(event: UsageEvent): string {
+function matchedSignal(event: UsageEvent, signals: NutritionOutcomeSignal[]): NutritionOutcomeSignal | null {
+  const repoRoot = event.repoRoot?.trim();
+  if (repoRoot) {
+    const exact = signals.find((signal) => normalizePathLike(signal.repoRoot) === normalizePathLike(repoRoot));
+    if (exact) return exact;
+  }
+
+  const projectId = event.projectId?.trim();
+  if (projectId) {
+    const byProjectPath = signals.find((signal) => isSameOrInsidePath(projectId, signal.repoRoot));
+    if (byProjectPath) return byProjectPath;
+  }
+
+  return null;
+}
+
+function repoKey(event: UsageEvent, signal: NutritionOutcomeSignal | null): string {
+  if (signal) return signal.repoRoot;
+
   const repoRoot = event.repoRoot?.trim();
   if (repoRoot) return repoRoot;
 
@@ -80,8 +108,9 @@ export function buildNutritionReport(
   const byRepo = new Map<string, RepoAccumulator>();
 
   for (const event of events) {
-    const key = repoKey(event);
-    const repoRoot = event.repoRoot?.trim() || null;
+    const signal = matchedSignal(event, outcomeSignals);
+    const key = repoKey(event, signal);
+    const repoRoot = signal?.repoRoot ?? event.repoRoot?.trim() ?? null;
     let accumulator = byRepo.get(key);
 
     if (!accumulator) {

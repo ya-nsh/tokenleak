@@ -132,6 +132,7 @@ function extractUsage(record: unknown): UsageRecord | null {
     cacheReadTokens,
     cacheWriteTokens,
     messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
+    projectId: typeof rec['cwd'] === 'string' && rec['cwd'].trim() ? rec['cwd'].trim() : undefined,
   };
 }
 
@@ -269,7 +270,7 @@ export class ClaudeCodeProvider implements IProvider {
           const usage = extractUsage(record);
           if (usage !== null && isInRange(usage.date, range)) {
             usage.sessionId = relativeFile;
-            usage.projectId = projectId;
+            usage.projectId = usage.projectId ?? projectId;
             if (usage.messageId) {
               latestRecordsByMessageId.set(usage.messageId, usage);
             } else {

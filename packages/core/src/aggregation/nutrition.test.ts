@@ -68,6 +68,36 @@ describe('buildNutritionReport', () => {
     expect(app?.tokensPerChangedLine).toBe(40);
   });
 
+  it('joins project paths to the matching Git repo root signal', () => {
+    const report = buildNutritionReport(
+      [
+        {
+          provider: 'pi',
+          timestamp: '2026-03-01T10:00:00.000Z',
+          date: '2026-03-01',
+          model: 'gpt-5',
+          inputTokens: 800,
+          outputTokens: 200,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 1_000,
+          cost: 0.2,
+          sessionId: 'session-project-path',
+          projectId: '/Users/test/work/app/packages/core',
+        },
+      ],
+      [{ repoRoot: '/Users/test/work/app', commits: 1, changedFiles: 2, changedLines: 10 }],
+      { since: '2026-03-01', until: '2026-03-31' },
+    );
+
+    expect(report.repos).toHaveLength(1);
+    expect(report.repos[0]?.repoRoot).toBe('/Users/test/work/app');
+    expect(report.repos[0]?.label).toBe('app');
+    expect(report.repos[0]?.commits).toBe(1);
+    expect(report.repos[0]?.tokensPerCommit).toBe(1_000);
+    expect(report.missingOutcomeRepos).toEqual([]);
+  });
+
   it('keeps missing outcome data explicit instead of fabricating ratios', () => {
     const report = buildNutritionReport(EVENTS, [], { since: '2026-03-01', until: '2026-03-31' });
     const app = report.repos.find((repo) => repo.repoRoot === '/Users/test/work/app');

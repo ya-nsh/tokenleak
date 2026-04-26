@@ -1192,6 +1192,20 @@ async function isGitRepo(repoRoot: string): Promise<boolean> {
   return result.ok && result.stdout.trim() === 'true';
 }
 
+async function resolveGitRepoRoot(pathLike: string): Promise<string | null> {
+  if (!existsSync(pathLike)) {
+    return null;
+  }
+
+  const result = await runGitCommand(['git', '-C', pathLike, 'rev-parse', '--show-toplevel']);
+  if (!result.ok) {
+    return null;
+  }
+
+  const repoRoot = result.stdout.trim();
+  return repoRoot || null;
+}
+
 function parseGitNumstat(output: string, repoRoot: string): NutritionOutcomeSignal {
   let commits = 0;
   let changedFiles = 0;
@@ -1253,10 +1267,23 @@ async function loadGitOutcomeSignal(repoRoot: string, range: DateRange): Promise
 
 function uniqueRepoRoots(events: UsageEvent[]): string[] {
   return [...new Set(
-    events
-      .map((event) => event.repoRoot?.trim())
-      .filter((repoRoot): repoRoot is string => Boolean(repoRoot)),
+    events.flatMap((event) => [
+      event.repoRoot?.trim(),
+      event.projectId?.trim(),
+    ]).filter((pathLike): pathLike is string => Boolean(pathLike)),
   )].sort();
+}
+
+async function collectGitOutcomeSignals(events: UsageEvent[], range: DateRange): Promise<NutritionOutcomeSignal[]> {
+  const candidatePaths = uniqueRepoRoots(events);
+  const resolvedRoots = (await Promise.all(
+    candidatePaths.map((pathLike) => resolveGitRepoRoot(pathLike)),
+  )).filter((repoRoot): repoRoot is string => repoRoot !== null);
+  const repoRoots = [...new Set(resolvedRoots)].sort();
+
+  return (await Promise.all(
+    repoRoots.map((repoRoot) => loadGitOutcomeSignal(repoRoot, range)),
+  )).filter((signal): signal is NutritionOutcomeSignal => signal !== null);
 }
 
 function formatNullableNumber(value: number | null, digits: number = 0): string {
@@ -1362,10 +1389,7 @@ async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
   const available = await selectAvailableProviders(config);
   const output = await loadTokenleakData(available, dateRange);
   const events = output.providers.flatMap((provider) => provider.events ?? []);
-  const repoRoots = uniqueRepoRoots(events);
-  const outcomeSignals = (await Promise.all(
-    repoRoots.map((repoRoot) => loadGitOutcomeSignal(repoRoot, dateRange)),
-  )).filter((signal): signal is NutritionOutcomeSignal => signal !== null);
+  const outcomeSignals = await collectGitOutcomeSignals(events, dateRange);
   const report = buildNutritionReport(events, outcomeSignals, dateRange);
 
   const rendered = format === 'json'
