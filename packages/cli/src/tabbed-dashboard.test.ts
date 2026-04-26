@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { DateRange, ProviderColors, ProviderData } from '@tokenleak/core';
+import type { DateRange, ProviderColors, ProviderData, UsageEvent } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
 import { startTabbedDashboard } from './tabbed-dashboard';
 
@@ -9,7 +9,31 @@ const COLORS: ProviderColors = {
   gradient: ['#000000', '#111111'],
 };
 
-function createProviderData(name: string): ProviderData {
+function createEvent(
+  provider: string,
+  sessionId: string,
+  projectId: string,
+  model: string,
+  totalTokens: number,
+): UsageEvent {
+  return {
+    provider,
+    timestamp: '2026-03-14T09:00:00.000Z',
+    date: '2026-03-14',
+    model,
+    inputTokens: Math.round(totalTokens * 0.6),
+    outputTokens: Math.round(totalTokens * 0.3),
+    cacheReadTokens: Math.round(totalTokens * 0.08),
+    cacheWriteTokens: Math.round(totalTokens * 0.02),
+    totalTokens,
+    cost: totalTokens * 0.00002,
+    sessionId,
+    projectId,
+    durationMs: totalTokens * 10,
+  };
+}
+
+function createProviderData(name: string, events: UsageEvent[] = []): ProviderData {
   return {
     provider: name,
     displayName: name,
@@ -17,7 +41,7 @@ function createProviderData(name: string): ProviderData {
     totalTokens: 0,
     totalCost: 0,
     colors: COLORS,
-    events: [],
+    events,
   };
 }
 
@@ -183,5 +207,106 @@ describe('startTabbedDashboard', () => {
     const screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
     const lastScreen = screens.at(-1) ?? '';
     expect(lastScreen).toContain('2025-03-14 → 2026-03-14');
+  });
+
+  it('applies query search in the session tab', async () => {
+    const provider: IProvider = {
+      name: 'claude-code',
+      displayName: 'Claude Code',
+      colors: COLORS,
+      async isAvailable() {
+        return true;
+      },
+      async load(): Promise<ProviderData> {
+        return createProviderData('claude-code', [
+          createEvent('claude-code', 'session-a', 'project-alpha', 'claude-3-opus', 9000),
+          createEvent('claude-code', 'session-b', 'project-beta', 'claude-3-haiku', 4000),
+        ]);
+      },
+    };
+
+    const dashboardPromise = startTabbedDashboard([provider], {
+      initialTimeRange: '30d',
+      noColor: true,
+      until: '2026-03-14',
+      promptInput: async () => 'beta',
+    });
+
+    await Bun.sleep(10);
+    expect(keypressHandler).not.toBeNull();
+
+    keypressHandler!('', { sequence: '4' });
+    keypressHandler!('', { sequence: '/' });
+
+    await Bun.sleep(10);
+    keypressHandler!('', { name: 'q', sequence: 'q' });
+    await dashboardPromise;
+
+    const screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
+    const lastScreen = screens.at(-1) ?? '';
+    expect(lastScreen).toContain('query=beta');
+    expect(lastScreen).toContain('1 of 2 sessions shown');
+    expect(lastScreen).toContain('project-beta');
+    expect(lastScreen).not.toContain('project-alpha');
+  });
+
+  it('applies structured filters in the project tab and clears them', async () => {
+    const claudeProvider: IProvider = {
+      name: 'claude-code',
+      displayName: 'Claude Code',
+      colors: COLORS,
+      async isAvailable() {
+        return true;
+      },
+      async load(): Promise<ProviderData> {
+        return createProviderData('claude-code', [
+          createEvent('claude-code', 'session-a', 'project-alpha', 'claude-3-opus', 9000),
+        ]);
+      },
+    };
+    const codexProvider: IProvider = {
+      name: 'codex',
+      displayName: 'Codex',
+      colors: COLORS,
+      async isAvailable() {
+        return true;
+      },
+      async load(): Promise<ProviderData> {
+        return createProviderData('codex', [
+          createEvent('codex', 'session-b', 'project-beta', 'gpt-4o-mini', 4000),
+        ]);
+      },
+    };
+
+    const dashboardPromise = startTabbedDashboard([claudeProvider, codexProvider], {
+      initialTimeRange: '30d',
+      noColor: true,
+      until: '2026-03-14',
+      promptInput: async () => 'provider=codex',
+    });
+
+    await Bun.sleep(10);
+    expect(keypressHandler).not.toBeNull();
+
+    keypressHandler!('', { sequence: '7' });
+    keypressHandler!('', { name: 'f', sequence: 'f' });
+
+    await Bun.sleep(10);
+    let screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
+    let lastScreen = screens.at(-1) ?? '';
+    expect(lastScreen).toContain('provider=codex');
+    expect(lastScreen).toContain('1 of 2 projects shown');
+    expect(lastScreen).toContain('project-beta');
+
+    keypressHandler!('', { name: 'c', sequence: 'c' });
+    await Bun.sleep(10);
+    keypressHandler!('', { name: 'q', sequence: 'q' });
+    await dashboardPromise;
+
+    screens = writes.filter((chunk) => chunk.includes('\x1b[H\x1b[J'));
+    lastScreen = screens.at(-1) ?? '';
+    expect(lastScreen).toContain('2 of 2 projects shown');
+    expect(lastScreen).toContain('project-alpha');
+    expect(lastScreen).toContain('project-beta');
   });
 });

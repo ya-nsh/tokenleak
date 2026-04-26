@@ -10,3 +10,11 @@ export { renderSessionView } from './session-view';
 export { renderModelView } from './model-view';
 export { renderTokenView } from './token-view';
 export { renderCwdView } from './cwd-view';
+export {
+  EMPTY_DRILLDOWN_FILTER_STATE,
+  formatDrilldownFilterSummary,
+  getFilteredProjects,
+  getFilteredSessions,
+  hasActiveDrilldownFilters,
+} from './searchable-drilldown';
+export type { DrilldownFilterState } from './searchable-drilldown';

@@ -1,6 +1,12 @@
 import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, bold256, colorize256, dim, PROJECT_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
+import {
+  formatDrilldownFilterSummary,
+  getFilteredSessions,
+  hasActiveDrilldownFilters,
+} from './searchable-drilldown';
+import type { DrilldownFilterState } from './searchable-drilldown';
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -22,7 +28,12 @@ function clampLabel(value: string, width: number): string {
   return value.length > width ? `${value.slice(0, Math.max(1, width - 1))}…` : value.padEnd(width);
 }
 
-export function renderSessionView(output: TokenleakOutput, width: number, noColor: boolean): string {
+export function renderSessionView(
+  output: TokenleakOutput,
+  width: number,
+  noColor: boolean,
+  filterState?: DrilldownFilterState | null,
+): string {
   const metrics = output.more?.sessionMetrics;
   if (!metrics || metrics.totalSessions === 0) {
     return `  ${dim('No event-level data available for session analysis.', noColor)}`;
@@ -54,12 +65,26 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
 
   addMetric('Projects', String(metrics.projectCount));
 
-  const drilldown = output.more?.sessionDrilldown ?? [];
-  if (drilldown.length > 0) {
+  const summary = formatDrilldownFilterSummary(filterState);
+  if (summary) {
+    lines.push('');
+    lines.push(truncateVisible(`  ${dim(summary, noColor)}`, width));
+  }
+
+  const { total, filtered } = getFilteredSessions(output, filterState);
+  if (total > 0) {
+    lines.push('');
+    lines.push(truncateVisible(
+      `  ${dim(`${filtered.length} of ${total} sessions shown`, noColor)}`,
+      width,
+    ));
+  }
+
+  if (filtered.length > 0) {
     lines.push('');
     lines.push(`  ${bold('Top Sessions', noColor)}`);
 
-    const sessions = drilldown.slice(0, 5);
+    const sessions = filtered;
     const sessionLabelWidth = Math.min(28, Math.max(12, width - 46));
     const providerWidth = Math.min(12, Math.max(8, Math.floor(width * 0.15)));
     const tokenWidth = 7;
@@ -89,6 +114,9 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
       ));
       lines.push(truncateVisible(`     ${dim(detailParts.join('  ·  '), noColor)}`, width));
     }
+  } else if (total > 0) {
+    lines.push('');
+    lines.push(`  ${dim('No sessions matched the active filters.', noColor)}`);
   } else if (metrics.longestSession) {
     lines.push('');
     lines.push(`  ${bold('Longest Session', noColor)}`);
@@ -101,7 +129,7 @@ export function renderSessionView(output: TokenleakOutput, width: number, noColo
     }
   }
 
-  if (metrics.topProject) {
+  if (metrics.topProject && !hasActiveDrilldownFilters(filterState)) {
     lines.push('');
     lines.push(truncateVisible(
       `  ${dim('Top project:', noColor)} ${bold256(metrics.topProject.name, SEMANTIC.OUTPUT, noColor)} (${formatTokens(metrics.topProject.tokens)})`,

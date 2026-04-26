@@ -187,6 +187,37 @@ describe('renderSessionView', () => {
     const result = renderSessionView(output, 80, true);
     expect(stripAnsi(result)).toBe(result);
   });
+
+  it('filters sessions by query text', () => {
+    const output = createOutput({ more: createMoreStats() });
+    const result = renderSessionView(output, 80, true, {
+      query: 'beta',
+      provider: '',
+      project: '',
+      model: '',
+      sort: '',
+      active: true,
+    });
+
+    expect(result).toContain('1 of 2 sessions shown');
+    expect(result).toContain('project-beta');
+    expect(result).not.toContain('project-alpha');
+  });
+
+  it('filters sessions by model and shows a no-match state', () => {
+    const output = createOutput({ more: createMoreStats() });
+    const result = renderSessionView(output, 80, true, {
+      query: '',
+      provider: '',
+      project: '',
+      model: 'gpt-4o',
+      sort: '',
+      active: true,
+    });
+
+    expect(result).toContain('0 of 2 sessions shown');
+    expect(result).toContain('No sessions matched the active filters.');
+  });
 });
 
 describe('renderModelView', () => {
@@ -321,6 +352,45 @@ describe('renderCwdView', () => {
     const output = createOutput({ more: createMoreStats() });
     const result = renderCwdView(output, 80, true);
     expect(stripAnsi(result)).toBe(result);
+  });
+
+  it('filters projects by provider using contributing sessions', () => {
+    const more = createMoreStats();
+    more.sessionDrilldown = more.sessionDrilldown.map((session, index) => (
+      index === 1
+        ? { ...session, provider: 'codex' }
+        : session
+    ));
+    const output = createOutput({ more });
+
+    const result = renderCwdView(output, 90, true, {
+      query: '',
+      provider: 'codex',
+      project: '',
+      model: '',
+      sort: '',
+      active: true,
+    });
+
+    expect(result).toContain('1 of 2 projects shown');
+    expect(result).toContain('project-beta');
+    expect(result).not.toContain('project-alpha');
+  });
+
+  it('filters projects by query text', () => {
+    const output = createOutput({ more: createMoreStats() });
+    const result = renderCwdView(output, 80, true, {
+      query: 'beta',
+      provider: '',
+      project: '',
+      model: '',
+      sort: '',
+      active: true,
+    });
+
+    expect(result).toContain('1 of 2 projects shown');
+    expect(result).toContain('project-beta');
+    expect(result).not.toContain('project-alpha');
   });
 });
 
