@@ -13,6 +13,7 @@ export { buildExplainReport } from './explain';
 export { buildFocusReport } from './focus';
 export { buildReplayReport } from './replay';
 export { buildNutritionReport } from './nutrition';
+export { collectGitOutcomeSignals } from './nutrition-git';
 export {
   buildSessionRollups,
   buildProjectRollups,

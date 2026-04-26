@@ -4,7 +4,7 @@ import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate } from 
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
-const VISIBLE_ROWS = 5;
+export const NUTRITION_VISIBLE_ROWS = 5;
 const MAX_REPOS = 30;
 const COLUMNS = [
   { title: '#', width: 3, align: 'right' },
@@ -140,7 +140,7 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
 
   const repos = report.repos.slice(0, MAX_REPOS);
   const offset = state.nutritionScrollOffset;
-  const visible = repos.slice(offset, offset + VISIBLE_ROWS);
+  const visible = repos.slice(offset, offset + NUTRITION_VISIBLE_ROWS);
   const maxCostPerCommit = Math.max(
     0,
     ...repos.map((repo) => repo.costPerCommit ?? 0),

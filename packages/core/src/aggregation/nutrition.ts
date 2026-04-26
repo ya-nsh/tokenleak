@@ -43,8 +43,20 @@ function matchedSignal(event: UsageEvent, signals: NutritionOutcomeSignal[]): Nu
 
   const projectId = event.projectId?.trim();
   if (projectId) {
-    const byProjectPath = signals.find((signal) => isSameOrInsidePath(projectId, signal.repoRoot));
-    if (byProjectPath) return byProjectPath;
+    let longestMatch: NutritionOutcomeSignal | null = null;
+    for (const signal of signals) {
+      if (!isSameOrInsidePath(projectId, signal.repoRoot)) {
+        continue;
+      }
+
+      if (
+        !longestMatch ||
+        normalizePathLike(signal.repoRoot).length > normalizePathLike(longestMatch.repoRoot).length
+      ) {
+        longestMatch = signal;
+      }
+    }
+    if (longestMatch) return longestMatch;
   }
 
   return null;

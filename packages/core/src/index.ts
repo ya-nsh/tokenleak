@@ -79,6 +79,7 @@ export {
   buildExplainReport,
   buildReplayReport,
   buildNutritionReport,
+  collectGitOutcomeSignals,
 } from './aggregation';
 
 export {

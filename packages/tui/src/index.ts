@@ -37,7 +37,7 @@ import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel } from './panels/replay.js';
-import { createNutritionPanel } from './panels/nutrition.js';
+import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -444,7 +444,7 @@ function getVisibleCount(view: ViewMode): number {
     case 'compare': return 6;
     case 'wrapped': return 20;
     case 'replay': return 15;
-    case 'nutrition': return 10;
+    case 'nutrition': return NUTRITION_VISIBLE_ROWS;
     default: return 10;
   }
 }
