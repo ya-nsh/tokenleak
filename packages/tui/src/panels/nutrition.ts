@@ -4,16 +4,20 @@ import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate } from 
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
-const VISIBLE_ROWS = 8;
+const VISIBLE_ROWS = 5;
 const MAX_REPOS = 30;
-const DETAIL_WIDTH = 76;
-const TABLE_WIDTH = 77;
-const REPO_COL = 16;
-const TOKEN_COL = 8;
-const COST_COL = 8;
-const GIT_COL = 11;
-const TOK_COMMIT_COL = 9;
-const COST_COMMIT_COL = 9;
+const COLUMNS = [
+  { title: '#', width: 3, align: 'right' },
+  { title: 'Repo', width: 13, align: 'left' },
+  { title: 'Tokens', width: 7, align: 'right' },
+  { title: 'Cost', width: 7, align: 'right' },
+  { title: 'Git', width: 9, align: 'right' },
+  { title: 'Tok/C', width: 7, align: 'right' },
+  { title: '$/C', width: 7, align: 'right' },
+  { title: 'ROI Signal', width: 17, align: 'left' },
+] as const;
+const TABLE_WIDTH = COLUMNS.reduce((sum, column) => sum + column.width, 0) + COLUMNS.length + 1;
+const DETAIL_WIDTH = TABLE_WIDTH - 2;
 
 function formatNullableNumber(value: number | null, digits: number = 0): string {
   if (value === null) return '-';
@@ -47,54 +51,70 @@ function repoIdentity(repo: NutritionRepoSummary): string {
   return repo.repoRoot ?? repo.label;
 }
 
-function roiSignal(repo: NutritionRepoSummary, maxCostPerCommit: number): { label: string; bar: string; fg: string } {
+function roiSignal(repo: NutritionRepoSummary, maxCostPerCommit: number): string {
   if (repo.commits <= 0) {
-    return { label: 'No Git signal', bar: '        ', fg: COLORS.red };
+    return 'No Git signal';
   }
 
   const score = buildEfficiencyRatio(repo, maxCostPerCommit);
   if (score >= 0.66) {
-    return { label: 'strong', bar: asciiBar(score, 8), fg: COLORS.green };
+    return `${asciiBar(score, 8)} strong`;
   }
   if (score >= 0.33) {
-    return { label: 'ok', bar: asciiBar(score, 8), fg: COLORS.cyan };
+    return `${asciiBar(score, 8)} ok`;
   }
-  return { label: 'weak', bar: asciiBar(score, 8), fg: COLORS.amber };
+  return `${asciiBar(score, 8)} weak`;
 }
 
-function renderRepoRow(repo: NutritionRepoSummary, rank: number, maxCostPerCommit: number) {
+function alignCell(value: string, width: number, align: 'left' | 'right'): string {
+  const fitted = middleTruncate(value, width);
+  return align === 'right' ? padLeft(fitted, width) : padRight(fitted, width);
+}
+
+function gridLine(left: string, join: string, right: string): string {
+  return `${left}${COLUMNS.map((column) => '─'.repeat(column.width)).join(join)}${right}`;
+}
+
+function gridRow(cells: string[]): string {
+  const rendered = COLUMNS.map((column, index) =>
+    alignCell(cells[index] ?? '', column.width, column.align),
+  );
+  return `│${rendered.join('│')}│`;
+}
+
+function gridSpan(content: string): string {
+  return `│${padRight(middleTruncate(content, DETAIL_WIDTH), DETAIL_WIDTH)}│`;
+}
+
+function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerCommit: number) {
   const signal = roiSignal(repo, maxCostPerCommit);
-  const label = truncate(repo.label, REPO_COL);
+  const label = repo.label;
   const outcome = repo.commits > 0
-    ? `${repo.commits}c/${formatTokens(repo.changedLines)}l`
+    ? `${repo.commits}/${formatTokens(repo.changedLines)}`
     : 'No signal';
   const detail = middleTruncate(repoIdentity(repo), DETAIL_WIDTH);
   const providers = repo.providers.join(', ') || '-';
   const models = repo.models.slice(0, 3).join(', ') || '-';
   const modelDetail = middleTruncate(`providers ${providers}  models ${models}`, DETAIL_WIDTH);
 
-  return Box(
-    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Box(
-      { flexDirection: 'row', width: '100%' },
-      Text({ content: `${padLeft(`${rank}.`, 3)} `, fg: COLORS.dimWhite }),
-      Text({ content: padRight(label, REPO_COL), fg: COLORS.white }),
-      Text({ content: padLeft(formatTokens(repo.tokens), TOKEN_COL), fg: COLORS.green }),
-      Text({ content: padLeft(formatCost(repo.cost), COST_COL), fg: COLORS.amber }),
-      Text({ content: padLeft(outcome, GIT_COL), fg: repo.commits > 0 ? COLORS.cyan : COLORS.red }),
-      Text({ content: padLeft(formatNullableNumber(repo.tokensPerCommit), TOK_COMMIT_COL), fg: COLORS.white }),
-      Text({ content: padLeft(formatNullableCost(repo.costPerCommit), COST_COMMIT_COL), fg: COLORS.amber }),
-      Text({ content: `  ${signal.bar} ${signal.label}`, fg: signal.fg }),
-    ),
+  return [
     Text({
-      content: `     repo ${detail}`,
-      fg: COLORS.dimWhite,
+      content: gridRow([
+        `${rank}.`,
+        label,
+        formatTokens(repo.tokens),
+        formatCost(repo.cost),
+        outcome,
+        formatNullableNumber(repo.tokensPerCommit),
+        formatNullableCost(repo.costPerCommit),
+        signal,
+      ]),
+      fg: repo.commits > 0 ? COLORS.white : COLORS.red,
     }),
-    Text({
-      content: `     ${modelDetail}`,
-      fg: COLORS.dimWhite,
-    }),
-  );
+    Text({ content: gridSpan(`repo ${detail}`), fg: COLORS.dimWhite }),
+    Text({ content: gridSpan(modelDetail), fg: COLORS.dimWhite }),
+    Text({ content: gridLine('├', '┼', '┤'), fg: COLORS.dimWhite }),
+  ];
 }
 
 export function createNutritionPanel(state: AppState, report: NutritionReport | null) {
@@ -154,17 +174,10 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
         }),
       ];
 
-  const columnHeader = Box(
-    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: padRight('', 4), fg: COLORS.dimWhite }),
-    Text({ content: padRight('Repo', REPO_COL), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Tokens', TOKEN_COL), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Cost', COST_COL), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Git Output', GIT_COL), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Tok/C', TOK_COMMIT_COL), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('$/C', COST_COMMIT_COL), fg: COLORS.dimWhite }),
-    Text({ content: '  ROI Signal', fg: COLORS.dimWhite }),
+  const tableRows = visible.flatMap((repo, index) =>
+    renderRepoRows(repo, offset + index + 1, maxCostPerCommit),
   );
+  const trimmedRows = tableRows.length > 0 ? tableRows.slice(0, -1) : tableRows;
 
   return Box(
     {
@@ -200,9 +213,14 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
       ...signalNotice,
       Text({ content: '', fg: COLORS.dimWhite }),
     ),
-    columnHeader,
-    Text({ content: ` ${'─'.repeat(TABLE_WIDTH)}`, fg: COLORS.dimWhite }),
-    ...visible.map((repo, index) => renderRepoRow(repo, offset + index + 1, maxCostPerCommit)),
+    Box(
+      { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+      Text({ content: gridLine('┌', '┬', '┐'), fg: COLORS.dimWhite }),
+      Text({ content: gridRow(COLUMNS.map((column) => column.title)), fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: gridLine('├', '┼', '┤'), fg: COLORS.dimWhite }),
+      ...trimmedRows,
+      Text({ content: gridLine('└', '┴', '┘'), fg: COLORS.dimWhite }),
+    ),
     ...scrollIndicators,
   );
 }
