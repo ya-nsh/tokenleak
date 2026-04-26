@@ -362,6 +362,39 @@ export interface ReplayReport {
   summary: ReplayDaySummary;
 }
 
+export type WasteCategory =
+  | 'premium-short-output'
+  | 'low-cache-hit-rate'
+  | 'wasted-cache-writes'
+  | 'context-drag'
+  | 'burst-spike'
+  | 'model-switch-churn';
+
+export interface WasteRecipe {
+  title: string;
+  command?: string;
+  detail: string;
+}
+
+export interface WasteFinding {
+  category: WasteCategory;
+  severity: 'high' | 'medium' | 'low';
+  title: string;
+  evidence: string;
+  provider?: string;
+  model?: string;
+  projectId?: string;
+  estimatedMonthlySavings: number | null;
+  recipes: WasteRecipe[];
+}
+
+export interface WasteReport {
+  method: string;
+  dateRange: DateRange;
+  enoughEvidence: boolean;
+  findings: WasteFinding[];
+}
+
 export interface ModelMixShiftEntry {
   model: string;
   currentShare: number;

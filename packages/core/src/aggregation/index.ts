@@ -12,6 +12,7 @@ export { buildMoreStats, computeModelMixShift } from './more';
 export { buildExplainReport } from './explain';
 export { buildFocusReport } from './focus';
 export { buildReplayReport } from './replay';
+export { buildWasteReport } from './waste';
 export {
   buildSessionRollups,
   buildProjectRollups,

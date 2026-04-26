@@ -37,6 +37,10 @@ export type {
   TokenVelocityPoint,
   ReplayDaySummary,
   ReplayReport,
+  WasteCategory,
+  WasteRecipe,
+  WasteFinding,
+  WasteReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -75,6 +79,7 @@ export {
   computeModelMixShift,
   buildExplainReport,
   buildReplayReport,
+  buildWasteReport,
 } from './aggregation';
 
 export {

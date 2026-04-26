@@ -10,6 +10,7 @@ import {
   buildExplainReport,
   buildFocusReport,
   buildReplayReport,
+  buildWasteReport,
   mergeProviderData,
   buildMoreStats,
 } from '@tokenleak/core';
@@ -18,6 +19,7 @@ import type {
   FocusReport,
   RenderOptions,
   TokenleakOutput,
+  WasteReport,
   ProviderData,
 } from '@tokenleak/core';
 import {
@@ -157,12 +159,14 @@ function buildHelpText(): string {
     '  tokenleak [flags]',
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
+    '  tokenleak waste [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
+    '  waste                  Find likely avoidable spend and local fix recipes',
     '  replay [date]          Replay a day\'s session timeline (defaults to today)',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
@@ -213,6 +217,8 @@ function buildHelpText(): string {
     '  tokenleak explain 2026-03-10',
     '  tokenleak explain 2026-03-10 --format json',
     '  tokenleak focus --provider codex --days 30',
+    '  tokenleak waste --days 30',
+    '  tokenleak waste --format json --output waste.json',
     '  tokenleak replay',
     '  tokenleak replay 2026-03-10 --format json',
     '',
@@ -254,6 +260,40 @@ function buildFocusHelpText(): string {
     '  tokenleak focus',
     '  tokenleak focus --provider claude,codex --days 30',
     '  tokenleak focus --format json --output focus.json',
+    '',
+  ].join('\n');
+}
+
+function buildWasteHelpText(): string {
+  return [
+    `tokenleak waste ${VERSION}`,
+    'Find likely avoidable token spend and print concrete local fix recipes.',
+    '',
+    'Usage:',
+    '  tokenleak waste [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file and infer format from extension',
+    '  -w, --width <number>    Terminal render width',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --claude            Only include Claude Code',
+    '      --codex             Only include Codex',
+    '      --cursor           Only include Cursor',
+    '      --pi                Only include Pi',
+    '      --open-code         Only include OpenCode',
+    '      --all-providers     Ignore provider filters and use every available provider',
+    '      --list-providers    Show registered providers and aliases',
+    '      --no-color          Disable ANSI colors in terminal output',
+    '      --help              Show this help',
+    '      --version           Show version information',
+    '',
+    'Examples:',
+    '  tokenleak waste --days 30',
+    '  tokenleak waste --format json --output waste.json',
     '',
   ].join('\n');
 }
@@ -1094,6 +1134,107 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
   lines.push(dim('Stk = project streak (consecutive days)  Density = tokens per hour', noColor));
 
   return lines.join('\n');
+}
+
+function resolveTerminalJsonFormat(
+  commandName: string,
+  cliArgs: Record<string, unknown>,
+): 'json' | 'terminal' {
+  if (typeof cliArgs['format'] === 'string') {
+    const format = cliArgs['format'];
+    if (format === 'json' || format === 'terminal') {
+      return format;
+    }
+
+    throw new TokenleakError(`tokenleak ${commandName} only supports --format terminal or --format json`);
+  }
+
+  if (typeof cliArgs['output'] === 'string') {
+    const inferred = inferFormatFromPath(cliArgs['output']);
+    if (inferred === 'json') {
+      return 'json';
+    }
+  }
+
+  return 'terminal';
+}
+
+function formatSavings(value: number | null): string {
+  return value === null ? 'not estimated' : `$${value.toFixed(2)}/mo`;
+}
+
+function renderWasteReport(report: WasteReport, width: number, noColor: boolean): string {
+  const termWidth = Math.max(70, width || 80);
+  const lines = [
+    bold('Tokenleak Waste', noColor),
+    report.method,
+    '',
+    `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
+  ];
+
+  if (!report.enoughEvidence) {
+    lines.push('Not enough evidence for a confident taxonomy yet. More event-level data will improve findings.');
+  }
+
+  if (report.findings.length === 0) {
+    lines.push('', 'No deterministic waste findings for this range.');
+    return lines.join('\n');
+  }
+
+  lines.push('', `${report.findings.length} finding${report.findings.length === 1 ? '' : 's'}:`);
+
+  for (const finding of report.findings) {
+    const title = `${finding.severity.toUpperCase()} ${finding.title}`;
+    lines.push('');
+    lines.push(bold(truncateCell(title, termWidth), noColor));
+    lines.push(`Category: ${finding.category}`);
+    lines.push(`Evidence: ${finding.evidence}`);
+    lines.push(`Estimated savings: ${formatSavings(finding.estimatedMonthlySavings)}`);
+    if (finding.provider || finding.model) {
+      lines.push(`Scope: ${[finding.provider, finding.model].filter(Boolean).join(' / ')}`);
+    }
+    for (const recipe of finding.recipes) {
+      lines.push(`- ${recipe.title}: ${recipe.detail}`);
+      if (recipe.command) {
+        lines.push(`  ${recipe.command}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function runWaste(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig({ ...cliArgs, more: true });
+  const format = resolveTerminalJsonFormat('waste', cliArgs);
+
+  if (config.listProviders) {
+    const registry = createRegistry();
+    const providers = registry.getAll();
+    const availabilityResults = await Promise.all(
+      providers.map(async (provider) => [provider.name, await provider.isAvailable()] as const),
+    );
+    process.stdout.write(buildProviderList(providers, new Map(availabilityResults)));
+    return;
+  }
+
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+  const available = await selectAvailableProviders(config);
+  const output = await loadTokenleakData(available, dateRange);
+  const report = buildWasteReport(output);
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderWasteReport(report, config.width, config.noColor);
+
+  if (config.output) {
+    writeFileSync(config.output, rendered);
+  } else {
+    process.stdout.write(`${rendered}\n`);
+  }
 }
 
 export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
@@ -2053,6 +2194,115 @@ const focusMain = defineCommand({
   },
 });
 
+const wasteMain = defineCommand({
+  meta: {
+    name: 'waste',
+    version: VERSION,
+    description: 'Find likely avoidable spend and local fix recipes',
+  },
+  args: {
+    format: {
+      type: 'string',
+      alias: 'f',
+      description: 'Output format: terminal, json',
+    },
+    since: {
+      type: 'string',
+      alias: 's',
+      description: 'Start date (YYYY-MM-DD)',
+    },
+    until: {
+      type: 'string',
+      alias: 'u',
+      description: 'End date (YYYY-MM-DD), defaults to today',
+    },
+    days: {
+      type: 'string',
+      alias: 'd',
+      description: `Number of days to look back (default: ${DEFAULT_DAYS}, overridden by --since)`,
+    },
+    output: {
+      type: 'string',
+      alias: 'o',
+      description: 'Output file path',
+    },
+    width: {
+      type: 'string',
+      alias: 'w',
+      description: 'Terminal width (default: 80)',
+    },
+    noColor: {
+      type: 'boolean',
+      description: 'Disable ANSI colors',
+      default: false,
+    },
+    provider: {
+      type: 'string',
+      alias: 'p',
+      description: 'Filter to specific provider(s), comma-separated',
+    },
+    claude: {
+      type: 'boolean',
+      description: 'Shortcut for --provider claude-code',
+      default: false,
+    },
+    codex: {
+      type: 'boolean',
+      description: 'Shortcut for --provider codex',
+      default: false,
+    },
+    cursor: {
+      type: 'boolean',
+      description: 'Shortcut for --provider cursor',
+      default: false,
+    },
+    pi: {
+      type: 'boolean',
+      description: 'Shortcut for --provider pi',
+      default: false,
+    },
+    openCode: {
+      type: 'boolean',
+      description: 'Shortcut for --provider open-code',
+      default: false,
+    },
+    allProviders: {
+      type: 'boolean',
+      description: 'Ignore provider filters and use every available provider',
+      default: false,
+    },
+    listProviders: {
+      type: 'boolean',
+      description: 'List registered providers and aliases',
+      default: false,
+    },
+  },
+  async run({ args }) {
+    try {
+      const cliArgs: Record<string, unknown> = {};
+      if (args.format !== undefined) cliArgs['format'] = args.format;
+      if (args.since !== undefined) cliArgs['since'] = args.since;
+      if (args.until !== undefined) cliArgs['until'] = args.until;
+      if (args.days !== undefined) cliArgs['days'] = Number(args.days);
+      if (args.output !== undefined) cliArgs['output'] = args.output;
+      if (args.width !== undefined) cliArgs['width'] = Number(args.width);
+      if (args.noColor) cliArgs['noColor'] = true;
+      if (args.provider !== undefined) cliArgs['provider'] = args.provider;
+      if (args.claude) cliArgs['claude'] = true;
+      if (args.codex) cliArgs['codex'] = true;
+      if (args.cursor) cliArgs['cursor'] = true;
+      if (args.pi) cliArgs['pi'] = true;
+      if (args.openCode) cliArgs['openCode'] = true;
+      if (args.allProviders) cliArgs['allProviders'] = true;
+      if (args.listProviders) cliArgs['listProviders'] = true;
+
+      await runWaste(cliArgs);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  },
+});
+
 // Only run when executed directly, not when imported by tests
 const isDirectExecution =
   typeof Bun !== 'undefined'
@@ -2120,6 +2370,23 @@ if (isDirectExecution) {
     }
 
     await runMain(focusMain);
+    process.exit(0);
+  }
+  if (argv[0] === 'waste') {
+    const wasteArgv = argv.slice(1);
+    process.argv = [...process.argv.slice(0, 2), ...wasteArgv];
+
+    if (wasteArgv.includes('--help') || wasteArgv.includes('-h')) {
+      process.stdout.write(buildWasteHelpText());
+      process.exit(0);
+    }
+
+    if (wasteArgv.includes('--version') || wasteArgv.includes('-v')) {
+      process.stdout.write(buildVersionText());
+      process.exit(0);
+    }
+
+    await runMain(wasteMain);
     process.exit(0);
   }
   if (argv[0] === 'cursor') {
