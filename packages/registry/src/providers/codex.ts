@@ -55,6 +55,7 @@ interface CodexUsageRecord {
 
 interface SessionContext {
   model: string;
+  projectId?: string;
   previousTotals: {
     inputTokens: number;
     outputTokens: number;
@@ -205,6 +206,22 @@ function inferModelFromContext(record: unknown): string | null {
   return null;
 }
 
+function inferProjectIdFromContext(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) {
+    return null;
+  }
+
+  const obj = record as Record<string, unknown>;
+  const payload = obj['payload'];
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+
+  const meta = payload as Record<string, unknown>;
+  const cwd = meta['cwd'];
+  return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null;
+}
+
 function parseTokenCountUsage(
   record: unknown,
   context: SessionContext,
@@ -318,6 +335,11 @@ function parseUsageRecord(
   record: unknown,
   context: SessionContext,
 ): CodexUsageRecord | null {
+  const inferredProjectId = inferProjectIdFromContext(record);
+  if (inferredProjectId) {
+    context.projectId = inferredProjectId;
+  }
+
   const inferredModel = inferModelFromContext(record);
   if (inferredModel) {
     if (context.model !== inferredModel) {
@@ -389,6 +411,7 @@ export class CodexProvider implements IProvider {
     for (const file of files) {
       const context: SessionContext = {
         model: 'gpt-5',
+        projectId: undefined,
         previousTotals: null,
       };
       const relativeFile = relative(this.sessionsDir, file).split(sep).join('/');
@@ -406,7 +429,7 @@ export class CodexProvider implements IProvider {
           }
 
           usage.sessionId = relativeFile;
-          usage.projectId = projectDir === '.' ? undefined : projectDir;
+          usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
 
           const normalizedModel = normalizeModelName(
             compactModelDateSuffix(usage.model),

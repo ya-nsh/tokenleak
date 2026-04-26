@@ -42,6 +42,13 @@ export type {
   CommonsProviderModelEntry,
   CommonsExport,
   CommonsInspectReport,
+  WasteCategory,
+  WasteRecipe,
+  WasteFinding,
+  WasteReport,
+  NutritionOutcomeSignal,
+  NutritionRepoSummary,
+  NutritionReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -82,6 +89,25 @@ export {
   buildReplayReport,
   buildCommonsExport,
   inspectCommonsExport,
+  buildWasteReport,
+  buildNutritionReport,
+  collectGitOutcomeSignals,
+  clusterPrompts,
+  tokenBigrams,
+  buildReceipt,
+  CATEGORY_LABELS,
+  CATEGORY_LABELS_SHORT,
+  formatReceiptDollars,
+} from './aggregation';
+
+export type {
+  PromptCluster,
+  ClusterOptions,
+  Receipt,
+  ReceiptLine,
+  ReceiptSummary,
+  ReceiptCategory,
+  BuildReceiptOptions,
 } from './aggregation';
 
 export {

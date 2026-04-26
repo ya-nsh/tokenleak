@@ -219,12 +219,19 @@ describe('interactive launcher', () => {
 });
 
 describe('consolidated menu', () => {
-  test('has 10 items with unique shortcuts 1-0', () => {
+  test('has unique shortcuts covering digits 1-0 and Receipts', () => {
     const options = createMenuOptions();
-    expect(options).toHaveLength(10);
+    expect(options).toHaveLength(11);
     const shortcuts = options.map((o) => o.shortcut);
-    expect(new Set(shortcuts).size).toBe(10);
-    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
+    expect(new Set(shortcuts).size).toBe(shortcuts.length);
+    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'R', '0']);
+  });
+
+  test('has Receipts entry reachable from the launcher', () => {
+    const options = createMenuOptions();
+    const receipts = options.find((o) => o.shortcut === 'R');
+    expect(receipts).toBeDefined();
+    expect(receipts!.title).toBe('Receipts');
   });
 
   test('has Export as item 2', () => {
@@ -375,11 +382,13 @@ describe('interactive helpers', () => {
   });
 
   test('buildLauncherBody keeps the selected action visible in compact mode', () => {
+    const options = createMenuOptions();
+    const customIndex = options.findIndex((o) => o.title === 'Build Custom Command');
     const output = stripAnsi(
       buildLauncherBody(
         { version: '2.1.0', helpText: 'help' },
-        createMenuOptions(),
-        9,
+        options,
+        customIndex,
         88,
         12,
       ).join('\n'),
@@ -781,6 +790,7 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--more');
     expect(stdout).toContain('tokenleak explain <date>');
     expect(stdout).toContain('focus');
+    expect(stdout).not.toContain('tokenleak waste');
     expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
@@ -797,6 +807,18 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('tokenleak focus');
     expect(stdout).toContain('deep-work score');
     expect(stdout).toContain('--format <format>');
+  });
+
+  test('waste is not exposed as a standalone command', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'waste', '--help'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('Advisor view for Waste Patterns');
   });
 
   test('--version prints version', async () => {

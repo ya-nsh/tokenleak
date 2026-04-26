@@ -13,6 +13,20 @@ export { buildExplainReport } from './explain';
 export { buildFocusReport } from './focus';
 export { buildReplayReport } from './replay';
 export { buildCommonsExport, inspectCommonsExport } from './commons';
+export { buildWasteReport } from './waste';
+export { buildNutritionReport } from './nutrition';
+export { collectGitOutcomeSignals } from './nutrition-git';
+export { clusterPrompts, tokenBigrams } from './prompt-clusters';
+export type { PromptCluster, ClusterOptions } from './prompt-clusters';
+export { buildReceipt } from './receipt-lines';
+export type {
+  Receipt,
+  ReceiptLine,
+  ReceiptSummary,
+  ReceiptCategory,
+  BuildReceiptOptions,
+} from './receipt-lines';
+export { CATEGORY_LABELS, CATEGORY_LABELS_SHORT, formatReceiptDollars } from './receipt-labels';
 export {
   buildSessionRollups,
   buildProjectRollups,

@@ -1,9 +1,10 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport } from '@tokenleak/core';
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, WasteReport, NutritionReport, Receipt, ReceiptCategory } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
-export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay';
+export type ViewMode = 'overview' | 'matrix' | 'advisor' | 'focus' | 'explain' | 'compare' | 'export' | 'wrapped' | 'replay' | 'nutrition' | 'receipts';
 export type SortMode = 'cost' | 'tokens';
+export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
 
 export interface AppState {
@@ -18,6 +19,7 @@ export interface AppState {
   explainDate: string | null;       // YYYY-MM-DD, defaults to peak day
   focusScrollOffset: number;
   advisorScrollOffset: number;
+  nutritionScrollOffset: number;
   compareScrollOffset: number;
 
   // matrix pages
@@ -46,6 +48,12 @@ export interface AppState {
   replayScrollOffset: number;
   replayExpandedBlocks: Set<number>;
 
+  // receipts view state
+  receiptsScrollOffset: number;
+  receiptsExpandedLineIndex: number | null;
+  receiptsSortMode: ReceiptsSortMode;
+  receiptsCategoryFilter: ReceiptCategory | null;
+
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
   cachedFocusReport: FocusReport | null;
@@ -53,6 +61,9 @@ export interface AppState {
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
   cachedReplayReport: ReplayReport | null;
+  cachedWasteReport: WasteReport | null;
+  cachedNutritionReport: NutritionReport | null;
+  cachedReceipt: Receipt | null;
 }
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
@@ -69,6 +80,7 @@ export function createInitialState(): AppState {
     explainDate: null,
     focusScrollOffset: 0,
     advisorScrollOffset: 0,
+    nutritionScrollOffset: 0,
     compareScrollOffset: 0,
     matrixPage: 0,
     showHelp: false,
@@ -84,11 +96,18 @@ export function createInitialState(): AppState {
     replayDate: null,
     replayScrollOffset: 0,
     replayExpandedBlocks: new Set(),
+    receiptsScrollOffset: 0,
+    receiptsExpandedLineIndex: null,
+    receiptsSortMode: 'cost',
+    receiptsCategoryFilter: null,
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
     cachedCompareOutput: null,
     cachedMoreStats: null,
     cachedReplayReport: null,
+    cachedWasteReport: null,
+    cachedNutritionReport: null,
+    cachedReceipt: null,
   };
 }

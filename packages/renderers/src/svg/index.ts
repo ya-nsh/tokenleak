@@ -4,3 +4,4 @@ export { renderBadge } from './badge';
 export { renderWrappedSlidesSvg, computeAchievements } from './wrapped-slides';
 export type { Achievement } from './wrapped-slides';
 export { renderWrappedSinglePageSvg } from './wrapped-single-page';
+export { renderReceiptSvg } from './receipt';
