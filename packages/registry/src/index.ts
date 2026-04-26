@@ -14,6 +14,7 @@ export {
 export type { ModelPricing, CostBreakdown } from './models';
 
 export type { IProvider } from './provider';
+export type { ClaudeQuotaSnapshot, CodexQuotaSnapshot, QuotaWindowSnapshot } from './providers/index';
 export { ProviderRegistry } from './registry';
 export { GitCorrelator, parseGitLog } from './git-correlator';
 export type {
@@ -23,7 +24,15 @@ export type {
   ShipStatus,
 } from './git-correlator';
 export { splitJsonlRecords } from './parsers/index';
-export { ClaudeCodeProvider, CodexProvider, CursorProvider, OpenCodeProvider, PiProvider } from './providers/index';
+export {
+  ClaudeCodeProvider,
+  CodexProvider,
+  CursorProvider,
+  OpenCodeProvider,
+  PiProvider,
+  extractClaudeQuotaSnapshot,
+  extractCodexQuotaSnapshot,
+} from './providers/index';
 export {
   CursorAuthError,
   getActiveCursorCredentials,

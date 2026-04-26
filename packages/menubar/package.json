@@ -1,0 +1,10 @@
+{
+  "name": "@tokenleak/menubar",
+  "version": "2.1.0",
+  "private": true,
+  "scripts": {
+    "build": "bun ../../scripts/build-menubar-app.ts",
+    "test": "bun ../../scripts/check-menubar-app.ts",
+    "check": "bun ../../scripts/check-menubar-app.ts"
+  }
+}

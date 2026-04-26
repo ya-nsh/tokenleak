@@ -704,11 +704,21 @@ describe('run', () => {
   });
 
   test('throws a login hint when cursor is requested without auth or cache', async () => {
+    const emptyRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cli-empty-cursor-'));
+    const previousEnv = process.env;
+    process.env = {
+      ...process.env,
+      TOKENLEAK_CURSOR_DIR: emptyRoot,
+    };
+
     let thrown: unknown;
     try {
       await run({ format: 'json', provider: 'cursor' });
     } catch (error: unknown) {
       thrown = error;
+    } finally {
+      process.env = previousEnv;
+      rmSync(emptyRoot, { recursive: true, force: true });
     }
     expect(thrown).toBeInstanceOf(TokenleakError);
     expect((thrown as TokenleakError).message).toBe(

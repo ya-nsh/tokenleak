@@ -54,6 +54,7 @@ import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
 import { startTabbedDashboard } from './tabbed-dashboard.js';
 import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
+import { buildMenubarHelpText, runMenubarCommand } from './menubar/command.js';
 
 export { computeDateRange };
 export { renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak };
@@ -167,6 +168,7 @@ function buildHelpText(): string {
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
     '  tokenleak cursor <command>',
+    '  tokenleak menubar <command>',
     '',
     'Subcommands:',
     '  explain <date>         Explain what drove usage on one day',
@@ -175,6 +177,7 @@ function buildHelpText(): string {
     '  replay [date]          Replay a day\'s session timeline (defaults to today)',
     '  receipts               Itemized receipt of spend by prompt behavior',
     '  cursor                 Manage Cursor auth and cache sync',
+    '  menubar                Install and manage the macOS quota menubar app',
     '',
     'Provider Shortcuts:',
     '  --claude                Only include Claude Code',
@@ -2702,6 +2705,24 @@ if (isDirectExecution) {
       }
 
       await runCursorCommand(argv.slice(1));
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+  if (argv[0] === 'menubar') {
+    try {
+      if (argv[1] === '--help' || argv[1] === '-h' || argv.length === 1) {
+        process.stdout.write(buildMenubarHelpText());
+        process.exit(0);
+      }
+
+      if (argv[1] === '--version' || argv[1] === '-v') {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await runMenubarCommand(argv.slice(1), process.argv[1]!);
       process.exit(0);
     } catch (error: unknown) {
       handleError(error);
