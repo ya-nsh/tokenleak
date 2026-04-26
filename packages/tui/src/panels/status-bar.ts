@@ -56,7 +56,7 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const helpHint = '?:help';
+  const helpHint = '?:guide';
   const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-9/0:view`;
   const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
 
