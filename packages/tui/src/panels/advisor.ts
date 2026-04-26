@@ -5,8 +5,7 @@ import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
 export const ADVISOR_VISIBLE_ITEMS = 5;
-const TITLE_WIDTH = 104;
-const BODY_WIDTH = 126;
+const CONTENT_WIDTH = 72;
 const MAX_BODY_LINES = 2;
 
 function confidenceColor(c: 'high' | 'medium' | 'low'): string {
@@ -68,19 +67,33 @@ function textLines(lines: string[], fg: string) {
   return lines.map((line) => Text({ content: line, fg }));
 }
 
+function indentedTextLines(value: string, fg: string) {
+  const indent = '  ';
+  return textLines(
+    wrapText(value, CONTENT_WIDTH - indent.length).map((line) => `${indent}${line}`),
+    fg,
+  );
+}
+
+function titleLine(title: string, badge: string): string {
+  const prefix = '\u25B8 ';
+  const titleWidth = Math.max(12, CONTENT_WIDTH - prefix.length - 2 - badge.length);
+  return `${prefix}${truncate(title, titleWidth)}  ${badge}`;
+}
+
 function renderRecommendation(rec: AdvisorRecommendation) {
   const badge = confidenceLabel(rec.confidence);
-  const title = truncate(`${typeLabel(rec.type)}: ${cleanText(rec.title)}`, TITLE_WIDTH);
+  const title = `${typeLabel(rec.type)}: ${cleanText(rec.title)}`;
   const description = `${cleanText(rec.description)} Saves ${formatCost(rec.monthlySavings)}/mo`;
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({
-      content: `\u25B8 ${title}  ${badge}`,
+      content: titleLine(title, badge),
       fg: confidenceColor(rec.confidence),
       attributes: BOLD,
     }),
-    ...textLines(wrapText(`  ${description}`, BODY_WIDTH), COLORS.dimWhite),
+    ...indentedTextLines(description, COLORS.dimWhite),
     Text({
       content: '',
       fg: COLORS.dimWhite,
@@ -106,23 +119,23 @@ function renderWasteFinding(finding: WasteFinding) {
   const recipe = finding.recipes[0];
   const scope = [finding.provider, finding.model].filter(Boolean).join(' / ');
   const badge = `[${finding.severity.toUpperCase()}]`;
-  const title = truncate(`${categoryLabel(finding.category)}: ${cleanText(finding.title)}`, TITLE_WIDTH);
+  const title = `${categoryLabel(finding.category)}: ${cleanText(finding.title)}`;
   const savings = `Savings: ${formatSavings(finding.estimatedMonthlySavings)}${scope ? `  Scope: ${scope}` : ''}`;
   const recipeText = recipe ? `Recipe: ${recipe.title} - ${recipe.detail}` : '';
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({
-      content: `\u25B8 ${title}  ${badge}`,
+      content: titleLine(title, badge),
       fg: severityColor(finding.severity),
       attributes: BOLD,
     }),
-    ...textLines(wrapText(`  Evidence: ${finding.evidence}`, BODY_WIDTH), COLORS.dimWhite),
+    ...indentedTextLines(`Evidence: ${finding.evidence}`, COLORS.dimWhite),
     Text({
-      content: `  ${truncate(savings, BODY_WIDTH - 2)}`,
+      content: `  ${truncate(savings, CONTENT_WIDTH - 2)}`,
       fg: COLORS.dimWhite,
     }),
-    ...(recipe ? textLines(wrapText(`  ${recipeText}`, BODY_WIDTH), COLORS.cyan) : []),
+    ...(recipe ? indentedTextLines(recipeText, COLORS.cyan) : []),
     Text({ content: '', fg: COLORS.dimWhite }),
   );
 }

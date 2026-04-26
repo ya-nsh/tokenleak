@@ -136,7 +136,47 @@ describe('buildWasteReport', () => {
     expect(report.findings.map((finding) => finding.category)).toContain('context-drag');
     expect(report.findings.map((finding) => finding.category)).toContain('burst-spike');
     expect(report.findings.map((finding) => finding.category)).toContain('model-switch-churn');
+    const churn = report.findings.find((finding) => finding.category === 'model-switch-churn');
+    expect(churn?.provider).toBe('claude-code');
+    expect(churn?.evidence).toContain('claude-code session');
     expect(report.findings[0]?.recipes.length).toBeGreaterThan(0);
+  });
+
+  it('does not merge matching session ids across providers for model-switch churn', () => {
+    const report = buildWasteReport(output([
+      event({
+        provider: 'claude-code',
+        sessionId: 'shared-session',
+        timestamp: '2026-04-01T10:00:00.000Z',
+        model: 'claude-opus-4',
+      }),
+      event({
+        provider: 'codex',
+        sessionId: 'shared-session',
+        timestamp: '2026-04-01T10:05:00.000Z',
+        model: 'gpt-5',
+      }),
+      event({
+        provider: 'claude-code',
+        sessionId: 'shared-session',
+        timestamp: '2026-04-01T10:10:00.000Z',
+        model: 'claude-opus-4',
+      }),
+      event({
+        provider: 'codex',
+        sessionId: 'shared-session',
+        timestamp: '2026-04-01T10:15:00.000Z',
+        model: 'gpt-5',
+      }),
+      event({
+        provider: 'claude-code',
+        sessionId: 'shared-session',
+        timestamp: '2026-04-01T10:20:00.000Z',
+        model: 'claude-opus-4',
+      }),
+    ]));
+
+    expect(report.findings.map((finding) => finding.category)).not.toContain('model-switch-churn');
   });
 
   it('returns a sparse report instead of failing on empty data', () => {

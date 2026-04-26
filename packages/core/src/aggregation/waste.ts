@@ -180,13 +180,17 @@ function detectModelSwitchChurn(events: UsageEvent[]): WasteFinding[] {
   const bySession = new Map<string, UsageEvent[]>();
   for (const event of events) {
     if (!event.sessionId) continue;
-    const sessionEvents = bySession.get(event.sessionId) ?? [];
+    const sessionKey = `${event.provider}:${event.sessionId}`;
+    const sessionEvents = bySession.get(sessionKey) ?? [];
     sessionEvents.push(event);
-    bySession.set(event.sessionId, sessionEvents);
+    bySession.set(sessionKey, sessionEvents);
   }
 
-  for (const [sessionId, sessionEvents] of bySession) {
+  for (const sessionEvents of bySession.values()) {
     const ordered = sessionEvents.slice().sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+    const first = ordered[0];
+    if (!first) continue;
+
     let switches = 0;
     for (let index = 1; index < ordered.length; index++) {
       if (ordered[index]!.model !== ordered[index - 1]!.model) {
@@ -199,7 +203,8 @@ function detectModelSwitchChurn(events: UsageEvent[]): WasteFinding[] {
         category: 'model-switch-churn',
         severity: 'low',
         title: 'Frequent model switching inside a session',
-        evidence: `Session ${sessionId} switched models ${switches} times across ${ordered.length} events.`,
+        provider: first.provider,
+        evidence: `${first.provider} session ${first.sessionId} switched models ${switches} times across ${ordered.length} events.`,
         estimatedMonthlySavings: null,
         recipes: [
           {
