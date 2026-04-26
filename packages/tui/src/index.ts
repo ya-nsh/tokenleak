@@ -14,7 +14,7 @@ import {
   saveCursorCredentials,
   validateCursorSession,
 } from '@tokenleak/registry';
-import { computeAchievements } from '@tokenleak/renderers';
+import { computeAchievements, startReplayLiveServer } from '@tokenleak/renderers';
 import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
@@ -321,6 +321,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           state.replayExpandedBlockIndex,
           state.replayScrollOffset,
           getPanelContentWidth(renderer, REPLAY_MAX_CONTENT_WIDTH),
+          undefined,
+          null,
+          state.replayLiveServerPort,
         );
       }
       if (!state.replayDate) {
@@ -344,6 +347,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           render(state, renderer);
         },
         buildReplayPlaybackView(state),
+        state.replayLiveServerPort,
       );
     case 'nutrition':
       if (!hasWindowData) {
@@ -647,6 +651,7 @@ function resetReplayInteraction(state: AppState): void {
   state.replayExpandedBlockIndex = null;
   exitReplayPlayback(state);
   stopReplayPlaybackTimer();
+  stopReplayLiveServer(state);
 }
 
 let replayPlaybackTimer: ReturnType<typeof setInterval> | null = null;
@@ -691,6 +696,12 @@ function handleReplayPlaybackInput(
 ): boolean {
   if (state.selectedView !== 'replay') return false;
   const events = state.cachedReplayReport?.events;
+
+  // Browser launcher — works from BOTH overview and playback modes.
+  if (sequence === 'b' && events && events.length > 0) {
+    void launchReplayBrowser(state, renderer);
+    return true;
+  }
 
   // Toggle entry from overview mode.
   if (state.replayCursorEventIndex === null) {
@@ -805,6 +816,54 @@ function pauseReplayPlaybackIfRunning(state: AppState): void {
     state.replayPlaybackActive = false;
     stopReplayPlaybackTimer();
   }
+}
+
+// ── In-process replay live server (launched via `b` from the replay view) ──
+
+let replayLiveServerStop: (() => void) | null = null;
+
+const OS_OPEN_COMMANDS: Record<string, string> = {
+  darwin: 'open',
+  linux: 'xdg-open',
+  win32: 'start',
+};
+
+function openUrlInBrowser(url: string): void {
+  const cmd = OS_OPEN_COMMANDS[process.platform];
+  if (!cmd) return;
+  const args = process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : [cmd, url];
+  try {
+    Bun.spawn(args, { stdout: 'ignore', stderr: 'ignore' });
+  } catch {
+    // best-effort; the in-TUI banner still shows the URL the user can open manually
+  }
+}
+
+async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Promise<void> {
+  // Idempotent — second press just re-opens the browser to the existing server.
+  if (state.replayLiveServerPort !== null) {
+    openUrlInBrowser(`http://localhost:${state.replayLiveServerPort}/`);
+    return;
+  }
+  if (!state.cachedReplayReport) return;
+  try {
+    const { port, stop } = await startReplayLiveServer(state.cachedReplayReport);
+    state.replayLiveServerPort = port;
+    replayLiveServerStop = stop;
+    render(state, renderer);
+    openUrlInBrowser(`http://localhost:${port}/`);
+  } catch (err) {
+    // surface the error in the help row briefly; for now just log to stderr
+    process.stderr.write(`failed to start replay live server: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+function stopReplayLiveServer(state: AppState): void {
+  if (replayLiveServerStop !== null) {
+    try { replayLiveServerStop(); } catch { /* noop */ }
+    replayLiveServerStop = null;
+  }
+  state.replayLiveServerPort = null;
 }
 
 function buildReplayPlaybackView(state: AppState): ReplayPlaybackView | null {
@@ -1526,6 +1585,7 @@ export async function main(): Promise<void> {
 
     // q: quit
     if (sequence === 'q') {
+      stopReplayLiveServer(state);
       renderer.destroy();
       process.exit(0);
     }

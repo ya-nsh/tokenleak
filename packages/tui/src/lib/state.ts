@@ -85,6 +85,8 @@ export interface AppState {
   replayCursorEventIndex: number | null;
   replayPlaybackActive: boolean;
   replayPlaybackSpeed: ReplayPlaybackSpeed;
+  /** Port the in-process replay live server is listening on, or null if not started. */
+  replayLiveServerPort: number | null;
 
   // receipts view state
   receiptsScrollOffset: number;
@@ -148,6 +150,7 @@ export function createInitialState(): AppState {
     replayCursorEventIndex: null,
     replayPlaybackActive: false,
     replayPlaybackSpeed: 240,
+    replayLiveServerPort: null,
     receiptsScrollOffset: 0,
     receiptsSelectedLineIndex: 0,
     receiptsExpandedLineIndex: null,
