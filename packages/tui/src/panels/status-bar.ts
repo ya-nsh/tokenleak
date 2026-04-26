@@ -25,6 +25,21 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
+  if (state.loadError) {
+    return Box(
+      {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-between',
+        paddingLeft: 1,
+        paddingRight: 1,
+        height: 1,
+      },
+      Text({ content: state.loadError, fg: COLORS.red }),
+      Text({ content: 'r:retry  q:quit', fg: COLORS.dimWhite }),
+    );
+  }
+
   if (state.viewTasks.activeLabel) {
     return Box(
       {

@@ -195,6 +195,8 @@ describe('getScopedWindowData', () => {
     expect(scoped?.windowRange).toEqual({ since: '2026-04-20', until: '2026-04-26' });
     expect(scoped?.events.map((event) => event.date)).toEqual(['2026-04-25']);
     expect(scoped?.scopedProviders[0]?.daily.map((day) => day.date)).toEqual(['2026-04-25']);
+    expect(scoped?.scopedProviders[0]?.totalTokens).toBe(200);
+    expect(scoped?.scopedProviders[0]?.totalCost).toBe(0.02);
   });
 });
 

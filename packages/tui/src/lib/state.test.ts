@@ -7,6 +7,7 @@ describe('createInitialState', () => {
 
     expect(state.selectedWindowIndex).toBe(DEFAULT_WINDOW_INDEX);
     expect(WINDOW_LABELS[state.selectedWindowIndex]).toBe('7D');
+    expect(state.loadError).toBeNull();
   });
 
   test('starts with empty transient view task state', () => {

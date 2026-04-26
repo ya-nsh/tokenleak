@@ -39,6 +39,7 @@ export interface AppState {
   selectedWindowIndex: number; // 0=1D, 1=7D, 2=30D, 3=90D, 4=ALL
   selectedView: ViewMode;
   isLoading: boolean;
+  loadError: string | null;
   data: TuiData | null;
   sortMode: SortMode;
   modelScrollOffset: number;
@@ -106,6 +107,7 @@ export function createInitialState(): AppState {
     selectedWindowIndex: DEFAULT_WINDOW_INDEX,
     selectedView: 'overview',
     isLoading: true,
+    loadError: null,
     data: null,
     sortMode: 'cost',
     modelScrollOffset: 0,

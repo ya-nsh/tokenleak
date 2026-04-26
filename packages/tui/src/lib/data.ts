@@ -333,6 +333,16 @@ function flattenProviderEvents(providers: ProviderData[]): UsageEvent[] {
   return events;
 }
 
+function sumDailyTotals(daily: ProviderData['daily']): { totalTokens: number; totalCost: number } {
+  return daily.reduce(
+    (totals, day) => ({
+      totalTokens: totals.totalTokens + day.totalTokens,
+      totalCost: totals.totalCost + day.cost,
+    }),
+    { totalTokens: 0, totalCost: 0 },
+  );
+}
+
 function scopedWindowKey(state: AppState, windowRange: DateRange): string {
   return `${state.selectedWindowIndex}:${windowRange.since}..${windowRange.until}`;
 }
@@ -366,8 +376,10 @@ export function getScopedWindowData(state: AppState): ScopedWindowData | null {
           const filteredDaily = provider.daily.filter(
             (day) => day.date >= windowRange.since && day.date <= windowRange.until,
           );
+          const totals = sumDailyTotals(filteredDaily);
           return {
             ...provider,
+            ...totals,
             daily: filteredDaily,
             events: filteredEvents,
           };

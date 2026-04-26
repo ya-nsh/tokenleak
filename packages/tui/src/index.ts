@@ -220,6 +220,10 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
   const hasWindowData = Boolean(state.data?.windows[state.selectedWindowIndex]);
 
+  if (!state.data && state.loadError) {
+    return createDeferredPanel('Refresh failed', state.loadError, true);
+  }
+
   if (!state.data && state.selectedView !== 'overview' && state.selectedView !== 'export') {
     return createDeferredPanel('Loading', 'Loading usage data...');
   }
@@ -463,6 +467,7 @@ function applyLoadedData(
 ): void {
   state.data = freshData;
   state.isLoading = false;
+  state.loadError = null;
   state.modelScrollOffset = 0;
   state.advisorScrollOffset = 0;
   state.focusScrollOffset = 0;
@@ -490,6 +495,7 @@ async function reloadAllData(
   failurePrefix?: string,
 ): Promise<void> {
   state.isLoading = true;
+  state.loadError = null;
   invalidateAllCaches(state);
   state.exportStatus = null;
   render(state, renderer);
@@ -500,7 +506,7 @@ async function reloadAllData(
     writeCachedTuiData(freshData);
   } catch (err: unknown) {
     state.isLoading = false;
-    state.exportStatus = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
+    state.loadError = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   render(state, renderer);
@@ -918,7 +924,7 @@ async function loadFreshDataInBackground(state: AppState, renderer: CliRenderer)
     writeCachedTuiData(freshData);
   } catch (err: unknown) {
     state.isLoading = false;
-    state.exportStatus = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
+    state.loadError = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   render(state, renderer);

@@ -33,6 +33,17 @@ describe('buildStatusBar', () => {
     expect(text).toContain('c:cursor');
     expect(text).not.toContain('1-9/0/R:view');
   });
+
+  test('surfaces background load failures outside of the export view', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    state.loadError = 'Refresh failed: provider blew up';
+
+    const text = collectTextContent(buildStatusBar(state)).join('');
+
+    expect(text).toContain('Refresh failed: provider blew up');
+    expect(text).toContain('r:retry');
+  });
 });
 
 describe('createHelpPanel', () => {
