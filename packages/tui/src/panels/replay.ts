@@ -1,19 +1,35 @@
 import { Box, Text } from '@opentui/core';
-import type { FlowBlock, ReplayReport, TokenVelocityPoint } from '@tokenleak/core';
+import type { FlowBlock, ReplayReport, TokenVelocityPoint, UsageEvent } from '@tokenleak/core';
 import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft, truncate, wrapText } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
+import type { PlaybackSummary } from '../lib/replay-playback.js';
 
-const HEATMAP_BLOCKS = [' ', '\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'];
+const HEATMAP_BLOCKS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const HEATMAP_SLOTS = 48;
 export const REPLAY_MAX_CONTENT_WIDTH = 78;
 const REPLAY_EVENT_DETAIL_LIMIT = 4;
 export const REPLAY_VISIBLE_BLOCKS = 8;
+const PLAYBACK_EVENT_LIST_BEFORE = 2;
+const PLAYBACK_EVENT_LIST_AFTER = 4;
 
 type ReplayToggleHandler = (blockIndex: number) => void;
+
+export interface ReplayPlaybackView {
+  cursorIndex: number;
+  active: boolean;
+  speed: number;
+  summary: PlaybackSummary;
+  totalDayCost: number;
+}
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatTimeSeconds(iso: string): string {
+  const date = new Date(iso);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
 }
 
 function formatDuration(ms: number): string {
@@ -24,7 +40,8 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-function renderActivityBar(report: ReplayReport) {
+/** Activity bar with an optional ▼ playhead column. */
+function renderActivityBar(report: ReplayReport, playback: ReplayPlaybackView | null) {
   if (report.events.length === 0) {
     return Text({ content: '  (no events)', fg: COLORS.dimWhite });
   }
@@ -46,11 +63,18 @@ function renderActivityBar(report: ReplayReport) {
   const firstTime = formatTime(report.events[0].timestamp);
   const lastTime = formatTime(report.events[report.events.length - 1].timestamp);
 
-  return Box(
-    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: bar, fg: COLORS.green }),
-    Text({ content: `${firstTime}${' '.repeat(Math.max(1, HEATMAP_SLOTS - firstTime.length - lastTime.length))}${lastTime}`, fg: COLORS.dimWhite }),
-  );
+  const children: ReturnType<typeof Text>[] = [];
+  if (playback) {
+    const cursorEvent = playback.summary.cursorEvent;
+    const date = new Date(cursorEvent.timestamp);
+    const slot = Math.min(date.getHours() * 2 + Math.floor(date.getMinutes() / 30), HEATMAP_SLOTS - 1);
+    const playhead = ' '.repeat(slot) + '▼';
+    children.push(Text({ content: playhead, fg: COLORS.amber, attributes: BOLD }));
+  }
+  children.push(Text({ content: bar, fg: COLORS.green }));
+  children.push(Text({ content: `${firstTime}${' '.repeat(Math.max(1, HEATMAP_SLOTS - firstTime.length - lastTime.length))}${lastTime}`, fg: COLORS.dimWhite }));
+
+  return Box({ flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 }, ...children);
 }
 
 function renderDetailLine(content: string, contentWidth: number, fg: string = COLORS.dimWhite) {
@@ -61,17 +85,21 @@ function renderFlowBlockCard(
   block: FlowBlock,
   selected: boolean,
   expanded: boolean,
+  active: boolean,
   contentWidth: number,
   onToggleBlock?: ReplayToggleHandler,
 ) {
-  const timeRange = `${formatTime(block.start)}\u2013${formatTime(block.end)}`;
+  const timeRange = `${formatTime(block.start)}–${formatTime(block.end)}`;
   const headerText = `${timeRange}  ${block.label}  |  ${block.eventCount} events  |  ${formatTokens(block.totalTokens)} tok  |  ${formatCost(block.cost)}`;
-  const cursor = selected ? '\u25B8' : ' ';
-  const expandIcon = expanded ? '\u25BC' : '\u25B6';
+  const cursor = active ? '▶' : selected ? '▸' : ' ';
+  const expandIcon = expanded ? '▼' : '▶';
 
+  const headerFg = active
+    ? COLORS.amber
+    : block.label === 'Deep Flow' ? COLORS.cyan : block.label === 'Quick Lookup' ? COLORS.dimWhite : COLORS.white;
   const headerLine = Text({
     content: truncate(` ${cursor} ${expandIcon} ${headerText}`, contentWidth),
-    fg: block.label === 'Deep Flow' ? COLORS.cyan : block.label === 'Quick Lookup' ? COLORS.dimWhite : COLORS.white,
+    fg: headerFg,
     attributes: BOLD,
   });
 
@@ -116,10 +144,10 @@ function renderFlowBlockCard(
     const first = (trend[0] * 100).toFixed(0);
     const last = (trend[trend.length - 1] * 100).toFixed(0);
     if (first !== last) {
-      const direction = Number(last) > Number(first) ? '\u2191' : '\u2193';
+      const direction = Number(last) > Number(first) ? '↑' : '↓';
       children.push(
         renderDetailLine(
-          `Cache trend: ${first}% \u2192 ${last}% ${direction}`,
+          `Cache trend: ${first}% → ${last}% ${direction}`,
           contentWidth,
           Number(last) > Number(first) ? COLORS.green : COLORS.red,
         ),
@@ -161,7 +189,7 @@ function renderPulseChart(velocity: TokenVelocityPoint[]) {
       const tpm = velocity[idx].tokensPerMinute;
       const normalizedHeight = maxTpm > 0 ? (tpm / maxTpm) * (chartHeight - 1) : 0;
       const threshold = chartHeight - 1 - row;
-      line += normalizedHeight >= threshold ? '\u2588' : ' ';
+      line += normalizedHeight >= threshold ? '█' : ' ';
     }
     rows.push(line);
   }
@@ -173,7 +201,7 @@ function renderPulseChart(velocity: TokenVelocityPoint[]) {
   for (let i = 0; i < rows.length; i++) {
     const label = i === 0 ? padLeft(formatTokens(maxTpm), 7) : i === rows.length - 1 ? padLeft('0', 7) : '       ';
     children.push(
-      Text({ content: `${label} \u2502${rows[i]}`, fg: COLORS.green }),
+      Text({ content: `${label} │${rows[i]}`, fg: COLORS.green }),
     );
   }
 
@@ -203,6 +231,62 @@ function renderDaySummary(report: ReplayReport, contentWidth: number) {
   );
 }
 
+function renderPlaybackHeader(playback: ReplayPlaybackView, totalEvents: number, contentWidth: number) {
+  const status = playback.active
+    ? `▶ playing ${playback.speed}×`
+    : `⏸ paused @ ${formatTimeSeconds(playback.summary.cursorEvent.timestamp)}`;
+  const statusColor = playback.active ? COLORS.green : COLORS.amber;
+  const cost = `${formatCost(playback.summary.cumulativeCost)}/${formatCost(playback.totalDayCost)}`;
+  const counter = `event ${playback.summary.cursorIndex + 1}/${totalEvents}`;
+  const cacheBit = `cache ${formatPercent(playback.summary.cacheHitRate)}`;
+  const left = `${cost}  ·  ${counter}  ·  ${cacheBit}`;
+  const composed = `${left}     ${status}`;
+  return Box(
+    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: truncate(composed, contentWidth), fg: statusColor, attributes: BOLD }),
+  );
+}
+
+function renderPlaybackEventList(report: ReplayReport, playback: ReplayPlaybackView, contentWidth: number) {
+  const start = Math.max(0, playback.cursorIndex - PLAYBACK_EVENT_LIST_BEFORE);
+  const end = Math.min(report.events.length, playback.cursorIndex + PLAYBACK_EVENT_LIST_AFTER + 1);
+  const lines: ReturnType<typeof Text>[] = [
+    Text({ content: ' Events near cursor', fg: COLORS.amber, attributes: BOLD }),
+  ];
+  for (let i = start; i < end; i++) {
+    const e: UsageEvent = report.events[i];
+    const isCursor = i === playback.cursorIndex;
+    const isFuture = i > playback.cursorIndex;
+    const cacheRate = (e.inputTokens + e.cacheReadTokens) > 0
+      ? e.cacheReadTokens / (e.inputTokens + e.cacheReadTokens)
+      : 0;
+    const marker = isCursor ? '▶' : ' ';
+    const line = ` ${marker} ${padRight(formatTimeSeconds(e.timestamp), 9)} ${padRight(truncate(e.model, 22), 23)} ${padLeft(formatTokens(e.totalTokens), 8)} tok  cache ${padLeft(formatPercent(cacheRate), 5)}  ${padLeft(formatCost(e.cost), 8)}`;
+    const fg = isCursor ? COLORS.green : isFuture ? COLORS.dimWhite : COLORS.white;
+    const attributes = isCursor ? BOLD : undefined;
+    lines.push(Text({ content: truncate(line, contentWidth), fg, attributes }));
+  }
+  return Box({ flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 }, ...lines);
+}
+
+function renderPlaybackHelp(contentWidth: number) {
+  const line1 = ' [n/p] step  [N/P] block  [i] interesting  [home/end] jump';
+  const line2 = ' [space] play/pause  [1/2/3] speed  [s/esc] exit playback';
+  return Box(
+    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: truncate(line1, contentWidth), fg: COLORS.dimWhite }),
+    Text({ content: truncate(line2, contentWidth), fg: COLORS.dimWhite }),
+  );
+}
+
+function renderOverviewHelp(contentWidth: number) {
+  const line = ' [s] enter step/playback mode  ([n/p] step events, [space] play, [i] jump to interesting)';
+  return Box(
+    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),
+  );
+}
+
 export function createReplayPanel(
   report: ReplayReport | null,
   replayDate: string | null,
@@ -211,8 +295,9 @@ export function createReplayPanel(
   scrollOffset: number,
   contentWidth: number = REPLAY_MAX_CONTENT_WIDTH,
   onToggleBlock?: ReplayToggleHandler,
+  playback: ReplayPlaybackView | null = null,
 ) {
-  const dateLabel = replayDate ? formatShortDate(replayDate) : '\u2014';
+  const dateLabel = replayDate ? formatShortDate(replayDate) : '—';
 
   if (!report) {
     return Box(
@@ -226,7 +311,7 @@ export function createReplayPanel(
         paddingRight: 1,
       },
       Text({
-        content: ` Replay: ${dateLabel} \u25C4 \u25BA `,
+        content: ` Replay: ${dateLabel} ◄ ► `,
         fg: COLORS.amber,
         attributes: BOLD,
       }),
@@ -243,6 +328,7 @@ export function createReplayPanel(
       block,
       block.blockIndex === selectedBlockIndex,
       block.blockIndex === expandedBlockIndex,
+      playback !== null && block.blockIndex === selectedBlockIndex,
       contentWidth,
       onToggleBlock,
     ));
@@ -256,16 +342,14 @@ export function createReplayPanel(
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
 
-  return Box(
-    {
-      flexDirection: 'column',
-      width: '100%',
-      flexGrow: 1,
-      borderStyle: 'single',
-      borderColor: COLORS.dimWhite,
-    },
+  const titleSuffix = playback ? '  [PLAYBACK]' : '';
+  const playbackHeader = playback ? renderPlaybackHeader(playback, report.events.length, contentWidth) : null;
+  const playbackEvents = playback ? renderPlaybackEventList(report, playback, contentWidth) : null;
+  const help = playback ? renderPlaybackHelp(contentWidth) : renderOverviewHelp(contentWidth);
+
+  const children: ReturnType<typeof Box | typeof Text>[] = [
     Text({
-      content: ` Replay: ${dateLabel} \u25C4 \u25BA `,
+      content: ` Replay: ${dateLabel} ◄ ►${titleSuffix}`,
       fg: COLORS.amber,
       attributes: BOLD,
     }),
@@ -273,9 +357,15 @@ export function createReplayPanel(
       { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({ content: `Total: ${formatCost(totalCost)}`, fg: COLORS.green }),
     ),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderActivityBar(report),
-    Text({ content: '', fg: COLORS.dimWhite }),
+  ];
+  if (playbackHeader) {
+    children.push(Text({ content: '', fg: COLORS.dimWhite }));
+    children.push(playbackHeader);
+  }
+  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  children.push(renderActivityBar(report, playback));
+  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  children.push(
     Box(
       { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({
@@ -284,11 +374,28 @@ export function createReplayPanel(
         attributes: BOLD,
       }),
     ),
-    ...blockCards,
-    ...scrollIndicators,
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderPulseChart(report.tokenVelocity),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderDaySummary(report, contentWidth),
+  );
+  children.push(...blockCards);
+  children.push(...scrollIndicators);
+  if (playbackEvents) {
+    children.push(Text({ content: '', fg: COLORS.dimWhite }));
+    children.push(playbackEvents);
+  }
+  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  children.push(renderPulseChart(report.tokenVelocity));
+  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  children.push(renderDaySummary(report, contentWidth));
+  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  children.push(help);
+
+  return Box(
+    {
+      flexDirection: 'column',
+      width: '100%',
+      flexGrow: 1,
+      borderStyle: 'single',
+      borderColor: COLORS.dimWhite,
+    },
+    ...children,
   );
 }

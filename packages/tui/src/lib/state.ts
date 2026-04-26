@@ -28,6 +28,7 @@ export type ViewMode =
 export type SortMode = 'cost' | 'tokens';
 export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
+export type ReplayPlaybackSpeed = 60 | 240 | 600;
 
 export interface ViewTaskState {
   pendingKeys: Set<string>;
@@ -80,6 +81,10 @@ export interface AppState {
   replayScrollOffset: number;
   replaySelectedBlockIndex: number;
   replayExpandedBlockIndex: number | null;
+  // replay playback / step mode (null cursor = overview, set = step/playback mode)
+  replayCursorEventIndex: number | null;
+  replayPlaybackActive: boolean;
+  replayPlaybackSpeed: ReplayPlaybackSpeed;
 
   // receipts view state
   receiptsScrollOffset: number;
@@ -140,6 +145,9 @@ export function createInitialState(): AppState {
     replayScrollOffset: 0,
     replaySelectedBlockIndex: 0,
     replayExpandedBlockIndex: null,
+    replayCursorEventIndex: null,
+    replayPlaybackActive: false,
+    replayPlaybackSpeed: 240,
     receiptsScrollOffset: 0,
     receiptsSelectedLineIndex: 0,
     receiptsExpandedLineIndex: null,
