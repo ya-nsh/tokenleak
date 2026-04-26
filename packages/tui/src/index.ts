@@ -50,9 +50,9 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
-import { createReplayPanel } from './panels/replay.js';
+import { createReplayPanel, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
-import { createReceiptsPanel } from './panels/receipts.js';
+import { createReceiptsPanel, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -303,7 +303,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         return createReplayPanel(
           null,
           state.replayDate,
-          state.replayExpandedBlocks,
+          state.replaySelectedBlockIndex,
+          state.replayExpandedBlockIndex,
           state.replayScrollOffset,
         );
       }
@@ -319,8 +320,13 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       return createReplayPanel(
         state.cachedReplayReport,
         state.replayDate,
-        state.replayExpandedBlocks,
+        state.replaySelectedBlockIndex,
+        state.replayExpandedBlockIndex,
         state.replayScrollOffset,
+        (blockIndex) => {
+          toggleReplayBlock(state, blockIndex);
+          render(state, renderer);
+        },
       );
     case 'nutrition':
       if (!hasWindowData) {
@@ -384,7 +390,10 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           ensureReceipt(state);
         });
       }
-      return createReceiptsPanel(state, state.cachedReceipt);
+      return createReceiptsPanel(state, state.cachedReceipt, (lineIndex) => {
+        toggleReceiptLine(state, lineIndex);
+        render(state, renderer);
+      });
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -473,10 +482,12 @@ function applyLoadedData(
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
   state.replayScrollOffset = 0;
-  state.replayExpandedBlocks = new Set();
+  state.replaySelectedBlockIndex = 0;
+  state.replayExpandedBlockIndex = null;
   state.replayDate = null;
   state.explainDate = null;
   state.receiptsScrollOffset = 0;
+  state.receiptsSelectedLineIndex = 0;
   state.receiptsExpandedLineIndex = null;
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
@@ -589,6 +600,89 @@ function tryOpenCursorSetup(state: AppState, renderer: CliRenderer): boolean {
 let currentState: AppState;
 let currentRenderer: CliRenderer;
 
+function clampItemIndex(index: number, itemCount: number): number {
+  if (itemCount <= 0) return 0;
+  return Math.max(0, Math.min(index, itemCount - 1));
+}
+
+function keepSelectedItemVisible(selectedIndex: number, scrollOffset: number, visibleCount: number): number {
+  if (selectedIndex < scrollOffset) {
+    return selectedIndex;
+  }
+  if (selectedIndex >= scrollOffset + visibleCount) {
+    return selectedIndex - visibleCount + 1;
+  }
+  return scrollOffset;
+}
+
+function resetReplayInteraction(state: AppState): void {
+  state.replayScrollOffset = 0;
+  state.replaySelectedBlockIndex = 0;
+  state.replayExpandedBlockIndex = null;
+}
+
+function resetReceiptsInteraction(state: AppState): void {
+  state.receiptsScrollOffset = 0;
+  state.receiptsSelectedLineIndex = 0;
+  state.receiptsExpandedLineIndex = null;
+}
+
+function getReceiptLineCount(state: AppState): number {
+  const receipt = state.cachedReceipt;
+  if (!receipt) return 0;
+  return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter).length;
+}
+
+function toggleReplayBlock(state: AppState, blockIndex: number = state.replaySelectedBlockIndex): void {
+  const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
+  if (itemCount <= 0) return;
+  const selected = clampItemIndex(blockIndex, itemCount);
+  state.replaySelectedBlockIndex = selected;
+  state.replayScrollOffset = keepSelectedItemVisible(
+    selected,
+    state.replayScrollOffset,
+    REPLAY_VISIBLE_BLOCKS,
+  );
+  state.replayExpandedBlockIndex = state.replayExpandedBlockIndex === selected ? null : selected;
+}
+
+function toggleReceiptLine(state: AppState, lineIndex: number = state.receiptsSelectedLineIndex): void {
+  const itemCount = getReceiptLineCount(state);
+  if (itemCount <= 0) return;
+  const selected = clampItemIndex(lineIndex, itemCount);
+  state.receiptsSelectedLineIndex = selected;
+  state.receiptsScrollOffset = keepSelectedItemVisible(
+    selected,
+    state.receiptsScrollOffset,
+    RECEIPTS_VISIBLE_ROWS,
+  );
+  state.receiptsExpandedLineIndex = state.receiptsExpandedLineIndex === selected ? null : selected;
+}
+
+function moveReplaySelection(state: AppState, direction: number): void {
+  const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
+  if (itemCount <= 0) return;
+  const selected = clampItemIndex(state.replaySelectedBlockIndex + direction, itemCount);
+  state.replaySelectedBlockIndex = selected;
+  state.replayScrollOffset = keepSelectedItemVisible(
+    selected,
+    state.replayScrollOffset,
+    REPLAY_VISIBLE_BLOCKS,
+  );
+}
+
+function moveReceiptSelection(state: AppState, direction: number): void {
+  const itemCount = getReceiptLineCount(state);
+  if (itemCount <= 0) return;
+  const selected = clampItemIndex(state.receiptsSelectedLineIndex + direction, itemCount);
+  state.receiptsSelectedLineIndex = selected;
+  state.receiptsScrollOffset = keepSelectedItemVisible(
+    selected,
+    state.receiptsScrollOffset,
+    RECEIPTS_VISIBLE_ROWS,
+  );
+}
+
 function handleViewSwitch(mode: ViewMode): void {
   if (currentState.selectedView !== mode) {
     currentState.selectedView = mode;
@@ -598,12 +692,10 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
-    currentState.replayScrollOffset = 0;
-    currentState.receiptsScrollOffset = 0;
-    currentState.receiptsExpandedLineIndex = null;
+    resetReplayInteraction(currentState);
+    resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
     currentState.receiptsCategoryFilter = null;
-    currentState.replayExpandedBlocks = new Set();
     currentState.viewTasks.activeLabel = null;
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
@@ -660,12 +752,12 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
-  state.receiptsScrollOffset = 0;
-  state.receiptsExpandedLineIndex = null;
+  resetReceiptsInteraction(state);
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
+  resetReplayInteraction(state);
   clearViewTaskState(state);
 }
 
@@ -680,6 +772,8 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  resetReplayInteraction(state);
+  resetReceiptsInteraction(state);
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
   clearViewTaskState(state);
@@ -692,8 +786,7 @@ function shiftReplayDate(state: AppState, direction: number): void {
   d.setUTCDate(d.getUTCDate() + direction);
   state.replayDate = d.toISOString().slice(0, 10);
   state.cachedReplayReport = null;
-  state.replayScrollOffset = 0;
-  state.replayExpandedBlocks = new Set();
+  resetReplayInteraction(state);
 }
 
 /** Navigate explain date forward or backward by one day */
@@ -762,10 +855,7 @@ function getScrollableItemCount(state: AppState): number {
     case 'nutrition':
       return Math.min(state.cachedNutritionReport?.repos.length ?? 0, 30);
     case 'receipts': {
-      const receipt = state.cachedReceipt;
-      if (!receipt) return 0;
-      return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter)
-        .length;
+      return getReceiptLineCount(state);
     }
     default:
       return 0;
@@ -783,11 +873,11 @@ function getVisibleCount(view: ViewMode): number {
     case 'wrapped':
       return 20;
     case 'replay':
-      return 15;
+      return REPLAY_VISIBLE_BLOCKS;
     case 'nutrition':
       return NUTRITION_VISIBLE_ROWS;
     case 'receipts':
-      return 12;
+      return RECEIPTS_VISIBLE_ROWS;
     default:
       return 10;
   }
@@ -1094,6 +1184,16 @@ export async function main(): Promise<void> {
         }
         return true;
       }
+      if (state.selectedView === 'replay') {
+        moveReplaySelection(state, 1);
+        render(state, renderer);
+        return true;
+      }
+      if (state.selectedView === 'receipts') {
+        moveReceiptSelection(state, 1);
+        render(state, renderer);
+        return true;
+      }
       if (SCROLLABLE_VIEWS.has(state.selectedView)) {
         const itemCount = getScrollableItemCount(state);
         const visibleCount = getVisibleCount(state.selectedView);
@@ -1115,6 +1215,16 @@ export async function main(): Promise<void> {
           state.modelScrollOffset--;
           render(state, renderer);
         }
+        return true;
+      }
+      if (state.selectedView === 'replay') {
+        moveReplaySelection(state, -1);
+        render(state, renderer);
+        return true;
+      }
+      if (state.selectedView === 'receipts') {
+        moveReceiptSelection(state, -1);
+        render(state, renderer);
         return true;
       }
       if (SCROLLABLE_VIEWS.has(state.selectedView)) {
@@ -1152,22 +1262,16 @@ export async function main(): Promise<void> {
       return true;
     }
 
-    // Enter: expand/collapse flow blocks (replay view)
-    if (sequence === '\r' && state.selectedView === 'replay') {
-      const blockIndex = state.replayScrollOffset;
-      if (state.replayExpandedBlocks.has(blockIndex)) {
-        state.replayExpandedBlocks.delete(blockIndex);
-      } else {
-        state.replayExpandedBlocks.add(blockIndex);
-      }
+    // Enter/Space: expand/collapse the selected flow block (replay view)
+    if ((sequence === '\r' || sequence === ' ') && state.selectedView === 'replay') {
+      toggleReplayBlock(state);
       render(state, renderer);
       return true;
     }
 
-    // Enter: expand/collapse sample prompts for the top visible line (receipts view)
-    if (sequence === '\r' && state.selectedView === 'receipts') {
-      const target = state.receiptsScrollOffset;
-      state.receiptsExpandedLineIndex = state.receiptsExpandedLineIndex === target ? null : target;
+    // Enter/Space: expand/collapse sample prompts for the selected receipt line
+    if ((sequence === '\r' || sequence === ' ') && state.selectedView === 'receipts') {
+      toggleReceiptLine(state);
       render(state, renderer);
       return true;
     }
@@ -1177,8 +1281,7 @@ export async function main(): Promise<void> {
       const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
       const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
       state.receiptsSortMode = order[nextIndex]!;
-      state.receiptsScrollOffset = 0;
-      state.receiptsExpandedLineIndex = null;
+      resetReceiptsInteraction(state);
       render(state, renderer);
       return true;
     }
@@ -1194,8 +1297,7 @@ export async function main(): Promise<void> {
       const currentIndex = current === null ? -1 : categories.indexOf(current);
       const nextIndex = currentIndex + 1;
       state.receiptsCategoryFilter = nextIndex >= categories.length ? null : categories[nextIndex]!;
-      state.receiptsScrollOffset = 0;
-      state.receiptsExpandedLineIndex = null;
+      resetReceiptsInteraction(state);
       render(state, renderer);
       return true;
     }

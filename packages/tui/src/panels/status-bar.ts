@@ -97,9 +97,9 @@ export function buildStatusBar(state: AppState) {
   } else if (state.selectedView === 'explain') {
     keys = `${nav}  h/l:date  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'replay') {
-    keys = `${nav}  h/l:date  j/k:scroll  enter:expand  r:refresh${cursorHint}  ${helpHint}  q:quit`;
+    keys = `${nav}  h/l:date  j/k:select  enter/space:toggle  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'receipts') {
-    keys = `${nav}  j/k:scroll  enter:expand  o:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:select  enter/space:toggle  o:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (
     state.selectedView === 'advisor' ||
     state.selectedView === 'focus' ||

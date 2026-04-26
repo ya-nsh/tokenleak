@@ -65,6 +65,53 @@ export function truncate(s: string, maxLen: number): string {
   return s.slice(0, maxLen - 1) + '\u2026';
 }
 
+export function cleanInlineText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+export function wrapText(value: string, width: number, maxLines: number): string[] {
+  const safeWidth = Math.max(1, width);
+  const safeMaxLines = Math.max(1, maxLines);
+  const words = cleanInlineText(value).split(' ').filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= safeWidth) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+    } else {
+      lines.push(truncate(word, safeWidth));
+      current = '';
+      if (lines.length >= safeMaxLines) {
+        break;
+      }
+      continue;
+    }
+
+    if (lines.length >= safeMaxLines) {
+      break;
+    }
+    current = word.length > safeWidth ? truncate(word, safeWidth) : word;
+  }
+
+  if (current && lines.length < safeMaxLines) {
+    lines.push(current);
+  }
+
+  const fullText = words.join(' ');
+  if (lines.length === safeMaxLines && fullText.length > lines.join(' ').length) {
+    lines[safeMaxLines - 1] = truncate(lines[safeMaxLines - 1] ?? '', safeWidth);
+  }
+
+  return lines.length > 0 ? lines : [''];
+}
+
 /** Build a simple ASCII bar chart segment */
 export function asciiBar(ratio: number, width: number): string {
   const clamped = Math.max(0, Math.min(1, ratio));

@@ -5,7 +5,7 @@ import {
   type ReceiptCategory,
   type ReceiptLine,
 } from '@tokenleak/core';
-import { formatCost, padRight, padLeft, truncate } from '../lib/format.js';
+import { formatCost, padRight, padLeft, truncate, wrapText } from '../lib/format.js';
 import { deriveReceiptLines } from '../lib/data.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { ReceiptsSortMode } from '../lib/state.js';
@@ -16,51 +16,70 @@ const SORT_LABELS: Record<ReceiptsSortMode, string> = {
   alpha: 'alpha',
 };
 
-const VISIBLE_ROWS = 12;
+export const RECEIPTS_VISIBLE_ROWS = 8;
+const CONTENT_WIDTH = 78;
+const SAMPLE_LIMIT = 3;
+const SAMPLE_LINE_LIMIT = 2;
 
-function renderLine(line: ReceiptLine, rank: number, descColWidth: number, isExpanded: boolean) {
+type ReceiptToggleHandler = (lineIndex: number) => void;
+
+function renderLine(
+  line: ReceiptLine,
+  lineIndex: number,
+  rank: number,
+  descColWidth: number,
+  isSelected: boolean,
+  isExpanded: boolean,
+  onToggleLine?: ReceiptToggleHandler,
+) {
   const rankStr = padLeft(`${rank}.`, 3);
   const category = CATEGORY_LABELS_SHORT[line.category] ?? line.category.toUpperCase();
   const qty = `${line.quantity}×`;
   const cost = formatCost(line.totalCost);
   const desc = truncate(line.description, descColWidth);
-  // Arrow indicator on the expanded line so the cursor position is obvious.
-  const pointer = isExpanded ? '▸' : ' ';
+  const pointer = isSelected ? '▸' : ' ';
+  const expandIcon = isExpanded ? '▼' : '▶';
+  const content = truncate(
+    ` ${pointer} ${expandIcon} ${rankStr} ${padRight(category, 9)} ${padLeft(qty, 5)}  ${padRight(desc, descColWidth)} ${padLeft(cost, 10)}`,
+    CONTENT_WIDTH,
+  );
 
   return Box(
-    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
+    {
+      flexDirection: 'row',
+      width: '100%',
+      paddingLeft: 1,
+      paddingRight: 1,
+      onMouseDown: onToggleLine ? () => onToggleLine(lineIndex) : undefined,
+    },
     Text({
-      content: `${pointer}${rankStr} `,
-      fg: isExpanded ? COLORS.amber : COLORS.dimWhite,
-      attributes: isExpanded ? BOLD : undefined,
+      content,
+      fg: isSelected ? COLORS.amber : COLORS.white,
+      attributes: isSelected || isExpanded ? BOLD : undefined,
     }),
-    Text({ content: padRight(category, 9), fg: COLORS.amber, attributes: BOLD }),
-    Text({ content: padLeft(qty, 5), fg: COLORS.cyan }),
-    Text({ content: `  ${padRight(desc, descColWidth)}`, fg: COLORS.white }),
-    Text({ content: padLeft(cost, 10), fg: COLORS.green }),
   );
 }
 
-function renderSamplePrompt(prompt: string, descColWidth: number) {
-  const indent = 6; // align under the description column
-  const width = Math.max(10, descColWidth - 2);
-  const text = truncate(prompt, width);
-  return Box(
-    { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: ' '.repeat(indent), fg: COLORS.dimWhite }),
-    Text({ content: '└ ', fg: COLORS.dimWhite }),
-    Text({ content: text, fg: COLORS.dimWhite }),
+function renderDetailLine(value: string, fg: string = COLORS.dimWhite) {
+  return Text({ content: truncate(`      ${value}`, CONTENT_WIDTH), fg });
+}
+
+function renderSamplePrompt(prompt: string) {
+  return wrapText(prompt, CONTENT_WIDTH - 10, SAMPLE_LINE_LIMIT).map((line, index) =>
+    renderDetailLine(`${index === 0 ? '└ ' : '  '}${line}`),
   );
 }
 
 export function createReceiptsPanel(
   state: {
     receiptsScrollOffset: number;
+    receiptsSelectedLineIndex: number;
     receiptsExpandedLineIndex: number | null;
     receiptsSortMode: ReceiptsSortMode;
     receiptsCategoryFilter: ReceiptCategory | null;
   },
   receipt: Receipt | null,
+  onToggleLine?: ReceiptToggleHandler,
 ) {
   if (!receipt || receipt.lines.length === 0) {
     return Box(
@@ -95,11 +114,12 @@ export function createReceiptsPanel(
     state.receiptsSortMode,
     state.receiptsCategoryFilter,
   );
-  const offset = state.receiptsScrollOffset;
-  const visible = derivedLines.slice(offset, offset + VISIBLE_ROWS);
+  const maxOffset = Math.max(0, derivedLines.length - RECEIPTS_VISIBLE_ROWS);
+  const offset = Math.max(0, Math.min(state.receiptsScrollOffset, maxOffset));
+  const visible = derivedLines.slice(offset, offset + RECEIPTS_VISIBLE_ROWS);
 
   const DESC_MIN = 20;
-  const DESC_MAX = 52;
+  const DESC_MAX = 38;
   const longest = Math.max(DESC_MIN, ...visible.map((l) => l.description.length));
   const descColWidth = Math.min(DESC_MAX, longest);
 
@@ -146,11 +166,13 @@ export function createReceiptsPanel(
 
   const columnHeader = Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: padRight('', 4), fg: COLORS.dimWhite }),
-    Text({ content: padRight('Bucket', 9), fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Qty', 5), fg: COLORS.dimWhite }),
-    Text({ content: `  ${padRight('Description', descColWidth)}`, fg: COLORS.dimWhite }),
-    Text({ content: padLeft('Cost', 10), fg: COLORS.dimWhite }),
+    Text({
+      content: truncate(
+        `     ${padRight('#', 3)} ${padRight('Bucket', 9)} ${padLeft('Qty', 5)}  ${padRight('Description', descColWidth)} ${padLeft('Cost', 10)}`,
+        CONTENT_WIDTH,
+      ),
+      fg: COLORS.dimWhite,
+    }),
   );
 
   const summary = Box(
@@ -185,18 +207,19 @@ export function createReceiptsPanel(
             attributes: BOLD,
           }),
         ),
-        Text({
-          content: `All categories · Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
-          fg: COLORS.dimWhite,
-        }),
+        ...wrapText(
+          `All categories · Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
+          CONTENT_WIDTH - 2,
+          2,
+        ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
       )
     : Box(
-        { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-        Text({
-          content: `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  `,
-          fg: COLORS.dimWhite,
-        }),
-        Text({ content: `Total ${formatCost(receipt.summary.total)}`, fg: COLORS.amber, attributes: BOLD }),
+        { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
+        ...wrapText(
+          `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
+          CONTENT_WIDTH - 2,
+          2,
+        ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
       );
 
   const expandedIndex = state.receiptsExpandedLineIndex;
@@ -204,21 +227,27 @@ export function createReceiptsPanel(
   for (let i = 0; i < visible.length; i++) {
     const absoluteIndex = offset + i;
     const isExpanded = expandedIndex === absoluteIndex;
-    rows.push(renderLine(visible[i]!, absoluteIndex + 1, descColWidth, isExpanded));
+    const isSelected = state.receiptsSelectedLineIndex === absoluteIndex;
+    rows.push(renderLine(
+      visible[i]!,
+      absoluteIndex,
+      absoluteIndex + 1,
+      descColWidth,
+      isSelected,
+      isExpanded,
+      onToggleLine,
+    ));
     if (isExpanded) {
       const samples = visible[i]!.samplePrompts;
       if (samples.length === 0) {
-        rows.push(
-          Box(
-            { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-            Text({ content: '      ', fg: COLORS.dimWhite }),
-            Text({ content: '└ ', fg: COLORS.dimWhite }),
-            Text({ content: 'No sample prompts available for this line.', fg: COLORS.dimWhite }),
-          ),
-        );
+        rows.push(renderDetailLine('└ No sample prompts available for this line.'));
       } else {
-        for (const sample of samples) {
-          rows.push(renderSamplePrompt(sample, descColWidth));
+        const visibleSamples = samples.slice(0, SAMPLE_LIMIT);
+        for (const sample of visibleSamples) {
+          rows.push(...renderSamplePrompt(sample));
+        }
+        if (samples.length > visibleSamples.length) {
+          rows.push(renderDetailLine(`+${samples.length - visibleSamples.length} more samples`));
         }
       }
     }
