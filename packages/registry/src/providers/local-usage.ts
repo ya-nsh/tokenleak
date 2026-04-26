@@ -5,10 +5,15 @@ import type {
   ModelBreakdown,
   ProviderColors,
   ProviderData,
+  ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
-import { estimateCostBreakdown } from '../models/cost';
 import { normalizeModelName } from '../models/normalizer';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  resolveUsageCost,
+} from '../costing';
 
 export interface LocalUsageRecord {
   date: string;
@@ -144,32 +149,19 @@ export function sessionIdFromFile(file: string): string {
   return basename(file).replace(/\.(jsonl?|jsonl\.\w+)$/i, '');
 }
 
-function toCachePricing(
-  pricing: ReturnType<typeof estimateCostBreakdown>['pricing'],
-) {
-  if (!pricing) {
-    return undefined;
-  }
-
-  return {
-    input: pricing.input,
-    cacheRead: pricing.cacheRead,
-    cacheWrite: pricing.cacheWrite,
-  };
-}
-
 export function toUsageEvent(
   metadata: LocalProviderMetadata,
   record: LocalUsageRecord,
 ): UsageEvent {
   const normalizedModel = normalizeModelName(record.model);
-  const costBreakdown = estimateCostBreakdown(
-    normalizedModel,
-    record.inputTokens,
-    record.outputTokens,
-    record.cacheReadTokens,
-    record.cacheWriteTokens,
-  );
+  const cost = resolveUsageCost({
+    model: normalizedModel,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    explicitCost: record.explicitCost,
+  });
   const totalTokens =
     record.inputTokens +
     record.outputTokens +
@@ -186,11 +178,11 @@ export function toUsageEvent(
     cacheReadTokens: record.cacheReadTokens,
     cacheWriteTokens: record.cacheWriteTokens,
     totalTokens,
-    cost:
-      typeof record.explicitCost === 'number' && Number.isFinite(record.explicitCost)
-        ? record.explicitCost
-        : costBreakdown.totalCost,
-    pricing: toCachePricing(costBreakdown.pricing),
+    cost: cost.cost,
+    pricing: cost.pricing,
+    costSource: cost.costSource,
+    pricedTokens: cost.pricedTokens,
+    unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
     projectId: record.projectId,
     repoRoot: record.repoRoot,
@@ -203,8 +195,13 @@ export function toUsageEvent(
 export function buildProviderData(
   metadata: LocalProviderMetadata,
   records: LocalUsageRecord[],
+  providerWarnings: ProviderWarning[] = [],
 ): ProviderData {
   const events = records.map((record) => toUsageEvent(metadata, record));
+  const warnings = new Map<string, ProviderWarning>(
+    providerWarnings.map((warning) => [`${warning.kind}:${warning.file}`, { ...warning }]),
+  );
+  addUnknownPricingWarnings(warnings, events);
   const byDate = new Map<string, Map<string, ModelBreakdown>>();
 
   for (const event of events) {
@@ -225,6 +222,9 @@ export function buildProviderData(
         totalTokens: 0,
         cost: 0,
         pricing: event.pricing,
+        costSource: event.costSource,
+        pricedTokens: 0,
+        unpricedTokens: 0,
       };
       dateMap.set(event.model, model);
     }
@@ -235,6 +235,10 @@ export function buildProviderData(
     model.cacheWriteTokens += event.cacheWriteTokens;
     model.totalTokens += event.totalTokens;
     model.cost += event.cost;
+    model.pricedTokens = (model.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+    model.unpricedTokens = (model.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+    model.costSource =
+      (model.unpricedTokens ?? 0) >= model.totalTokens ? 'unpriced' : model.costSource;
     if (!model.pricing && event.pricing) {
       model.pricing = event.pricing;
     }
@@ -271,5 +275,9 @@ export function buildProviderData(
     totalCost: daily.reduce((sum, day) => sum + day.cost, 0),
     colors: metadata.colors,
     events,
+    costCompleteness: buildEventCostCompleteness(events),
+    warnings: [...warnings.values()].sort(
+      (a, b) => a.kind.localeCompare(b.kind) || a.file.localeCompare(b.file),
+    ),
   };
 }

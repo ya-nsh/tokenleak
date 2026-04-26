@@ -176,6 +176,11 @@ describe('provider parity providers', () => {
     expect(data.daily).toHaveLength(1);
     expect(data.totalTokens).toBe(135);
     expect(data.totalCost).toBe(0.02);
+    expect(data.costCompleteness).toMatchObject({
+      pricedTokens: 135,
+      unpricedTokens: 0,
+    });
+    expect(data.events?.[0]?.costSource).toBe('provider-reported');
   });
 
   it('uses file mtime for Amp message usage when thread created is missing', async () => {
