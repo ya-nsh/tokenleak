@@ -37,6 +37,9 @@ export type {
   TokenVelocityPoint,
   ReplayDaySummary,
   ReplayReport,
+  NutritionOutcomeSignal,
+  NutritionRepoSummary,
+  NutritionReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -75,6 +78,7 @@ export {
   computeModelMixShift,
   buildExplainReport,
   buildReplayReport,
+  buildNutritionReport,
 } from './aggregation';
 
 export {
