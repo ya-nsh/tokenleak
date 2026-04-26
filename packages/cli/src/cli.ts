@@ -82,6 +82,7 @@ import {
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildReplayHelpText, renderReplayTerminal } from './replay.js';
+import { CAST_DEFAULT_SPEED, buildReplayCast } from './replay-cast.js';
 import {
   buildReceiptsHelpText,
   collectEventsForReceipt,
@@ -2078,6 +2079,31 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
         index += 2;
         break;
       }
+      case '--record':
+      case '--cast': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires an output path`);
+        }
+        cliArgs['record'] = raw;
+        index += 2;
+        break;
+      }
+      case '--speed': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        const speed = Number(raw);
+        if (!Number.isFinite(speed) || speed <= 0 || speed > 10_000) {
+          throw new TokenleakError(
+            `--speed must be a positive number ≤ 10000 (got "${raw}")`,
+          );
+        }
+        cliArgs['speed'] = speed;
+        index += 2;
+        break;
+      }
       default:
         throw new TokenleakError(`Unknown replay flag "${arg}"`);
     }
@@ -2351,7 +2377,11 @@ function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'termin
 async function runReplay(date: string, cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const interactive = cliArgs['interactive'] === true;
-  const format = interactive ? 'terminal' : resolveReplayFormat(cliArgs);
+  const recordPath = typeof cliArgs['record'] === 'string' ? cliArgs['record'] : null;
+  if (interactive && recordPath !== null) {
+    throw new TokenleakError('--interactive and --record are mutually exclusive');
+  }
+  const format = interactive || recordPath ? 'terminal' : resolveReplayFormat(cliArgs);
 
   if (
     config.allProviders &&
@@ -2376,11 +2406,34 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   emitProviderWarnings(replayOutput.providers, 'Warning');
   const report = buildReplayReport(replayOutput.providers, date);
 
+  if (recordPath !== null) {
+    const ignored: string[] = [];
+    if (cliArgs['format']) ignored.push('--format');
+    if (cliArgs['output']) ignored.push('--output');
+    if (cliArgs['width']) ignored.push('--width');
+    if (cliArgs['port']) ignored.push('--port');
+    if (cliArgs['open']) ignored.push('--open');
+    if (ignored.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignored.join(', ')} ignored when --record is set.\n`,
+      );
+    }
+    const speed = typeof cliArgs['speed'] === 'number' ? cliArgs['speed'] : CAST_DEFAULT_SPEED;
+    const cast = buildReplayCast(report, { speed });
+    writeFileSync(recordPath, cast);
+    const eventCount = report.events.length;
+    process.stderr.write(
+      `Wrote asciinema cast to ${recordPath} (${eventCount} frame${eventCount === 1 ? '' : 's'} at ${speed}× — play with: asciinema play ${recordPath})\n`,
+    );
+    return;
+  }
+
   if (interactive) {
     const ignored: string[] = [];
     if (cliArgs['format']) ignored.push('--format');
     if (cliArgs['output']) ignored.push('--output');
     if (cliArgs['width']) ignored.push('--width');
+    if (cliArgs['speed']) ignored.push('--speed');
     if (ignored.length > 0) {
       process.stderr.write(
         `Warning: ${ignored.join(', ')} ignored when --interactive is set.\n`,

@@ -40,6 +40,29 @@ describe('parseReplayArgs', () => {
     expect(() => parseReplayArgs(['--bogus'])).toThrow(TokenleakError);
   });
 
+  describe('--record / --cast / --speed', () => {
+    it('parses --record and --cast as the same flag', () => {
+      expect(parseReplayArgs(['--record', 'day.cast']).cliArgs['record']).toBe('day.cast');
+      expect(parseReplayArgs(['--cast', 'day.cast']).cliArgs['record']).toBe('day.cast');
+    });
+
+    it('--record requires an output path', () => {
+      expect(() => parseReplayArgs(['--record'])).toThrow(TokenleakError);
+    });
+
+    it('parses --speed as a positive number', () => {
+      expect(parseReplayArgs(['--speed', '600']).cliArgs['speed']).toBe(600);
+      expect(parseReplayArgs(['--speed', '0.5']).cliArgs['speed']).toBe(0.5);
+    });
+
+    it('rejects non-positive or out-of-range speeds', () => {
+      expect(() => parseReplayArgs(['--speed', '0'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', '-1'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', 'abc'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', '20000'])).toThrow(TokenleakError);
+    });
+  });
+
   describe('--port validation', () => {
     it('rejects non-numeric values instead of silently defaulting', () => {
       expect(() => parseReplayArgs(['--port', 'abc'])).toThrow(TokenleakError);
