@@ -84,4 +84,23 @@ describe('getModelPricing fallback chain', () => {
       cacheWrite: 4,
     });
   });
+
+  test('preserves verified fallback rates when remote rates are missing or zero', () => {
+    resetPricingState();
+    setRemotePricingForTest({
+      'gpt-4o': {
+        input: 1,
+        output: 2,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    });
+
+    expect(getModelPricing('gpt-4o')).toEqual({
+      input: 1,
+      output: 2,
+      cacheRead: 1.25,
+      cacheWrite: 2.50,
+    });
+  });
 });

@@ -60,7 +60,11 @@ export function resolveUsageCost(input: UsageCostInput): UsageCostResult {
       }
     : undefined;
 
-  if (typeof input.explicitCost === 'number' && Number.isFinite(input.explicitCost)) {
+  if (
+    typeof input.explicitCost === 'number' &&
+    Number.isFinite(input.explicitCost) &&
+    input.explicitCost >= 0
+  ) {
     return {
       cost: input.explicitCost,
       pricing,

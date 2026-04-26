@@ -302,7 +302,17 @@ export function getModelPricing(model: string): ModelPricing | undefined {
     return undefined;
   }
 
-  return getRemotePricing(model) ?? fallback;
+  const remote = getRemotePricing(model);
+  if (!remote) {
+    return fallback;
+  }
+
+  return {
+    input: remote.input > 0 ? remote.input : fallback.input,
+    output: remote.output > 0 ? remote.output : fallback.output,
+    cacheRead: remote.cacheRead > 0 ? remote.cacheRead : fallback.cacheRead,
+    cacheWrite: remote.cacheWrite > 0 ? remote.cacheWrite : fallback.cacheWrite,
+  };
 }
 
 export { TOKENS_PER_MILLION };
