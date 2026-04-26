@@ -5,7 +5,11 @@
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "dev": "bun src/bin.ts",

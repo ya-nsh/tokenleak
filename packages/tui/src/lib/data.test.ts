@@ -86,7 +86,7 @@ describe('TUI data cache', () => {
     mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(
       cachePath,
-      JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), data }),
+      JSON.stringify({ version: 2, generatedAt: new Date().toISOString(), data }),
       'utf8',
     );
 
@@ -197,6 +197,13 @@ describe('getScopedWindowData', () => {
     expect(scoped?.scopedProviders[0]?.daily.map((day) => day.date)).toEqual(['2026-04-25']);
     expect(scoped?.scopedProviders[0]?.totalTokens).toBe(200);
     expect(scoped?.scopedProviders[0]?.totalCost).toBe(0.02);
+    expect(scoped?.scopedProviders[0]?.costCompleteness).toEqual({
+      status: 'complete',
+      totalTokens: 200,
+      pricedTokens: 200,
+      unpricedTokens: 0,
+      unknownModels: [],
+    });
   });
 });
 

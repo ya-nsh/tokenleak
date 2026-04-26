@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DateRange } from '@tokenleak/core';
@@ -107,5 +107,36 @@ describe('PiProvider', () => {
       cacheRead: 0.3,
       cacheWrite: 3.75,
     });
+  });
+
+  it('keeps valid data when another session file has malformed records', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'pi-warning-'));
+    mkdirSync(join(tempRoot, 'sessions'));
+    writeFileSync(
+      join(tempRoot, 'sessions', 'good.jsonl'),
+      '{"type":"session","cwd":"/tmp/demo"}\n' +
+      '{"type":"message","timestamp":"2026-03-10T09:00:00.000Z","message":{"role":"assistant","model":"gpt-4o","usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0}}}\n',
+    );
+    writeFileSync(
+      join(tempRoot, 'sessions', 'bad.jsonl'),
+      '{"type":"session","cwd":"/tmp/demo"}\n' +
+      '{"type":"message",\n',
+    );
+
+    try {
+      const provider = new PiProvider(tempRoot);
+      const data = await provider.load({ since: '2026-03-10', until: '2026-03-10' });
+
+      expect(data.totalTokens).toBe(15);
+      expect(data.warnings).toEqual([
+        {
+          kind: 'parse',
+          file: join(tempRoot, 'sessions', 'bad.jsonl'),
+          count: 1,
+        },
+      ]);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });

@@ -1,7 +1,8 @@
 import { buildReceipt, SCHEMA_VERSION } from '@tokenleak/core';
-import type { ProviderData, UsageEvent } from '@tokenleak/core';
+import type { UsageEvent } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 export async function handleGetReceiptLines(
   args: { days?: number; since?: string; until?: string; provider?: string; topLines?: number },
@@ -14,10 +15,7 @@ export async function handleGetReceiptLines(
       ? available.filter((p) => p.name === args.provider)
       : available;
 
-    const results = await Promise.all(
-      filtered.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(filtered, range);
 
     const events: UsageEvent[] = [];
     for (const provider of data) {
@@ -46,6 +44,7 @@ export async function handleGetReceiptLines(
               schemaVersion: SCHEMA_VERSION,
               dateRange: range,
               receipt,
+              warnings,
               note:
                 events.length > 0 && receipt.lines.length === 0
                   ? 'No events carried captured prompts. Prompt capture currently only works for Claude Code logs.'

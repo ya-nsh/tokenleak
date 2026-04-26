@@ -1,4 +1,4 @@
-import type { TokenleakOutput, RenderOptions, DateRange } from '@tokenleak/core';
+import { getTodayLocal, shiftDateStringLocal, type TokenleakOutput, type RenderOptions, type DateRange } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
 import {
   renderTabBar,
@@ -57,9 +57,7 @@ function timeRangeToDays(range: TimeRange): number {
 
 function computeRange(range: TimeRange, baseUntil: string): DateRange {
   const until = baseUntil;
-  const d = new Date(until);
-  d.setDate(d.getDate() - timeRangeToDays(range));
-  const since = d.toISOString().slice(0, 10);
+  const since = shiftDateStringLocal(until, -(timeRangeToDays(range) - 1));
   return { since, until };
 }
 
@@ -246,7 +244,7 @@ export async function startTabbedDashboard(
     noColor: options.noColor,
     noInsights: options.noInsights ?? false,
     compare: options.compare ?? 'auto',
-    baseUntil: options.until ?? new Date().toISOString().slice(0, 10),
+    baseUntil: options.until ?? getTodayLocal(),
     initialRange: options.initialRange ?? null,
     width: options.width ?? null,
   };

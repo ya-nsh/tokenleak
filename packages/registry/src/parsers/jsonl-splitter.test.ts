@@ -79,10 +79,17 @@ describe('splitJsonlRecords', () => {
     try {
       process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'] = '50';
 
+      const warnings: string[] = [];
       const records = await collectAll(splitJsonlRecords(tmpPath));
+      for await (const record of splitJsonlRecords(tmpPath, {
+        onWarning: (warning) => warnings.push(`${warning.kind}:${warning.line}`),
+      })) {
+        void record;
+      }
       // Only the small record should be yielded, oversized one is skipped
       expect(records).toHaveLength(1);
       expect(records[0]).toEqual({ id: 1 });
+      expect(warnings).toEqual(['oversize:2']);
     } finally {
       if (originalEnv === undefined) {
         delete process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'];
@@ -114,5 +121,17 @@ describe('splitJsonlRecords', () => {
         // ignore cleanup errors
       }
     }
+  });
+
+  test('malformed lines emit parse warnings', async () => {
+    const warnings: string[] = [];
+    const filePath = join(FIXTURES_DIR, 'malformed.jsonl');
+
+    const records = await collectAll(splitJsonlRecords(filePath, {
+      onWarning: (warning) => warnings.push(`${warning.kind}:${warning.line}`),
+    }));
+
+    expect(records).toHaveLength(2);
+    expect(warnings).toEqual(['parse:2']);
   });
 });

@@ -14,12 +14,22 @@ function mergeModelArrays(existing: ModelBreakdown[], incoming: ModelBreakdown[]
   for (const m of incoming) {
     const prev = map.get(m.model);
     if (prev) {
+      const prevUnpriced = prev.unpricedTokens ?? 0;
+      const incomingUnpriced = m.unpricedTokens ?? 0;
+      const prevPriced = prev.pricedTokens ?? Math.max(0, prev.totalTokens - prevUnpriced);
+      const incomingPriced = m.pricedTokens ?? Math.max(0, m.totalTokens - incomingUnpriced);
       prev.inputTokens += m.inputTokens;
       prev.outputTokens += m.outputTokens;
       prev.cacheReadTokens += m.cacheReadTokens;
       prev.cacheWriteTokens += m.cacheWriteTokens;
       prev.totalTokens += m.totalTokens;
       prev.cost += m.cost;
+      prev.pricedTokens = prevPriced + incomingPriced;
+      prev.unpricedTokens = prevUnpriced + incomingUnpriced;
+      prev.costSource = prev.unpricedTokens >= prev.totalTokens ? 'unpriced' : prev.costSource;
+      if (!prev.pricing && m.pricing) {
+        prev.pricing = m.pricing;
+      }
     } else {
       map.set(m.model, { ...m });
     }

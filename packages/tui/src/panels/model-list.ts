@@ -1,6 +1,14 @@
 import { Box, Text } from '@opentui/core';
 import type { AggregatedStats } from '@tokenleak/core';
-import { formatTokens, formatCost, truncate, padRight, padLeft } from '../lib/format.js';
+import {
+  formatTokens,
+  formatCost,
+  formatCostCompletenessWarning,
+  formatCostWithCompleteness,
+  truncate,
+  padRight,
+  padLeft,
+} from '../lib/format.js';
 import { COLORS, BOLD, MODEL_COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
@@ -46,12 +54,17 @@ export function createModelList(state: AppState, stats: AggregatedStats | null) 
         attributes: BOLD,
       }),
       Text({
-        content: `Total: ${formatCost(totalCost)}`,
+        content: `Total: ${formatCostWithCompleteness(totalCost, stats.costCompleteness)}`,
         fg: COLORS.amber,
         attributes: BOLD,
       }),
     ),
   );
+
+  const warning = formatCostCompletenessWarning(stats.costCompleteness);
+  if (warning) {
+    children.push(Text({ content: warning, fg: COLORS.red }));
+  }
 
   children.push(
     Text({ content: '\u2500'.repeat(60), fg: COLORS.dimWhite }),

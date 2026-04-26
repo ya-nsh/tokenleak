@@ -28,13 +28,16 @@ import {
   buildMoreStats,
   buildNutritionReport,
   buildReceipt,
+  buildDailyCostCompleteness,
   buildReplayReport,
   buildWasteReport,
   collectGitOutcomeSignals,
   compareRanges,
   dayOfWeekBreakdown,
+  getTodayLocal,
   mergeProviderData,
   SCHEMA_VERSION,
+  shiftDateStringLocal,
 } from '@tokenleak/core';
 import {
   ProviderRegistry,
@@ -58,8 +61,8 @@ import {
 import type { AppState } from './state.js';
 import { WINDOW_DAYS } from './state.js';
 
-const TUI_CACHE_VERSION = 1;
-const TUI_CACHE_FILENAME = 'tui-data-v1.json';
+const TUI_CACHE_VERSION = 2;
+const TUI_CACHE_FILENAME = 'tui-data-v2.json';
 const scopedWindowCache = new WeakMap<TuiData, Map<string, ScopedWindowData>>();
 
 export interface TimeWindowData {
@@ -210,14 +213,11 @@ export function writeCachedTuiData(data: TuiData): void {
 }
 
 function todayStr(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return getTodayLocal();
 }
 
 function daysAgoStr(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return shiftDateStringLocal(todayStr(), -days);
 }
 
 /** Create and populate the provider registry with all known providers */
@@ -349,13 +349,17 @@ function flattenProviderEvents(providers: ProviderData[]): UsageEvent[] {
   return events;
 }
 
-function sumDailyTotals(daily: ProviderData['daily']): { totalTokens: number; totalCost: number } {
+function sumDailyTotals(
+  daily: ProviderData['daily'],
+): Pick<ProviderData, 'totalTokens' | 'totalCost' | 'costCompleteness'> {
+  const costCompleteness = buildDailyCostCompleteness(daily);
   return daily.reduce(
     (totals, day) => ({
       totalTokens: totals.totalTokens + day.totalTokens,
       totalCost: totals.totalCost + day.cost,
+      costCompleteness,
     }),
-    { totalTokens: 0, totalCost: 0 },
+    { totalTokens: 0, totalCost: 0, costCompleteness },
   );
 }
 

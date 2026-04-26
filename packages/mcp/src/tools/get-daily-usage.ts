@@ -1,7 +1,7 @@
-import { mergeProviderData } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
+import { buildDailyCostCompleteness, mergeProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData } from '../shared/provider-load.js';
 
 const DEFAULT_DAILY_DAYS = 14;
 
@@ -16,10 +16,7 @@ export async function handleGetDailyUsage(
       ? available.filter((p) => p.name === args.provider)
       : available;
 
-    const results = await Promise.all(
-      filtered.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(filtered, range);
 
     if (data.length === 0) {
       return {
@@ -27,7 +24,7 @@ export async function handleGetDailyUsage(
           {
             type: 'text' as const,
             text: JSON.stringify(
-              { dateRange: range, daily: [], message: 'No provider data found.' },
+              { dateRange: range, daily: [], warnings, message: 'No provider data found.' },
               null,
               2,
             ),
@@ -46,13 +43,14 @@ export async function handleGetDailyUsage(
       outputTokens: d.outputTokens,
       cacheReadTokens: d.cacheReadTokens,
       cacheWriteTokens: d.cacheWriteTokens,
+      costCompleteness: buildDailyCostCompleteness([d]),
     }));
 
     return {
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify({ dateRange: range, daily }, null, 2),
+          text: JSON.stringify({ dateRange: range, daily, warnings }, null, 2),
         },
       ],
     };

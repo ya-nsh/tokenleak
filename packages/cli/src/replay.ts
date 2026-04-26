@@ -32,7 +32,7 @@ function formatDuration(ms: number): string {
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
-  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function truncate(value: string, width: number): string {
@@ -57,8 +57,8 @@ function renderActivityBar(report: ReplayReport, width: number): string[] {
 
   for (const event of report.events) {
     const date = new Date(event.timestamp);
-    const hour = date.getUTCHours();
-    const minute = date.getUTCMinutes();
+    const hour = date.getHours();
+    const minute = date.getMinutes();
     const slot = Math.min(hour * 2 + Math.floor(minute / 30), HEATMAP_SLOTS - 1);
     slotTokens[slot] += event.totalTokens;
   }

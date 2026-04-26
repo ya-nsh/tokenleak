@@ -449,4 +449,22 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('Net savings $1.00');
     expect(result).toContain('Top project /Users/test/work/tokenleak');
   });
+
+  it('warns when rendered cost totals are incomplete', async () => {
+    const output = createTerminalOutput([
+      createProvider('codex', 'Codex', createDailyUsageSequence(1)),
+    ]);
+    output.aggregated.costCompleteness = {
+      status: 'unknown',
+      totalTokens: 1800,
+      pricedTokens: 0,
+      unpricedTokens: 1800,
+      unknownModels: ['gpt-5.4'],
+    };
+
+    const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true }));
+
+    expect(result).toContain('Cost totals are incomplete');
+    expect(result).toContain('gpt-5.4');
+  });
 });

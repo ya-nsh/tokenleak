@@ -1,5 +1,6 @@
 import { emitKeypressEvents } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
+import { getTodayLocal, inclusiveDaySpan } from '@tokenleak/core';
 import type { TimeRange } from '@tokenleak/renderers';
 import { computeDateRange } from './date-range.js';
 import { buildCliArgTokens, buildCliPreview } from './flags.js';
@@ -85,8 +86,6 @@ const TAB_RANGE_DAY_COUNTS: Record<TimeRange, number> = {
   '90d': 90,
   '365d': 365,
 };
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 const ESC = '\x1b[';
 const RESET = `${ESC}0m`;
 const BOLD = `${ESC}1m`;
@@ -1039,14 +1038,14 @@ function inferDashboardTimeRange(rangeArgs: CliArgs): TimeRange {
   if (!since) return '30d';
 
   const rawUntil = typeof rangeArgs['until'] === 'string' ? rangeArgs['until'].trim() : '';
-  const until = rawUntil || new Date().toISOString().slice(0, 10);
+  const until = rawUntil || getTodayLocal();
   const sinceMs = Date.parse(`${since}T00:00:00.000Z`);
   const untilMs = Date.parse(`${until}T00:00:00.000Z`);
   if (!Number.isFinite(sinceMs) || !Number.isFinite(untilMs) || sinceMs > untilMs) {
     return '30d';
   }
 
-  const spanDays = Math.max(1, Math.ceil((untilMs - sinceMs) / DAY_MS));
+  const spanDays = Math.max(1, inclusiveDaySpan(since, until));
   if (spanDays <= 7) return '7d';
   if (spanDays <= 30) return '30d';
   if (spanDays <= 90) return '90d';
