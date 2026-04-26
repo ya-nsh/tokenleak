@@ -8,13 +8,13 @@ const VISIBLE_ROWS = 5;
 const MAX_REPOS = 30;
 const COLUMNS = [
   { title: '#', width: 3, align: 'right' },
-  { title: 'Repo', width: 13, align: 'left' },
-  { title: 'Tokens', width: 7, align: 'right' },
-  { title: 'Cost', width: 7, align: 'right' },
-  { title: 'Git', width: 9, align: 'right' },
-  { title: 'Tok/C', width: 7, align: 'right' },
-  { title: '$/C', width: 7, align: 'right' },
-  { title: 'ROI Signal', width: 17, align: 'left' },
+  { title: 'Repo', width: 30, align: 'left' },
+  { title: 'Tokens', width: 10, align: 'right' },
+  { title: 'Cost', width: 9, align: 'right' },
+  { title: 'Git Output', width: 13, align: 'right' },
+  { title: 'Tok/Commit', width: 11, align: 'right' },
+  { title: '$/Commit', width: 10, align: 'right' },
+  { title: 'ROI Signal', width: 22, align: 'left' },
 ] as const;
 const TABLE_WIDTH = COLUMNS.reduce((sum, column) => sum + column.width, 0) + COLUMNS.length + 1;
 const DETAIL_WIDTH = TABLE_WIDTH - 2;
