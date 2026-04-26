@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'path';
-import { ClaudeCodeProvider } from './claude-code';
+import { ClaudeCodeProvider, extractUserPrompt } from './claude-code';
 import type { DateRange } from '@tokenleak/core';
 import { estimateCost } from '../models/cost';
 
@@ -259,6 +259,123 @@ describe('ClaudeCodeProvider', () => {
         expect(day.cacheWriteTokens).toBe(5);
       } finally {
         rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('extractUserPrompt', () => {
+    it('returns null for non-user records', () => {
+      expect(extractUserPrompt({ type: 'assistant', message: { content: 'hi' } })).toBeNull();
+      expect(extractUserPrompt({ type: 'system' })).toBeNull();
+      expect(extractUserPrompt(null)).toBeNull();
+      expect(extractUserPrompt('not an object')).toBeNull();
+    });
+
+    it('accepts legacy `type: "human"` (fixture schema)', () => {
+      const rec = { type: 'human', message: { role: 'user', content: 'old schema' } };
+      expect(extractUserPrompt(rec)).toBe('old schema');
+    });
+
+    it('accepts current `type: "user"` (live schema)', () => {
+      const rec = { type: 'user', message: { role: 'user', content: 'new schema' } };
+      expect(extractUserPrompt(rec)).toBe('new schema');
+    });
+
+    it('extracts text from content-block arrays', () => {
+      const rec = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'text', text: 'first line' },
+            { type: 'text', text: 'second line' },
+          ],
+        },
+      };
+      expect(extractUserPrompt(rec)).toBe('first line\nsecond line');
+    });
+
+    it('returns null for tool-result arrays (no text blocks)', () => {
+      const rec = {
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 'x', content: 'some output' }],
+        },
+      };
+      expect(extractUserPrompt(rec)).toBeNull();
+    });
+
+    it('filters out non-external user messages', () => {
+      const rec = {
+        type: 'user',
+        userType: 'synthetic',
+        message: { content: 'should be ignored' },
+      };
+      expect(extractUserPrompt(rec)).toBeNull();
+    });
+
+    it('accepts messages with userType="external"', () => {
+      const rec = {
+        type: 'user',
+        userType: 'external',
+        message: { content: 'real prompt' },
+      };
+      expect(extractUserPrompt(rec)).toBe('real prompt');
+    });
+
+    it('accepts messages with no userType field (older schema)', () => {
+      const rec = { type: 'user', message: { content: 'no userType' } };
+      expect(extractUserPrompt(rec)).toBe('no userType');
+    });
+
+    it('trims surrounding whitespace', () => {
+      const rec = { type: 'user', message: { content: '   hello   ' } };
+      expect(extractUserPrompt(rec)).toBe('hello');
+    });
+
+    it('returns null for empty/whitespace-only content', () => {
+      expect(extractUserPrompt({ type: 'user', message: { content: '' } })).toBeNull();
+      expect(extractUserPrompt({ type: 'user', message: { content: '   \n  ' } })).toBeNull();
+    });
+
+    it('truncates very long prompts', () => {
+      const longPrompt = 'x'.repeat(5_000);
+      const result = extractUserPrompt({ type: 'user', message: { content: longPrompt } });
+      expect(result?.length).toBe(2_000);
+    });
+
+    it('returns null for malformed records', () => {
+      expect(extractUserPrompt({ type: 'user' })).toBeNull();
+      expect(extractUserPrompt({ type: 'user', message: null })).toBeNull();
+      expect(extractUserPrompt({ type: 'user', message: 'not an object' })).toBeNull();
+      expect(extractUserPrompt({ type: 'user', message: {} })).toBeNull();
+    });
+  });
+
+  describe('load — prompt capture', () => {
+    it('attaches the preceding user prompt to each assistant UsageEvent', async () => {
+      const provider = new ClaudeCodeProvider(join(FIXTURES_DIR, 'claude-code'));
+      const data = await provider.load(FULL_RANGE);
+
+      const eventsWithPrompts = (data.events ?? []).filter((e) => e.prompt);
+      // The fixture has two human prompts in conv-001 preceding assistant messages.
+      expect(eventsWithPrompts.length).toBeGreaterThanOrEqual(2);
+      const prompts = eventsWithPrompts.map((e) => e.prompt).sort();
+      expect(prompts).toContain('Hello');
+      expect(prompts).toContain('Help me');
+    });
+
+    it('does not attach prompts when none precede the assistant message', async () => {
+      const provider = new ClaudeCodeProvider(join(FIXTURES_DIR, 'claude-code'));
+      const data = await provider.load(FULL_RANGE);
+
+      // conv-002 has no user prompts in the fixture, so those assistant events
+      // must have no prompt attached.
+      const conv002Events = (data.events ?? []).filter((e) =>
+        e.sessionId?.includes('conv-002'),
+      );
+      expect(conv002Events.length).toBeGreaterThan(0);
+      for (const event of conv002Events) {
+        expect(event.prompt).toBeUndefined();
       }
     });
   });

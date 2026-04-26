@@ -10,8 +10,11 @@ import type {
   NutritionOutcomeSignal,
   NutritionReport,
   ProviderData,
+  Receipt,
+  ReceiptLine,
   ReplayReport,
   TokenleakOutput,
+  UsageEvent,
 } from '@tokenleak/core';
 import {
   aggregate,
@@ -20,6 +23,7 @@ import {
   buildFocusReport,
   buildMoreStats,
   buildNutritionReport,
+  buildReceipt,
   buildReplayReport,
   collectGitOutcomeSignals,
   compareRanges,
@@ -292,6 +296,51 @@ export function ensureMoreStats(state: AppState): MoreStats | null {
   const more = buildMoreStats(scoped.scopedProviders, scoped.windowRange);
   state.cachedMoreStats = more;
   return more;
+}
+
+/**
+ * Apply the current sort + filter to a receipt's lines. Returned array is a
+ * shallow copy so the caller can safely mutate or slice. The subtotal/total
+ * summary is not recomputed — filters only affect which rows are displayed.
+ */
+export function deriveReceiptLines(
+  receipt: Receipt,
+  sortMode: AppState['receiptsSortMode'],
+  filter: AppState['receiptsCategoryFilter'],
+): ReceiptLine[] {
+  const filtered = filter === null ? receipt.lines : receipt.lines.filter((l) => l.category === filter);
+  const sorted = [...filtered];
+  if (sortMode === 'qty') {
+    sorted.sort((a, b) => b.quantity - a.quantity);
+  } else if (sortMode === 'alpha') {
+    sorted.sort((a, b) => a.description.localeCompare(b.description));
+  } else {
+    sorted.sort((a, b) => b.totalCost - a.totalCost);
+  }
+  return sorted;
+}
+
+/** Lazily compute and cache the Receipt (window-dependent) */
+export function ensureReceipt(state: AppState): Receipt | null {
+  if (!state.data) return null;
+  if (state.cachedReceipt) return state.cachedReceipt;
+
+  const allEvents: UsageEvent[] = state.data.providers.flatMap((p) => p.events ?? []);
+  const days = WINDOW_DAYS[state.selectedWindowIndex];
+  let filtered = allEvents;
+  let range: DateRange;
+  if (days && days > 0) {
+    const since = daysAgoStr(days - 1);
+    const until = todayStr();
+    filtered = allEvents.filter((e) => e.date >= since && e.date <= until);
+    range = { since, until };
+  } else {
+    range = state.data.dateRange;
+  }
+
+  const receipt = buildReceipt(filtered, range);
+  state.cachedReceipt = receipt;
+  return receipt;
 }
 
 /** Lazily compute and cache the ReplayReport (date- and window-dependent) */

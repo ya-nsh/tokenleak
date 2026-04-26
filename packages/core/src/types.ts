@@ -81,6 +81,8 @@ export interface UsageEvent {
   repoRoot?: string;
   directory?: string;
   durationMs?: number;
+  /** The most recent user prompt that triggered this assistant response, if captured by the parser. */
+  prompt?: string;
 }
 
 export interface DayOfWeekEntry {

@@ -80,6 +80,22 @@ export {
   buildReplayReport,
   buildNutritionReport,
   collectGitOutcomeSignals,
+  clusterPrompts,
+  tokenBigrams,
+  buildReceipt,
+  CATEGORY_LABELS,
+  CATEGORY_LABELS_SHORT,
+  formatReceiptDollars,
+} from './aggregation';
+
+export type {
+  PromptCluster,
+  ClusterOptions,
+  Receipt,
+  ReceiptLine,
+  ReceiptSummary,
+  ReceiptCategory,
+  BuildReceiptOptions,
 } from './aggregation';
 
 export {
