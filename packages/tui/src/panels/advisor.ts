@@ -1,10 +1,13 @@
 import { Box, Text } from '@opentui/core';
 import type { AdvisorReport, AdvisorRecommendation, WasteFinding, WasteReport } from '@tokenleak/core';
-import { formatCost } from '../lib/format.js';
+import { formatCost, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
-const VISIBLE_ROWS = 10;
+export const ADVISOR_VISIBLE_ITEMS = 5;
+const TITLE_WIDTH = 104;
+const BODY_WIDTH = 126;
+const MAX_BODY_LINES = 2;
 
 function confidenceColor(c: 'high' | 'medium' | 'low'): string {
   if (c === 'high') return COLORS.green;
@@ -22,28 +25,66 @@ function typeLabel(type: AdvisorRecommendation['type']): string {
   return 'Usage Pattern';
 }
 
+function cleanText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function wrapText(value: string, width: number, maxLines: number = MAX_BODY_LINES): string[] {
+  const words = cleanText(value).split(' ').filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= width) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+    } else {
+      lines.push(truncate(word, width));
+    }
+
+    if (lines.length >= maxLines) {
+      break;
+    }
+    current = word.length > width ? truncate(word, width) : word;
+  }
+
+  if (current && lines.length < maxLines) {
+    lines.push(current);
+  }
+
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    lines[maxLines - 1] = truncate(lines[maxLines - 1]!, width);
+  }
+
+  return lines.length > 0 ? lines : [''];
+}
+
+function textLines(lines: string[], fg: string) {
+  return lines.map((line) => Text({ content: line, fg }));
+}
+
 function renderRecommendation(rec: AdvisorRecommendation) {
+  const badge = confidenceLabel(rec.confidence);
+  const title = truncate(`${typeLabel(rec.type)}: ${cleanText(rec.title)}`, TITLE_WIDTH);
+  const description = `${cleanText(rec.description)} Saves ${formatCost(rec.monthlySavings)}/mo`;
+
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Box(
-      { flexDirection: 'row', width: '100%' },
-      Text({
-        content: `\u25B8 ${typeLabel(rec.type)}: ${rec.title}`,
-        fg: COLORS.white,
-        attributes: BOLD,
-      }),
-      Text({ content: '  ', fg: COLORS.dimWhite }),
-      Text({
-        content: confidenceLabel(rec.confidence),
-        fg: confidenceColor(rec.confidence),
-        attributes: BOLD,
-      }),
-    ),
     Text({
-      content: `  ${rec.description}. Saves ${formatCost(rec.monthlySavings)}/mo`,
+      content: `\u25B8 ${title}  ${badge}`,
+      fg: confidenceColor(rec.confidence),
+      attributes: BOLD,
+    }),
+    ...textLines(wrapText(`  ${description}`, BODY_WIDTH), COLORS.dimWhite),
+    Text({
+      content: '',
       fg: COLORS.dimWhite,
     }),
-    Text({ content: '', fg: COLORS.dimWhite }),
   );
 }
 
@@ -64,37 +105,24 @@ function formatSavings(value: number | null): string {
 function renderWasteFinding(finding: WasteFinding) {
   const recipe = finding.recipes[0];
   const scope = [finding.provider, finding.model].filter(Boolean).join(' / ');
+  const badge = `[${finding.severity.toUpperCase()}]`;
+  const title = truncate(`${categoryLabel(finding.category)}: ${cleanText(finding.title)}`, TITLE_WIDTH);
+  const savings = `Savings: ${formatSavings(finding.estimatedMonthlySavings)}${scope ? `  Scope: ${scope}` : ''}`;
+  const recipeText = recipe ? `Recipe: ${recipe.title} - ${recipe.detail}` : '';
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Box(
-      { flexDirection: 'row', width: '100%' },
-      Text({
-        content: `\u25B8 ${categoryLabel(finding.category)}: ${finding.title}`,
-        fg: COLORS.white,
-        attributes: BOLD,
-      }),
-      Text({ content: '  ', fg: COLORS.dimWhite }),
-      Text({
-        content: `[${finding.severity.toUpperCase()}]`,
-        fg: severityColor(finding.severity),
-        attributes: BOLD,
-      }),
-    ),
     Text({
-      content: `  Evidence: ${finding.evidence}`,
+      content: `\u25B8 ${title}  ${badge}`,
+      fg: severityColor(finding.severity),
+      attributes: BOLD,
+    }),
+    ...textLines(wrapText(`  Evidence: ${finding.evidence}`, BODY_WIDTH), COLORS.dimWhite),
+    Text({
+      content: `  ${truncate(savings, BODY_WIDTH - 2)}`,
       fg: COLORS.dimWhite,
     }),
-    Text({
-      content: `  Savings: ${formatSavings(finding.estimatedMonthlySavings)}${scope ? `  Scope: ${scope}` : ''}`,
-      fg: COLORS.dimWhite,
-    }),
-    recipe
-      ? Text({
-          content: `  Recipe: ${recipe.title} - ${recipe.detail}`,
-          fg: COLORS.cyan,
-        })
-      : Text({ content: '', fg: COLORS.dimWhite }),
+    ...(recipe ? textLines(wrapText(`  ${recipeText}`, BODY_WIDTH), COLORS.cyan) : []),
     Text({ content: '', fg: COLORS.dimWhite }),
   );
 }
@@ -127,9 +155,9 @@ export function createAdvisorPanel(
     ...recs.map((rec) => ({ type: 'recommendation' as const, rec })),
     ...wasteFindings.map((finding) => ({ type: 'waste' as const, finding })),
   ];
-  const maxOffset = Math.max(0, items.length - VISIBLE_ROWS);
+  const maxOffset = Math.max(0, items.length - ADVISOR_VISIBLE_ITEMS);
   const offset = Math.min(state.advisorScrollOffset, maxOffset);
-  const visibleItems = items.slice(offset, offset + VISIBLE_ROWS);
+  const visibleItems = items.slice(offset, offset + ADVISOR_VISIBLE_ITEMS);
 
   const summaryRow = Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },

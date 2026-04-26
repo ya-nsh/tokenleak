@@ -29,7 +29,7 @@ import { createStatsRow } from './panels/stats-row.js';
 import { createModelList } from './panels/model-list.js';
 import { buildStatusBar } from './panels/status-bar.js';
 import { createMatrixView } from './panels/bloomberg.js';
-import { createAdvisorPanel } from './panels/advisor.js';
+import { ADVISOR_VISIBLE_ITEMS, createAdvisorPanel } from './panels/advisor.js';
 import { createFocusPanel } from './panels/focus.js';
 import { createExplainPanel } from './panels/explain.js';
 import { createComparePanel } from './panels/compare.js';
@@ -434,7 +434,7 @@ function getScrollableItemCount(state: AppState): number {
 
 function getVisibleCount(view: ViewMode): number {
   switch (view) {
-    case 'advisor': return 10;
+    case 'advisor': return ADVISOR_VISIBLE_ITEMS;
     case 'focus': return 12;
     case 'compare': return 6;
     case 'wrapped': return 20;
