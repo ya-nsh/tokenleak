@@ -57,7 +57,7 @@ export function buildStatusBar(state: AppState) {
   }
 
   const helpHint = '?:help';
-  const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-9:view`;
+  const nav = `\u2190\u2192:view  tab/\u21E7tab:period  1-9/0:view`;
   const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
 
   let keys: string;
@@ -69,7 +69,7 @@ export function buildStatusBar(state: AppState) {
     keys = `${nav}  h/l:date  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'replay') {
     keys = `${nav}  h/l:date  j/k:scroll  enter:expand  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped') {
+  } else if (state.selectedView === 'advisor' || state.selectedView === 'focus' || state.selectedView === 'compare' || state.selectedView === 'wrapped' || state.selectedView === 'nutrition') {
     keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {
     keys = `${nav}  p:png  w:wrapped  l:live  r:refresh${cursorHint}  ${helpHint}  q:quit`;

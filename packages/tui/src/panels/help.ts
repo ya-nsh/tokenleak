@@ -74,6 +74,8 @@ export function createHelpPanel() {
           ['6', 'Compare'],
           ['7', 'Export'],
           ['8', 'Wrapped'],
+          ['9', 'Replay'],
+          ['0', 'Nutrition'],
           ['?', 'Help'],
         ]),
         ...helpSection('EXPLAIN VIEW', [

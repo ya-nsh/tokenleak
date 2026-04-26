@@ -7,9 +7,12 @@ import type {
   ExplainReport,
   FocusReport,
   MoreStats,
+  NutritionOutcomeSignal,
+  NutritionReport,
   ProviderData,
   ReplayReport,
   TokenleakOutput,
+  UsageEvent,
 } from '@tokenleak/core';
 import {
   aggregate,
@@ -17,12 +20,14 @@ import {
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
+  buildNutritionReport,
   buildReplayReport,
   compareRanges,
   dayOfWeekBreakdown,
   mergeProviderData,
   SCHEMA_VERSION,
 } from '@tokenleak/core';
+import { existsSync } from 'node:fs';
 import {
   ProviderRegistry,
   ClaudeCodeProvider,
@@ -41,6 +46,8 @@ export interface TimeWindowData {
   label: string;
   days: number;
   stats: AggregatedStats;
+  dateRange: DateRange;
+  nutritionOutcomeSignals: NutritionOutcomeSignal[];
 }
 
 export interface TuiData {
@@ -61,6 +68,104 @@ function daysAgoStr(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
+}
+
+async function runGitCommand(args: string[]): Promise<{ ok: boolean; stdout: string }> {
+  const proc = Bun.spawn(args, {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  return { ok: exitCode === 0, stdout };
+}
+
+async function isGitRepo(repoRoot: string): Promise<boolean> {
+  if (!existsSync(repoRoot)) {
+    return false;
+  }
+
+  const result = await runGitCommand(['git', '-C', repoRoot, 'rev-parse', '--is-inside-work-tree']);
+  return result.ok && result.stdout.trim() === 'true';
+}
+
+function parseGitNumstat(output: string, repoRoot: string): NutritionOutcomeSignal {
+  let commits = 0;
+  let changedFiles = 0;
+  let changedLines = 0;
+
+  for (const line of output.split('\n')) {
+    if (line === '__TOKENLEAK_COMMIT__') {
+      commits += 1;
+      continue;
+    }
+
+    const [insertions, deletions] = line.split('\t');
+    if (insertions === undefined || deletions === undefined) {
+      continue;
+    }
+
+    changedFiles += 1;
+    const added = Number(insertions);
+    const removed = Number(deletions);
+    if (Number.isFinite(added)) {
+      changedLines += added;
+    }
+    if (Number.isFinite(removed)) {
+      changedLines += removed;
+    }
+  }
+
+  return {
+    repoRoot,
+    commits,
+    changedFiles,
+    changedLines,
+  };
+}
+
+async function loadGitOutcomeSignal(repoRoot: string, range: DateRange): Promise<NutritionOutcomeSignal | null> {
+  if (!(await isGitRepo(repoRoot))) {
+    return null;
+  }
+
+  const result = await runGitCommand([
+    'git',
+    '-C',
+    repoRoot,
+    'log',
+    `--since=${range.since}T00:00:00`,
+    `--until=${range.until}T23:59:59`,
+    '--numstat',
+    '--pretty=format:__TOKENLEAK_COMMIT__',
+  ]);
+
+  if (!result.ok) {
+    return null;
+  }
+
+  return parseGitNumstat(result.stdout, repoRoot);
+}
+
+function uniqueRepoRoots(events: UsageEvent[]): string[] {
+  return [...new Set(
+    events
+      .map((event) => event.repoRoot?.trim())
+      .filter((repoRoot): repoRoot is string => Boolean(repoRoot)),
+  )].sort();
+}
+
+async function collectGitOutcomeSignals(events: UsageEvent[], range: DateRange): Promise<NutritionOutcomeSignal[]> {
+  const repoRoots = uniqueRepoRoots(events);
+  const signals = await Promise.all(
+    repoRoots.map((repoRoot) => loadGitOutcomeSignal(repoRoot, range)),
+  );
+  return signals.filter((signal): signal is NutritionOutcomeSignal => signal !== null);
 }
 
 /** Create and populate the provider registry with all known providers */
@@ -113,15 +218,30 @@ export async function loadAllData(): Promise<TuiData> {
     { label: '90D', days: 90 },
   ];
 
-  const windows: TimeWindowData[] = windowConfigs.map(({ label, days }) => {
+  const windows: TimeWindowData[] = [];
+
+  for (const { label, days } of windowConfigs) {
     const since = daysAgoStr(days - 1); // trailing N days including today
+    const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
     const stats = aggregate(filtered, today);
-    return { label, days, stats };
-  });
+    const events = providers.flatMap((provider) =>
+      (provider.events ?? []).filter((event) => event.date >= dateRange.since && event.date <= dateRange.until),
+    );
+    const nutritionOutcomeSignals = await collectGitOutcomeSignals(events, dateRange);
+    windows.push({ label, days, stats, dateRange, nutritionOutcomeSignals });
+  }
 
   // Add all-time window
-  windows.push({ label: 'ALL', days: 0, stats: allTimeStats });
+  const allEvents = providers.flatMap((provider) => provider.events ?? []);
+  const allNutritionOutcomeSignals = await collectGitOutcomeSignals(allEvents, allTimeRange);
+  windows.push({
+    label: 'ALL',
+    days: 0,
+    stats: allTimeStats,
+    dateRange: allTimeRange,
+    nutritionOutcomeSignals: allNutritionOutcomeSignals,
+  });
 
   return {
     providers,
@@ -208,6 +328,21 @@ export function ensureFocusReport(state: AppState): FocusReport | null {
 
   const report = buildFocusReport(filtered);
   state.cachedFocusReport = report;
+  return report;
+}
+
+/** Lazily compute and cache the NutritionReport (window-dependent) */
+export function ensureNutritionReport(state: AppState): NutritionReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedNutritionReport) return state.cachedNutritionReport;
+
+  const window = state.data.windows[state.selectedWindowIndex];
+  const scoped = getScopedWindowData(state);
+  if (!window || !scoped) return null;
+
+  const events = scoped.scopedProviders.flatMap((provider) => provider.events ?? []);
+  const report = buildNutritionReport(events, window.nutritionOutcomeSignals, window.dateRange);
+  state.cachedNutritionReport = report;
   return report;
 }
 
