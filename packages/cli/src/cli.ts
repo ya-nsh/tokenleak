@@ -27,6 +27,7 @@ import type {
   NutritionReport,
   ProviderWarning,
   RenderOptions,
+  ReplayReport,
   TokenleakOutput,
   ProviderData,
 } from '@tokenleak/core';
@@ -61,6 +62,8 @@ import {
   startLiveServer,
   startWrappedLiveServer,
   startReplayLiveServer,
+  type ReplayHeatmapEntry,
+  type ReplayLiveDataProvider,
   colorize256,
   bold256,
   dim,
@@ -2060,6 +2063,11 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
         cliArgs['interactive'] = true;
         index += 1;
         break;
+      case '--noHeatmap':
+      case '--no-heatmap':
+        cliArgs['noHeatmap'] = true;
+        index += 1;
+        break;
       case '--open':
         cliArgs['open'] = true;
         index += 1;
@@ -2354,6 +2362,27 @@ function runCommonsInspect(file: string): void {
   process.stdout.write(`${renderCommonsInspect(report)}\n`);
 }
 
+/**
+ * Group all loaded provider events by date to produce the heatmap entries
+ * that drive the in-browser day-navigation strip.
+ */
+function buildReplayHeatmap(providers: ProviderData[]): ReplayHeatmapEntry[] {
+  const byDate = new Map<string, { tokens: number; cost: number; events: number }>();
+  for (const provider of providers) {
+    const events = provider.events ?? [];
+    for (const e of events) {
+      const cur = byDate.get(e.date) ?? { tokens: 0, cost: 0, events: 0 };
+      cur.tokens += e.totalTokens;
+      cur.cost += e.cost;
+      cur.events += 1;
+      byDate.set(e.date, cur);
+    }
+  }
+  return Array.from(byDate.entries())
+    .map(([date, v]) => ({ date, tokens: v.tokens, cost: v.cost, events: v.events }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'terminal' {
   if (typeof cliArgs['format'] === 'string') {
     const format = cliArgs['format'];
@@ -2442,7 +2471,30 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
 
     const rawPort = cliArgs['port'];
     const port = typeof rawPort === 'number' && Number.isFinite(rawPort) ? rawPort : undefined;
-    const { port: actualPort, stop } = await startReplayLiveServer(report, port !== undefined ? { port } : {});
+    const noHeatmap = cliArgs['noHeatmap'] === true;
+
+    let serverArg: ReplayReport | ReplayLiveDataProvider = report;
+    if (!noHeatmap) {
+      // Load the last 90 days once. buildReplayReport filters by date, so
+      // navigating between days in the browser just calls it again with a
+      // different date — no re-load.
+      process.stderr.write('Loading 90 days of data for heatmap navigation...\n');
+      const heatmapRange = computeDateRange({ days: 90, until: date });
+      const heatmapOutput = await loadTokenleakData(available, heatmapRange);
+      const heatmapEntries = buildReplayHeatmap(heatmapOutput.providers);
+      const initialReport = buildReplayReport(heatmapOutput.providers, date);
+      serverArg = {
+        heatmap: heatmapEntries,
+        initialDate: date,
+        initialReport,
+        getReport: (d: string) => buildReplayReport(heatmapOutput.providers, d),
+      };
+    }
+
+    const { port: actualPort, stop } = await startReplayLiveServer(
+      serverArg,
+      port !== undefined ? { port } : {},
+    );
 
     if (cliArgs['open'] === true) {
       try {

@@ -1,4 +1,12 @@
 import type { ReplayReport } from '@tokenleak/core';
+import type { ReplayHeatmapEntry } from './replay-live-server';
+
+export interface ReplayLiveHtmlOptions {
+  /** Optional heatmap to render above the cost odometer for date navigation. */
+  heatmap?: ReplayHeatmapEntry[];
+  /** Date to mark as active in the heatmap. Defaults to the report's date. */
+  initialDate?: string;
+}
 
 function esc(s: string): string {
   return s
@@ -26,13 +34,136 @@ function formatDateLong(dateStr: string): string {
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
+function formatHeatmapDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function formatHeatmapTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tok`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tok`;
+  return `${Math.round(n)} tok`;
+}
+
+function formatHeatmapCost(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+const HEATMAP_DAYS = 91; // 13 weeks × 7 days
+
+/**
+ * Render the GitHub-style heatmap above the cost odometer for in-page date
+ * navigation. Each cell is an `<a>` so clicks just navigate to `/?date=X`
+ * — no JS required.
+ *
+ * Layout: 7 rows (Sun-Sat) × ~13 cols (weeks), latest day on the right.
+ */
+function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string): string {
+  const byDate = new Map<string, ReplayHeatmapEntry>();
+  for (const e of entries) byDate.set(e.date, e);
+
+  // Determine the day window: anchor on today (or the latest entry, whichever is later).
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const latestEntryDate = entries.reduce((acc, e) => (e.date > acc ? e.date : acc), todayStr);
+  const end = new Date(latestEntryDate + 'T00:00:00Z');
+  const start = new Date(end.getTime() - (HEATMAP_DAYS - 1) * 86_400_000);
+
+  const maxTokens = entries.reduce((acc, e) => Math.max(acc, e.tokens), 0);
+  const totalTokens = entries.reduce((acc, e) => acc + e.tokens, 0);
+  const totalCost = entries.reduce((acc, e) => acc + e.cost, 0);
+  const activeDays = entries.filter((e) => e.tokens > 0).length;
+
+  // Walk forward from start; bucket into weeks (column = week index).
+  const cells: Array<{ date: string; tokens: number; cost: number; events: number; weekday: number; col: number }> = [];
+  for (let i = 0; i < HEATMAP_DAYS; i++) {
+    const d = new Date(start.getTime() + i * 86_400_000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const weekday = d.getUTCDay(); // 0 = Sun
+    const col = Math.floor(i / 7);
+    const e = byDate.get(dateStr);
+    cells.push({
+      date: dateStr,
+      tokens: e?.tokens ?? 0,
+      cost: e?.cost ?? 0,
+      events: e?.events ?? 0,
+      weekday,
+      col,
+    });
+  }
+
+  const cellHtml = cells
+    .map((c) => {
+      const intensity = maxTokens > 0 && c.tokens > 0
+        ? Math.max(0.18, Math.log(1 + c.tokens) / Math.log(1 + maxTokens))
+        : 0;
+      const isActive = c.date === activeDate;
+      const klass = ['hm-cell'];
+      if (isActive) klass.push('hm-cell--active');
+      if (c.tokens === 0) klass.push('hm-cell--empty');
+      const tooltip = c.tokens > 0
+        ? `${formatHeatmapDate(c.date)} · ${formatHeatmapTokens(c.tokens)} · ${formatHeatmapCost(c.cost)}`
+        : `${formatHeatmapDate(c.date)} · no events`;
+      const style = c.tokens > 0
+        ? `--hm-alpha:${intensity.toFixed(3)};grid-column:${c.col + 1};grid-row:${c.weekday + 1};`
+        : `grid-column:${c.col + 1};grid-row:${c.weekday + 1};`;
+      return `<a class="${klass.join(' ')}" href="/?date=${esc(c.date)}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></a>`;
+    })
+    .join('');
+
+  // Month labels along the top: emit one label per week-column whose first
+  // day is the start of a new month (or the very first column).
+  const monthLabels: string[] = [];
+  const seenMonths = new Set<string>();
+  for (let week = 0; week < Math.ceil(HEATMAP_DAYS / 7); week++) {
+    const firstDay = cells.find((c) => c.col === week);
+    if (!firstDay) continue;
+    const d = new Date(firstDay.date + 'T00:00:00Z');
+    const monthKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    if (!seenMonths.has(monthKey)) {
+      seenMonths.add(monthKey);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      monthLabels.push(`<span style="grid-column:${week + 1}">${months[d.getUTCMonth()]}</span>`);
+    }
+  }
+
+  return `
+<section class="section heatmap-section">
+  <div class="heatmap-head">
+    <div class="kicker">// last 90 days · click any day to replay</div>
+    <div class="heatmap-stats mono">
+      <span><strong>${activeDays}</strong> active days</span>
+      <span><strong>${formatHeatmapTokens(totalTokens)}</strong></span>
+      <span><strong>${formatHeatmapCost(totalCost)}</strong></span>
+    </div>
+  </div>
+  <div class="heatmap-wrap">
+    <div class="heatmap-dow mono">
+      <span></span>
+      <span>Mon</span>
+      <span></span>
+      <span>Wed</span>
+      <span></span>
+      <span>Fri</span>
+      <span></span>
+    </div>
+    <div class="heatmap-body">
+      <div class="heatmap-months mono">${monthLabels.join('')}</div>
+      <div class="heatmap-grid">${cellHtml}</div>
+    </div>
+  </div>
+</section>`;
+}
+
 const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600&display=swap';
 
-export function generateReplayLiveHtml(report: ReplayReport): string {
+export function generateReplayLiveHtml(report: ReplayReport, options: ReplayLiveHtmlOptions = {}): string {
   const safeReport = JSON.stringify(report);
   const dateLong = formatDateLong(report.date);
   const isEmpty = report.events.length === 0;
+  const heatmap = options.heatmap ?? null;
+  const activeDate = options.initialDate ?? report.date;
 
   const styles = `
 :root {
@@ -433,6 +564,88 @@ header.bar .meta strong {
   border-radius: 999px;
 }
 .summary-pill strong { color: var(--text); font-weight: 500; }
+
+/* GitHub-style heatmap for in-page date navigation */
+.heatmap-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px 18px;
+}
+.heatmap-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.heatmap-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.heatmap-stats strong { color: var(--text); font-weight: 500; margin-right: 4px; }
+.heatmap-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.heatmap-dow {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  gap: 3px;
+  font-size: 9px;
+  color: var(--dim);
+  padding-top: 18px; /* line up with cells, accounting for the months row above */
+  flex: 0 0 auto;
+}
+.heatmap-dow span { line-height: 14px; }
+.heatmap-body {
+  flex: 0 0 auto;
+}
+.heatmap-months {
+  display: grid;
+  grid-template-columns: repeat(13, 14px);
+  gap: 3px;
+  font-size: 9px;
+  color: var(--dim);
+  height: 14px;
+  margin-bottom: 4px;
+}
+.heatmap-months span { grid-row: 1; white-space: nowrap; }
+.heatmap-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  grid-template-columns: repeat(13, 14px);
+  gap: 3px;
+}
+.hm-cell {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, calc(var(--hm-alpha, 0.18) * 0.9));
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  text-decoration: none;
+}
+.hm-cell:hover {
+  border-color: var(--accent);
+  transform: scale(1.2);
+}
+.hm-cell--empty {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+}
+.hm-cell--active {
+  border-color: var(--text) !important;
+  box-shadow: 0 0 0 1px var(--bg), 0 0 0 2px var(--accent);
+}
 
 /* Help footer */
 .help {
@@ -1093,6 +1306,7 @@ header.bar .meta strong {
       <span>${report.flowBlocks.length} flow blocks</span>
     </div>
   </header>
+  ${heatmap ? renderHeatmapSection(heatmap, activeDate) : ''}
   ${isEmpty ? emptyBody : mainBody}
 </div>
 <script>window.__REPLAY__ = ${escScript(safeReport)};</script>

@@ -200,6 +200,7 @@ export function buildReplayHelpText(): string {
     '      --all-providers     Ignore provider filters and use every available provider',
     '      --no-color          Accepted for parity with terminal output',
     '  -i, --interactive       Open the replay in a browser scrub UI on http://localhost:3567',
+    '      --no-heatmap        Disable the 90-day heatmap day-navigation strip in --interactive',
     '      --port <number>     Override the starting port for --interactive (default 3567)',
     '      --open              When combined with --interactive, auto-open the browser',
     '      --record <path>     Render the day as an asciinema v2 cast file (alias --cast)',
