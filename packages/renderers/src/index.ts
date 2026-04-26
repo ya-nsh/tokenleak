@@ -8,6 +8,9 @@ export { startLiveServer } from './live/live-server';
 export type { LiveServerOptions } from './live/live-server';
 export { startWrappedLiveServer } from './live/wrapped-live-server';
 export type { WrappedLiveServerOptions } from './live/wrapped-live-server';
+export { startReplayLiveServer } from './live/replay-live-server';
+export type { ReplayLiveServerOptions } from './live/replay-live-server';
+export { generateReplayLiveHtml } from './live/replay-live-template';
 export {
   renderTabBar,
   renderOverviewView,
