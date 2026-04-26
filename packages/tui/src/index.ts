@@ -1,7 +1,7 @@
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
-import { buildCommonsExport, buildCommonsPromptExport, SCHEMA_VERSION } from '@tokenleak/core';
+import { buildCommonsExport, buildCommonsPromptExport, buildMoreStats, SCHEMA_VERSION } from '@tokenleak/core';
 import {
   CursorAuthError,
   resolveCursorSetupStatus,
@@ -163,6 +163,27 @@ function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
   }
 
   return output;
+}
+
+function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
+  const output = buildTokenleakOutput(state);
+  if (!output || !state.data) return null;
+
+  const scopedProviders = state.data.providers.map((provider) => {
+    const filteredEvents = provider.events?.filter(
+      (event) => event.date >= output.dateRange.since && event.date <= output.dateRange.until,
+    );
+    const filteredDaily = provider.daily.filter(
+      (entry) => entry.date >= output.dateRange.since && entry.date <= output.dateRange.until,
+    );
+    return { ...provider, events: filteredEvents, daily: filteredDaily };
+  });
+
+  return {
+    ...output,
+    providers: scopedProviders,
+    more: buildMoreStats(scopedProviders, output.dateRange),
+  };
 }
 
 function resetCursorSetupForm(state: AppState): void {
@@ -560,7 +581,11 @@ async function handleExport(
       state.exportStatus = 'Copying LLM prompt...';
       render(state, renderer);
 
-      const prompt = buildCommonsPromptExport(buildCommonsExport(output));
+      const scopedOutput = buildWindowScopedTokenleakOutput(state);
+      if (!scopedOutput) {
+        throw new Error('No data loaded');
+      }
+      const prompt = buildCommonsPromptExport(buildCommonsExport(scopedOutput));
       await copyTextToClipboard(prompt);
       state.exportStatus = 'Copied LLM analysis prompt to clipboard';
     }

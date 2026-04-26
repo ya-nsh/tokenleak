@@ -853,6 +853,18 @@ describe('CLI invocation', () => {
     }
   });
 
+  test('commons export rejects invalid day counts with a clear error', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'commons', 'export', '--days', 'nope', '--provider', 'pi'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('--days must be a positive number');
+  });
+
   test('waste is not exposed as a standalone command', async () => {
     const proc = Bun.spawn(['bun', cliPath, 'waste', '--help'], {
       stdout: 'pipe',

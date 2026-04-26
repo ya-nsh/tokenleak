@@ -169,6 +169,19 @@ describe('buildCommonsExport', () => {
     expect(report.summary.providerModels).toBe(1);
   });
 
+  it('rejects malformed nested bucket entries during inspection', () => {
+    const exportData = buildCommonsExport(OUTPUT);
+    const report = inspectCommonsExport({
+      ...exportData,
+      projectBuckets: [{ label: '/Users/alice/work/private-repo' }],
+      providerModels: [{ provider: 'claude-code', model: 'claude-sonnet-4' }],
+    });
+
+    expect(report.valid).toBe(false);
+    expect(report.errors).toContain('projectBuckets[0] must have string label and finite numeric count.');
+    expect(report.errors).toContain('providerModels[0] must match the provider/model bucket shape.');
+  });
+
   it('builds an LLM-ready prompt without local identifiers', () => {
     const prompt = buildCommonsPromptExport(buildCommonsExport(OUTPUT));
 

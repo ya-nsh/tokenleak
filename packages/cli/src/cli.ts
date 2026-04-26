@@ -1937,7 +1937,15 @@ function parseCommonsExportArgs(
               : arg === '--output' || arg === '-o'
                 ? 'output'
                 : 'provider';
-        cliArgs[key] = key === 'days' ? Number(value) : value;
+        if (key === 'days') {
+          const days = Number(value);
+          if (!Number.isFinite(days) || days <= 0) {
+            throw new TokenleakError(`${arg} must be a positive number`);
+          }
+          cliArgs[key] = days;
+        } else {
+          cliArgs[key] = value;
+        }
         index += 2;
         break;
       }

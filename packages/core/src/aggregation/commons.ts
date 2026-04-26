@@ -190,6 +190,53 @@ function arrayLength(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
 }
 
+function isBucketEntry(value: unknown): value is CommonsBucketEntry {
+  return (
+    isRecord(value) &&
+    typeof value['label'] === 'string' &&
+    typeof value['count'] === 'number' &&
+    Number.isFinite(value['count'])
+  );
+}
+
+function validateBucketArray(value: unknown, key: string, errors: string[]): void {
+  if (!Array.isArray(value)) {
+    errors.push(`${key} must be an array.`);
+    return;
+  }
+
+  value.forEach((entry, index) => {
+    if (!isBucketEntry(entry)) {
+      errors.push(`${key}[${index}] must have string label and finite numeric count.`);
+    }
+  });
+}
+
+function isProviderModelEntry(value: unknown): value is CommonsProviderModelEntry {
+  return (
+    isRecord(value) &&
+    typeof value['provider'] === 'string' &&
+    typeof value['model'] === 'string' &&
+    typeof value['tokensBucket'] === 'string' &&
+    typeof value['costBucket'] === 'string' &&
+    typeof value['cacheHitRateBucket'] === 'string' &&
+    typeof value['eventCountBucket'] === 'string'
+  );
+}
+
+function validateProviderModels(value: unknown, errors: string[]): void {
+  if (!Array.isArray(value)) {
+    errors.push('providerModels must be an array.');
+    return;
+  }
+
+  value.forEach((entry, index) => {
+    if (!isProviderModelEntry(entry)) {
+      errors.push(`providerModels[${index}] must match the provider/model bucket shape.`);
+    }
+  });
+}
+
 export function inspectCommonsExport(value: unknown): CommonsInspectReport {
   const errors: string[] = [];
 
@@ -231,11 +278,11 @@ export function inspectCommonsExport(value: unknown): CommonsInspectReport {
     }
   }
 
-  for (const key of ['providerModels', 'dayOfWeek', 'hourOfDay', 'projectBuckets', 'sessionBuckets']) {
-    if (!Array.isArray(value[key])) {
-      errors.push(`${key} must be an array.`);
-    }
-  }
+  validateProviderModels(value['providerModels'], errors);
+  validateBucketArray(value['dayOfWeek'], 'dayOfWeek', errors);
+  validateBucketArray(value['hourOfDay'], 'hourOfDay', errors);
+  validateBucketArray(value['projectBuckets'], 'projectBuckets', errors);
+  validateBucketArray(value['sessionBuckets'], 'sessionBuckets', errors);
 
   return {
     valid: errors.length === 0,
