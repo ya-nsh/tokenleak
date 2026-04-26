@@ -131,6 +131,32 @@ function isTuiData(value: unknown): value is TuiData {
   );
 }
 
+function normalizeCachedCursorSetupStatus(status: CursorSetupStatus): CursorSetupStatus {
+  if (status.state !== 'sync_failed_cached') {
+    return status;
+  }
+
+  const { error, reason, ...rest } = status;
+  void error;
+  void reason;
+  return {
+    ...rest,
+    state: status.hasCache ? 'ready' : 'needs_sync',
+  };
+}
+
+function normalizeCachedTuiData(data: TuiData): TuiData {
+  const cursorSetupStatus = normalizeCachedCursorSetupStatus(data.cursorSetupStatus);
+  if (cursorSetupStatus === data.cursorSetupStatus) {
+    return data;
+  }
+
+  return {
+    ...data,
+    cursorSetupStatus,
+  };
+}
+
 export function readCachedTuiData(): TuiData | null {
   const path = getTuiDataCachePath();
   try {
@@ -148,7 +174,7 @@ export function readCachedTuiData(): TuiData | null {
       return null;
     }
 
-    return parsed.data;
+    return normalizeCachedTuiData(parsed.data);
   } catch {
     return null;
   }
@@ -162,7 +188,7 @@ export function writeCachedTuiData(data: TuiData): void {
     const envelope: CachedTuiDataEnvelope = {
       version: TUI_CACHE_VERSION,
       generatedAt: new Date().toISOString(),
-      data,
+      data: normalizeCachedTuiData(data),
     };
     writeFileSync(tmpPath, `${JSON.stringify(envelope)}\n`, 'utf8');
     renameSync(tmpPath, path);

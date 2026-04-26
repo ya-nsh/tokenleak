@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInitialState } from './state';
@@ -72,6 +72,51 @@ describe('TUI data cache', () => {
     );
 
     expect(readCachedTuiData()).toBeNull();
+  });
+
+  test('does not restore stale Cursor sync failure warnings from cache', () => {
+    const data = makeTuiData();
+    data.cursorSetupStatus = {
+      state: 'sync_failed_cached',
+      hasCredentials: true,
+      hasCache: true,
+      error: 'Cursor API returned status 502',
+      reason: 'api',
+    };
+    mkdirSync(dirname(cachePath), { recursive: true });
+    writeFileSync(
+      cachePath,
+      JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), data }),
+      'utf8',
+    );
+
+    expect(readCachedTuiData()?.cursorSetupStatus).toEqual({
+      state: 'ready',
+      hasCredentials: true,
+      hasCache: true,
+    });
+  });
+
+  test('does not persist transient Cursor sync failure warnings', () => {
+    const data = makeTuiData();
+    data.cursorSetupStatus = {
+      state: 'sync_failed_cached',
+      hasCredentials: true,
+      hasCache: true,
+      error: 'Cursor API returned status 502',
+      reason: 'api',
+    };
+
+    writeCachedTuiData(data);
+
+    const raw = JSON.parse(readFileSync(cachePath, 'utf8')) as {
+      data: TuiData;
+    };
+    expect(raw.data.cursorSetupStatus).toEqual({
+      state: 'ready',
+      hasCredentials: true,
+      hasCache: true,
+    });
   });
 });
 
