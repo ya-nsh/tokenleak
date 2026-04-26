@@ -1961,7 +1961,7 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
   return { date, cliArgs };
 }
 
-function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
+export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
   let date: string | null = null;
 
   if (argv.length > 0 && !argv[0]!.startsWith('-')) {
@@ -2063,13 +2063,21 @@ function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string
         cliArgs['open'] = true;
         index += 1;
         break;
-      case '--port':
-        if (argv[index + 1] === undefined) {
+      case '--port': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
           throw new TokenleakError(`${arg} requires a value`);
         }
-        cliArgs['port'] = Number(argv[index + 1]!);
+        const port = Number(raw);
+        if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+          throw new TokenleakError(
+            `--port must be an integer between 0 and 65535 (got "${raw}")`,
+          );
+        }
+        cliArgs['port'] = port;
         index += 2;
         break;
+      }
       default:
         throw new TokenleakError(`Unknown replay flag "${arg}"`);
     }
