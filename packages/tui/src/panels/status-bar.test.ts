@@ -30,6 +30,7 @@ describe('buildStatusBar', () => {
     const text = collectTextContent(buildStatusBar(state)).join('');
 
     expect(text).toContain('?:keys');
+    expect(text).toContain('c:cursor');
     expect(text).not.toContain('1-9/0/R:view');
   });
 });

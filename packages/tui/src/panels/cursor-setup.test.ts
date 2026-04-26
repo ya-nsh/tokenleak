@@ -80,6 +80,18 @@ describe('createCursorSetupPanel', () => {
     expect(lines.some((line) => line.includes(CURSOR_SESSION_COOKIE_NAME))).toBe(true);
   });
 
+  test('ready instructions make the proactive Cursor flow safe to open', () => {
+    const lines = getCursorSetupInstructions({
+      state: 'ready',
+      hasCredentials: true,
+      hasCache: true,
+    });
+
+    expect(lines[0]).toContain('Cursor is connected');
+    expect(lines.some((line) => line.includes('replace the saved session'))).toBe(true);
+    expect(lines.some((line) => line.includes('press Esc if no change is needed'))).toBe(true);
+  });
+
   test('focused field updates state and token input accepts bracketed paste', async () => {
     const { renderer, mockInput, renderOnce } = await createTestRenderer({
       width: 140,

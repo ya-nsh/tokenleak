@@ -572,10 +572,6 @@ function handleCursorSetupInput(sequence: string, state: AppState, renderer: Cli
 }
 
 function tryOpenCursorSetup(state: AppState, renderer: CliRenderer): boolean {
-  if (!buildCursorBanner(state)) {
-    return false;
-  }
-
   resetCursorSetupForm(state);
   openCursorSetup(state);
   render(state, renderer);

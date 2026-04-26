@@ -105,6 +105,14 @@ export function getCursorSetupInstructions(status: CursorSetupStatus | null): st
     return lines;
   }
 
+  if (status.state === 'ready') {
+    return [
+      'Cursor is connected. Press Enter in the token field to replace the saved session and resync usage.',
+      'Leave the token empty and press Esc if no change is needed.',
+      ...lines,
+    ];
+  }
+
   if (status.state === 'sync_failed_cached' || status.state === 'needs_sync') {
     return [
       'Press Enter to retry the Cursor usage sync for the active account.',
@@ -165,7 +173,9 @@ export function createCursorSetupPanel(
   const isError = isErrorMessage(state);
   const title = status?.state === 'needs_reauth'
     ? ' Cursor Re-authentication '
-    : ' Cursor Setup ';
+    : status?.state === 'ready'
+      ? ' Cursor Connected '
+      : ' Cursor Setup ';
   const labelInput = createFieldInput(
     renderer,
     state.cursorSetupLabel,

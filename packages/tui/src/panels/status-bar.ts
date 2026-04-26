@@ -1,7 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import { COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
-import { getCursorBannerText } from './cursor-setup.js';
 
 function formatUpdateTime(): string {
   const now = new Date();
@@ -73,7 +72,7 @@ export function buildStatusBar(state: AppState) {
 
   const helpHint = '?:keys';
   const nav = `\u2190\u2192:view  tab/\u21E7tab:period`;
-  const cursorHint = getCursorBannerText(state) ? '  c:cursor' : '';
+  const cursorHint = '  c:cursor';
 
   let keys: string;
   if (state.selectedView === 'overview') {
