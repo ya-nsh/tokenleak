@@ -96,28 +96,22 @@ describe('CodexProvider', () => {
     expect(data.daily[0]!.cacheReadTokens).toBe(700);
     expect(data.daily[0]!.totalTokens).toBe(2880);
     expect(data.totalTokens).toBe(2880);
-    expect(data.totalCost).toBe(0);
+    expect(data.totalCost).toBeCloseTo(0.010375, 8);
     expect(data.costCompleteness).toMatchObject({
-      status: 'unknown',
+      status: 'complete',
       totalTokens: 2880,
-      pricedTokens: 0,
-      unpricedTokens: 2880,
-      unknownModels: ['gpt-5.4'],
+      pricedTokens: 2880,
+      unpricedTokens: 0,
+      unknownModels: [],
     });
-    expect(data.warnings).toContainEqual({
-      kind: 'unknown-pricing',
-      file: 'gpt-5.4',
-      count: 2,
-    });
+    expect(data.warnings ?? []).not.toContainEqual(
+      expect.objectContaining({ kind: 'unknown-pricing', file: 'gpt-5.4' }),
+    );
   });
 
   // -- load: empty directory ----------------------------------------------
 
   it('returns empty data when directory has no JSONL files', async () => {
-    // Create provider pointing at a dir with no .jsonl files
-    const provider = new CodexProvider(
-      join(import.meta.dir, '..', '__fixtures__'),
-    );
     // The __fixtures__ dir has .jsonl files at root, but those are the
     // old splitter test fixtures, not in a codex sessions dir.
     // Let's use a dedicated empty dir instead.

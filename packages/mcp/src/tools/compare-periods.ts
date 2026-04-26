@@ -7,20 +7,18 @@ import {
   inclusiveDaySpan,
   shiftDateStringLocal,
 } from '@tokenleak/core';
-import type { DateRange, ProviderData } from '@tokenleak/core';
+import type { DateRange } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
+import { loadProviderData } from '../shared/provider-load.js';
 
 async function loadAndAggregate(
   providers: Awaited<ReturnType<ProviderRegistry['getAvailable']>>,
   range: DateRange,
 ) {
-  const results = await Promise.all(
-    providers.map((p) => p.load(range).catch(() => null)),
-  );
-  const data = results.filter((r): r is ProviderData => r !== null);
+  const { data, warnings } = await loadProviderData(providers, range);
   const merged = mergeProviderData(data);
   const stats = aggregate(merged, range.until);
-  return { data, stats };
+  return { stats, warnings };
 }
 
 export async function handleComparePeriods(
@@ -69,7 +67,17 @@ export async function handleComparePeriods(
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(compareOutput, null, 2),
+          text: JSON.stringify(
+            {
+              ...compareOutput,
+              warnings: {
+                current: currentResult.warnings,
+                previous: previousResult.warnings,
+              },
+            },
+            null,
+            2,
+          ),
         },
       ],
     };

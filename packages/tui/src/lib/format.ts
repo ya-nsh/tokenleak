@@ -1,3 +1,5 @@
+import type { CostCompleteness } from '@tokenleak/core';
+
 /** Format a token count into a human-readable abbreviated string */
 export function formatTokens(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
@@ -9,6 +11,35 @@ export function formatTokens(n: number): string {
 /** Format a cost value with dollar sign and 2 decimal places */
 export function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
+}
+
+export function isCostComplete(completeness: CostCompleteness | undefined): boolean {
+  return !completeness || completeness.status === 'complete';
+}
+
+export function formatCostWithCompleteness(
+  n: number,
+  completeness: CostCompleteness | undefined,
+): string {
+  const formatted = formatCost(n);
+  return isCostComplete(completeness) ? formatted : `${formatted}+`;
+}
+
+export function formatCostCompletenessWarning(
+  completeness: CostCompleteness | undefined,
+): string | null {
+  if (isCostComplete(completeness) || !completeness) {
+    return null;
+  }
+
+  const label = completeness.status === 'unknown' ? 'Cost unknown' : 'Cost incomplete';
+  const modelList = completeness.unknownModels.slice(0, 3).join(', ');
+  const extraModels = completeness.unknownModels.length > 3
+    ? ` +${completeness.unknownModels.length - 3} more`
+    : '';
+  const modelSuffix = modelList ? ` (${modelList}${extraModels})` : '';
+
+  return `${label}: ${formatTokens(completeness.unpricedTokens)} unpriced tokens${modelSuffix}`;
 }
 
 /** Format a percentage with 1 decimal place and % suffix */

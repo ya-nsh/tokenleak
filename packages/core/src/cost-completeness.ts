@@ -10,7 +10,7 @@ function mergeUnknownModels(target: Set<string>, models: Iterable<string>): void
 
 function emptyCostCompleteness(): CostCompleteness {
   return {
-    status: 'unknown',
+    status: 'complete',
     totalTokens: 0,
     pricedTokens: 0,
     unpricedTokens: 0,
@@ -67,7 +67,9 @@ export function buildDailyCostCompleteness(daily: DailyUsage[]): CostCompletenes
 
   for (const day of daily) {
     totalTokens += day.totalTokens;
+    let modeledTokens = 0;
     for (const model of day.models) {
+      modeledTokens += model.totalTokens;
       const modelUnpriced =
         model.costSource === 'unpriced'
           ? (model.unpricedTokens ?? model.totalTokens)
@@ -77,6 +79,15 @@ export function buildDailyCostCompleteness(daily: DailyUsage[]): CostCompletenes
       pricedTokens += Math.max(0, model.totalTokens - normalizedUnpriced);
       if (normalizedUnpriced > 0) {
         unknownModels.add(model.model);
+      }
+    }
+
+    const unmodeledTokens = Math.max(0, day.totalTokens - modeledTokens);
+    if (unmodeledTokens > 0) {
+      if (day.cost > 0) {
+        pricedTokens += unmodeledTokens;
+      } else {
+        unpricedTokens += unmodeledTokens;
       }
     }
   }

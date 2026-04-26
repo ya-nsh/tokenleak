@@ -3,7 +3,17 @@ import { getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_DAYS } from '../lib/state.js';
 import { COLORS, BOLD } from '../lib/theme.js';
-import { formatTokens, formatCost, padRight, padLeft, asciiBar, truncate, formatPercent } from '../lib/format.js';
+import {
+  formatTokens,
+  formatCost,
+  formatCostCompletenessWarning,
+  formatCostWithCompleteness,
+  padRight,
+  padLeft,
+  asciiBar,
+  truncate,
+  formatPercent,
+} from '../lib/format.js';
 import { getProviderColor } from '../lib/theme.js';
 import { createTimeWindowsPanel } from './time-windows.js';
 import { ensureMoreStats, getDayOfWeekForWindow } from '../lib/data.js';
@@ -45,18 +55,30 @@ function createOverviewPanel(state: AppState) {
   } else {
     children.push(
       statRow('Total Tokens', formatTokens(stats.totalTokens)),
-      statRow('Total Cost', formatCost(stats.totalCost), COLORS.amber),
+      statRow(
+        'Total Cost',
+        formatCostWithCompleteness(stats.totalCost, stats.costCompleteness),
+        COLORS.amber,
+      ),
       statRow('Active / Total Days', `${stats.activeDays} / ${stats.totalDays}`),
       statRow('Current Streak', `${stats.currentStreak}d`),
       statRow('Longest Streak', `${stats.longestStreak}d`),
       statRow('Cache Hit Rate', formatPercent(stats.cacheHitRate), COLORS.cyan),
       statRow('Avg Daily Tokens', formatTokens(stats.averageDailyTokens)),
-      statRow('Avg Daily Cost', formatCost(stats.averageDailyCost), COLORS.amber),
+      statRow(
+        'Avg Daily Cost',
+        formatCostWithCompleteness(stats.averageDailyCost, stats.costCompleteness),
+        COLORS.amber,
+      ),
       statRow('Providers', `${providers.length} active`),
       statRow('Peak Day', stats.peakDay ? `${stats.peakDay.date} (${formatTokens(stats.peakDay.tokens)})` : 'N/A'),
       statRow('Input Tokens', formatTokens(stats.totalInputTokens)),
       statRow('Output Tokens', formatTokens(stats.totalOutputTokens)),
     );
+    const warning = formatCostCompletenessWarning(stats.costCompleteness);
+    if (warning) {
+      children.push(Text({ content: warning, fg: COLORS.red }));
+    }
   }
 
   return Box(

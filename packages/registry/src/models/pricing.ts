@@ -151,6 +151,42 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
   },
 
   // OpenAI GPT-5 family
+  'gpt-5.5': {
+    input: 5.00,
+    output: 30.00,
+    cacheRead: 0.50,
+    cacheWrite: 5.00,
+  },
+  'gpt-5.4': {
+    input: 2.50,
+    output: 15.00,
+    cacheRead: 0.25,
+    cacheWrite: 2.50,
+  },
+  'gpt-5.4-mini': {
+    input: 0.75,
+    output: 4.50,
+    cacheRead: 0.075,
+    cacheWrite: 0.75,
+  },
+  'gpt-5.4-nano': {
+    input: 0.20,
+    output: 1.25,
+    cacheRead: 0.02,
+    cacheWrite: 0.20,
+  },
+  'gpt-5.3-codex': {
+    input: 1.75,
+    output: 14.00,
+    cacheRead: 0.175,
+    cacheWrite: 1.75,
+  },
+  'gpt-5.3-chat-latest': {
+    input: 1.75,
+    output: 14.00,
+    cacheRead: 0.175,
+    cacheWrite: 1.75,
+  },
   'gpt-5': {
     input: 1.25,
     output: 10.00,
@@ -254,12 +290,19 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
 /**
  * Look up pricing for a normalized model name.
  *
- * Delegates to the pricing resolver which checks remote pricing (LiteLLM)
- * first, then falls back to the hardcoded table. If `initPricing()` has not
- * been called, this behaves identically to a direct `MODEL_PRICING` lookup.
+ * Delegates to the pricing resolver only for models that are already present
+ * in the verified local table. This lets remote pricing update known rates
+ * without turning unsupported or speculative model names into exact costs.
+ * If `initPricing()` has not been called, this behaves identically to a direct
+ * `MODEL_PRICING` lookup.
  */
 export function getModelPricing(model: string): ModelPricing | undefined {
-  return getRemotePricing(model) ?? MODEL_PRICING[model];
+  const fallback = MODEL_PRICING[model];
+  if (!fallback) {
+    return undefined;
+  }
+
+  return getRemotePricing(model) ?? fallback;
 }
 
 export { TOKENS_PER_MILLION };

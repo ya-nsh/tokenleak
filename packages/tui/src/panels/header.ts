@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
-import { formatCost } from '../lib/format.js';
+import { formatCostWithCompleteness } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState, ViewMode } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
@@ -35,11 +35,18 @@ export function buildHeader(
   renderer: CliRenderer,
   onViewSwitch?: ViewSwitchCallback,
 ) {
-  const costStr = state.data ? formatCost(state.data.allTimeStats.totalCost) : '$...';
+  const costStr = state.data
+    ? formatCostWithCompleteness(
+        state.data.allTimeStats.totalCost,
+        state.data.allTimeStats.costCompleteness,
+      )
+    : '$...';
 
   const windowIdx = state.selectedWindowIndex;
   const stats = state.data?.windows[windowIdx]?.stats;
-  const windowCost = stats ? formatCost(stats.totalCost) : costStr;
+  const windowCost = stats
+    ? formatCostWithCompleteness(stats.totalCost, stats.costCompleteness)
+    : costStr;
 
   // Build tab indicators manually since TabSelect is a Renderable
   const tabParts: ReturnType<typeof Text | typeof Box>[] = [];

@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { getRemotePricing, initPricing, resetPricingState } from './pricing-resolver';
-import { MODEL_PRICING } from './pricing';
+import { afterEach, describe, expect, test } from 'bun:test';
+import {
+  getRemotePricing,
+  initPricing,
+  resetPricingState,
+  setRemotePricingForTest,
+} from './pricing-resolver';
 
 afterEach(() => {
   resetPricingState();
@@ -46,5 +50,38 @@ describe('getModelPricing fallback chain', () => {
   test('returns undefined for unknown model when no remote data is loaded', () => {
     resetPricingState();
     expect(getModelPricing('nonexistent-model-abc')).toBeUndefined();
+  });
+
+  test('does not accept remote-only model pricing as verified pricing', () => {
+    resetPricingState();
+    setRemotePricingForTest({
+      'nonexistent-model-abc': {
+        input: 123,
+        output: 456,
+        cacheRead: 7,
+        cacheWrite: 8,
+      },
+    });
+
+    expect(getModelPricing('nonexistent-model-abc')).toBeUndefined();
+  });
+
+  test('allows remote pricing to update verified model rates', () => {
+    resetPricingState();
+    setRemotePricingForTest({
+      'gpt-4o': {
+        input: 1,
+        output: 2,
+        cacheRead: 3,
+        cacheWrite: 4,
+      },
+    });
+
+    expect(getModelPricing('gpt-4o')).toEqual({
+      input: 1,
+      output: 2,
+      cacheRead: 3,
+      cacheWrite: 4,
+    });
   });
 });

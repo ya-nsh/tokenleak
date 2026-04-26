@@ -3,9 +3,9 @@ import {
   mergeProviderData,
   SCHEMA_VERSION,
 } from '@tokenleak/core';
-import type { ProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
+import { loadProviderData, summarizeProviderData } from '../shared/provider-load.js';
 
 export async function handleGetUsageSummary(
   args: { days?: number; since?: string; until?: string; provider?: string },
@@ -18,10 +18,7 @@ export async function handleGetUsageSummary(
       ? available.filter((p) => p.name === args.provider)
       : available;
 
-    const results = await Promise.all(
-      filtered.map((p) => p.load(range).catch(() => null)),
-    );
-    const data = results.filter((r): r is ProviderData => r !== null);
+    const { data, warnings } = await loadProviderData(filtered, range);
 
     if (data.length === 0) {
       return {
@@ -34,6 +31,7 @@ export async function handleGetUsageSummary(
                 dateRange: range,
                 providers: [],
                 aggregated: null,
+                warnings,
                 message: 'No provider data found for the given range.',
               },
               null,
@@ -56,12 +54,8 @@ export async function handleGetUsageSummary(
               schemaVersion: SCHEMA_VERSION,
               dateRange: range,
               aggregated: stats,
-              providers: data.map((d) => ({
-                name: d.provider,
-                displayName: d.displayName,
-                tokens: d.totalTokens,
-                cost: d.totalCost,
-              })),
+              providers: summarizeProviderData(data),
+              warnings,
             },
             null,
             2,

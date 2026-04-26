@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { normalizeModelName } from './normalizer';
 import { getModelPricing, MODEL_PRICING } from './pricing';
 import { estimateCost } from './cost';
-import type { ModelPricing } from './pricing';
 
 // ---------------------------------------------------------------------------
 // normalizeModelName
@@ -81,6 +80,14 @@ describe('getModelPricing', () => {
     expect(pricing!.input).toBe(1.10);
   });
 
+  test('returns pricing for current GPT-5 flagship models', () => {
+    expect(getModelPricing('gpt-5.5')?.input).toBe(5.00);
+    expect(getModelPricing('gpt-5.4')?.output).toBe(15.00);
+    expect(getModelPricing('gpt-5.4-mini')?.cacheRead).toBe(0.075);
+    expect(getModelPricing('gpt-5.4-nano')?.output).toBe(1.25);
+    expect(getModelPricing('gpt-5.3-codex')?.input).toBe(1.75);
+  });
+
   test('returns undefined for unknown model', () => {
     expect(getModelPricing('totally-unknown-model')).toBeUndefined();
   });
@@ -93,6 +100,7 @@ describe('getModelPricing', () => {
       'claude-sonnet-4', 'claude-opus-4',
       'claude-sonnet-4-6', 'claude-opus-4-6',
       'gpt-4o', 'gpt-4o-mini',
+      'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.3-codex',
       'o1', 'o1-mini', 'o3', 'o3-mini', 'o4-mini',
     ];
     for (const name of expected) {
