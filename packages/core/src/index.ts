@@ -37,6 +37,11 @@ export type {
   TokenVelocityPoint,
   ReplayDaySummary,
   ReplayReport,
+  CommonsPrivacyBlock,
+  CommonsBucketEntry,
+  CommonsProviderModelEntry,
+  CommonsExport,
+  CommonsInspectReport,
   ModelMixShiftEntry,
   CompareMore,
   MoreStats,
@@ -75,6 +80,8 @@ export {
   computeModelMixShift,
   buildExplainReport,
   buildReplayReport,
+  buildCommonsExport,
+  inspectCommonsExport,
 } from './aggregation';
 
 export {
