@@ -23,7 +23,21 @@ export type {
   ShipStatus,
 } from './git-correlator';
 export { splitJsonlRecords } from './parsers/index';
-export { ClaudeCodeProvider, CodexProvider, CursorProvider, OpenCodeProvider, PiProvider } from './providers/index';
+export {
+  ClaudeCodeProvider,
+  CodexProvider,
+  CursorProvider,
+  GeminiProvider,
+  CopilotProvider,
+  AmpProvider,
+  QwenProvider,
+  RooCodeProvider,
+  KiloCodeProvider,
+  OpenClawProvider,
+  HermesProvider,
+  OpenCodeProvider,
+  PiProvider,
+} from './providers/index';
 export {
   CursorAuthError,
   getActiveCursorCredentials,
