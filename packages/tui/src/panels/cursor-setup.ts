@@ -11,6 +11,7 @@ export interface CursorSetupCallbacks {
   onLabelInput: (value: string) => void;
   onTokenInput: (value: string) => void;
   onSubmit: () => void;
+  onCancel: () => void;
 }
 
 export interface CursorSetupPanel {
@@ -59,6 +60,15 @@ export function buildCursorBanner(state: AppState) {
     },
     Text({ content: text, fg: COLORS.amber, attributes: BOLD }),
   );
+}
+
+const KITTY_ESCAPE_SEQUENCE = /^\x1B\[(?:27|57344)(?:;[0-9:]+)?u$/;
+const MODIFY_OTHER_KEYS_ESCAPE_SEQUENCE = /^\x1B\[27;\d+;(?:27|57344)~$/;
+
+export function isEscapeKeySequence(sequence: string): boolean {
+  return sequence === '\x1b'
+    || KITTY_ESCAPE_SEQUENCE.test(sequence)
+    || MODIFY_OTHER_KEYS_ESCAPE_SEQUENCE.test(sequence);
 }
 
 function renderField(label: string, input: InputRenderable) {
@@ -144,6 +154,7 @@ function createFieldInput(
   field: CursorSetupField,
   onInput: (value: string) => void,
   onFieldFocus: (field: CursorSetupField) => void,
+  onCancel: () => void,
 ): InputRenderable {
   const input = new InputRenderable(renderer, {
     width: '100%',
@@ -155,6 +166,13 @@ function createFieldInput(
     textColor: COLORS.white,
     focusedTextColor: COLORS.white,
     placeholderColor: COLORS.dimWhite,
+    onKeyDown: (key) => {
+      if (key.name === 'escape') {
+        key.preventDefault();
+        key.stopPropagation();
+        onCancel();
+      }
+    },
   });
 
   input.on(InputRenderableEvents.INPUT, onInput);
@@ -183,6 +201,7 @@ export function createCursorSetupPanel(
     'label',
     callbacks.onLabelInput,
     callbacks.onFieldFocus,
+    callbacks.onCancel,
   );
   const tokenInput = createFieldInput(
     renderer,
@@ -191,6 +210,7 @@ export function createCursorSetupPanel(
     'token',
     callbacks.onTokenInput,
     callbacks.onFieldFocus,
+    callbacks.onCancel,
   );
 
   labelInput.on(InputRenderableEvents.ENTER, () => {

@@ -6,6 +6,7 @@ import {
   createCursorSetupPanel,
   getCursorBannerText,
   getCursorSetupInstructions,
+  isEscapeKeySequence,
 } from './cursor-setup.js';
 
 describe('getCursorBannerText', () => {
@@ -72,6 +73,19 @@ describe('getCursorBannerText', () => {
   });
 });
 
+describe('isEscapeKeySequence', () => {
+  test('matches raw, Kitty, and modifyOtherKeys Escape sequences', () => {
+    expect(isEscapeKeySequence('\x1b')).toBe(true);
+    expect(isEscapeKeySequence('\x1b[27u')).toBe(true);
+    expect(isEscapeKeySequence('\x1b[27;1u')).toBe(true);
+    expect(isEscapeKeySequence('\x1b[27;1:1u')).toBe(true);
+    expect(isEscapeKeySequence('\x1b[57344u')).toBe(true);
+    expect(isEscapeKeySequence('\x1b[27;1;27~')).toBe(true);
+    expect(isEscapeKeySequence('\t')).toBe(false);
+    expect(isEscapeKeySequence('\x1b[A')).toBe(false);
+  });
+});
+
 describe('createCursorSetupPanel', () => {
   test('instructions point users to the Cursor session cookie path', () => {
     const lines = getCursorSetupInstructions(null);
@@ -115,6 +129,7 @@ describe('createCursorSetupPanel', () => {
         onSubmit: () => {
           submitCount += 1;
         },
+        onCancel: () => {},
       });
 
       renderer.root.add(panel);
@@ -160,6 +175,7 @@ describe('createCursorSetupPanel', () => {
         onSubmit: () => {
           submitCount += 1;
         },
+        onCancel: () => {},
       });
 
       renderer.root.add(panel);
@@ -173,6 +189,46 @@ describe('createCursorSetupPanel', () => {
 
       expect(state.cursorSetupToken).toBe('session-cookie-value');
       expect(submitCount).toBe(1);
+    } finally {
+      renderer.destroy();
+    }
+  });
+
+  test('pressing Escape in a focused input cancels the setup flow', async () => {
+    const { renderer, mockInput, renderOnce } = await createTestRenderer({
+      width: 140,
+      height: 30,
+      useMouse: true,
+    });
+    const state = createInitialState();
+    let cancelCount = 0;
+
+    try {
+      const { panel, tokenInput } = createCursorSetupPanel(state, renderer, {
+        onFieldFocus: (field) => {
+          state.cursorSetupField = field;
+        },
+        onLabelInput: (value) => {
+          state.cursorSetupLabel = value;
+        },
+        onTokenInput: (value) => {
+          state.cursorSetupToken = value;
+        },
+        onSubmit: () => {},
+        onCancel: () => {
+          cancelCount += 1;
+        },
+      });
+
+      renderer.root.add(panel);
+      tokenInput.focus();
+      await renderOnce();
+
+      mockInput.pressEscape();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await renderOnce();
+
+      expect(cancelCount).toBe(1);
     } finally {
       renderer.destroy();
     }

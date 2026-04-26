@@ -47,7 +47,7 @@ import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel } from './panels/replay.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel } from './panels/receipts.js';
-import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
+import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
 const CURSOR_SETUP_TOKEN_INPUT_ID = 'cursor-setup-token-input';
@@ -198,6 +198,10 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       },
       onSubmit: () => {
         void submitCursorSetup(state, renderer);
+      },
+      onCancel: () => {
+        closeCursorSetup(state);
+        render(state, renderer);
       },
     });
 
@@ -552,13 +556,13 @@ function handleCursorSetupInput(sequence: string, state: AppState, renderer: Cli
     return false;
   }
 
-  if (state.cursorSetupSubmitting) {
+  if (isEscapeKeySequence(sequence)) {
+    closeCursorSetup(state);
+    render(state, renderer);
     return true;
   }
 
-  if (sequence === '\x1b') {
-    closeCursorSetup(state);
-    render(state, renderer);
+  if (state.cursorSetupSubmitting) {
     return true;
   }
 
@@ -988,7 +992,7 @@ export async function main(): Promise<void> {
     }
 
     // Escape closes help
-    if (sequence === '\x1b' && state.showHelp) {
+    if (isEscapeKeySequence(sequence) && state.showHelp) {
       state.showHelp = false;
       render(state, renderer);
       return true;
