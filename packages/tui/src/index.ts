@@ -50,9 +50,9 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
-import { createReplayPanel, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
+import { createReplayPanel, REPLAY_MAX_CONTENT_WIDTH, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
-import { createReceiptsPanel, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
+import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -306,6 +306,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           state.replaySelectedBlockIndex,
           state.replayExpandedBlockIndex,
           state.replayScrollOffset,
+          getPanelContentWidth(renderer, REPLAY_MAX_CONTENT_WIDTH),
         );
       }
       if (!state.replayDate) {
@@ -323,6 +324,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         state.replaySelectedBlockIndex,
         state.replayExpandedBlockIndex,
         state.replayScrollOffset,
+        getPanelContentWidth(renderer, REPLAY_MAX_CONTENT_WIDTH),
         (blockIndex) => {
           toggleReplayBlock(state, blockIndex);
           render(state, renderer);
@@ -382,7 +384,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     }
     case 'receipts':
       if (!hasWindowData) {
-        return createReceiptsPanel(state, null);
+        return createReceiptsPanel(state, null, getPanelContentWidth(renderer, RECEIPTS_MAX_CONTENT_WIDTH));
       }
       if (!state.cachedReceipt) {
         const key = getSelectedViewTaskKey(state, 'receipts');
@@ -390,10 +392,15 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           ensureReceipt(state);
         });
       }
-      return createReceiptsPanel(state, state.cachedReceipt, (lineIndex) => {
-        toggleReceiptLine(state, lineIndex);
-        render(state, renderer);
-      });
+      return createReceiptsPanel(
+        state,
+        state.cachedReceipt,
+        getPanelContentWidth(renderer, RECEIPTS_MAX_CONTENT_WIDTH),
+        (lineIndex) => {
+          toggleReceiptLine(state, lineIndex);
+          render(state, renderer);
+        },
+      );
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -599,6 +606,10 @@ function tryOpenCursorSetup(state: AppState, renderer: CliRenderer): boolean {
 
 let currentState: AppState;
 let currentRenderer: CliRenderer;
+
+function getPanelContentWidth(renderer: CliRenderer, maxWidth: number): number {
+  return Math.max(1, Math.min(maxWidth, renderer.terminalWidth - 4));
+}
 
 function clampItemIndex(index: number, itemCount: number): number {
   if (itemCount <= 0) return 0;

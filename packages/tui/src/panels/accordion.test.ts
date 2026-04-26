@@ -130,6 +130,13 @@ describe('Replay accordion panel', () => {
     expect(lines.some((line) => line.includes('+1 more events'))).toBe(true);
     expect(lines.every((line) => line.length <= 78)).toBe(true);
   });
+
+  test('honors a narrower caller-provided content width', () => {
+    const lines = collectTextContent(createReplayPanel(makeReplayReport(), '2026-03-10', 0, 0, 0, 50));
+
+    expect(lines.some((line) => line.includes('▸ ▼'))).toBe(true);
+    expect(lines.every((line) => line.length <= 50)).toBe(true);
+  });
 });
 
 describe('Receipts accordion panel', () => {
@@ -160,5 +167,19 @@ describe('Receipts accordion panel', () => {
     expect(lines.some((line) => line.includes('▸ ▼') && line.includes('1.'))).toBe(true);
     expect(lines.some((line) => line.includes('└ Please investigate this failing test'))).toBe(true);
     expect(lines.every((line) => line.length <= 78)).toBe(true);
+  });
+
+  test('honors a narrower caller-provided content width', () => {
+    const state = {
+      receiptsScrollOffset: 0,
+      receiptsSelectedLineIndex: 0,
+      receiptsExpandedLineIndex: 0,
+      receiptsSortMode: 'cost' as const,
+      receiptsCategoryFilter: null,
+    };
+    const lines = collectTextContent(createReceiptsPanel(state, makeReceipt(), 50));
+
+    expect(lines.some((line) => line.includes('▸ ▼'))).toBe(true);
+    expect(lines.every((line) => line.length <= 50)).toBe(true);
   });
 });

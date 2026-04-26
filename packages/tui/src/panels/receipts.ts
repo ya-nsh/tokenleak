@@ -17,7 +17,7 @@ const SORT_LABELS: Record<ReceiptsSortMode, string> = {
 };
 
 export const RECEIPTS_VISIBLE_ROWS = 8;
-const CONTENT_WIDTH = 78;
+export const RECEIPTS_MAX_CONTENT_WIDTH = 78;
 const SAMPLE_LIMIT = 3;
 const SAMPLE_LINE_LIMIT = 2;
 
@@ -30,6 +30,7 @@ function renderLine(
   descColWidth: number,
   isSelected: boolean,
   isExpanded: boolean,
+  contentWidth: number,
   onToggleLine?: ReceiptToggleHandler,
 ) {
   const rankStr = padLeft(`${rank}.`, 3);
@@ -41,7 +42,7 @@ function renderLine(
   const expandIcon = isExpanded ? '▼' : '▶';
   const content = truncate(
     ` ${pointer} ${expandIcon} ${rankStr} ${padRight(category, 9)} ${padLeft(qty, 5)}  ${padRight(desc, descColWidth)} ${padLeft(cost, 10)}`,
-    CONTENT_WIDTH,
+    contentWidth,
   );
 
   return Box(
@@ -60,13 +61,13 @@ function renderLine(
   );
 }
 
-function renderDetailLine(value: string, fg: string = COLORS.dimWhite) {
-  return Text({ content: truncate(`      ${value}`, CONTENT_WIDTH), fg });
+function renderDetailLine(value: string, contentWidth: number, fg: string = COLORS.dimWhite) {
+  return Text({ content: truncate(`      ${value}`, contentWidth), fg });
 }
 
-function renderSamplePrompt(prompt: string) {
-  return wrapText(prompt, CONTENT_WIDTH - 10, SAMPLE_LINE_LIMIT).map((line, index) =>
-    renderDetailLine(`${index === 0 ? '└ ' : '  '}${line}`),
+function renderSamplePrompt(prompt: string, contentWidth: number) {
+  return wrapText(prompt, contentWidth - 10, SAMPLE_LINE_LIMIT).map((line, index) =>
+    renderDetailLine(`${index === 0 ? '└ ' : '  '}${line}`, contentWidth),
   );
 }
 
@@ -79,6 +80,7 @@ export function createReceiptsPanel(
     receiptsCategoryFilter: ReceiptCategory | null;
   },
   receipt: Receipt | null,
+  contentWidth: number = RECEIPTS_MAX_CONTENT_WIDTH,
   onToggleLine?: ReceiptToggleHandler,
 ) {
   if (!receipt || receipt.lines.length === 0) {
@@ -169,7 +171,7 @@ export function createReceiptsPanel(
     Text({
       content: truncate(
         `     ${padRight('#', 3)} ${padRight('Bucket', 9)} ${padLeft('Qty', 5)}  ${padRight('Description', descColWidth)} ${padLeft('Cost', 10)}`,
-        CONTENT_WIDTH,
+        contentWidth,
       ),
       fg: COLORS.dimWhite,
     }),
@@ -209,7 +211,7 @@ export function createReceiptsPanel(
         ),
         ...wrapText(
           `All categories · Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
-          CONTENT_WIDTH - 2,
+          contentWidth - 2,
           2,
         ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
       )
@@ -217,7 +219,7 @@ export function createReceiptsPanel(
         { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
         ...wrapText(
           `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
-          CONTENT_WIDTH - 2,
+          contentWidth - 2,
           2,
         ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
       );
@@ -235,19 +237,20 @@ export function createReceiptsPanel(
       descColWidth,
       isSelected,
       isExpanded,
+      contentWidth,
       onToggleLine,
     ));
     if (isExpanded) {
       const samples = visible[i]!.samplePrompts;
       if (samples.length === 0) {
-        rows.push(renderDetailLine('└ No sample prompts available for this line.'));
+        rows.push(renderDetailLine('└ No sample prompts available for this line.', contentWidth));
       } else {
         const visibleSamples = samples.slice(0, SAMPLE_LIMIT);
         for (const sample of visibleSamples) {
-          rows.push(...renderSamplePrompt(sample));
+          rows.push(...renderSamplePrompt(sample, contentWidth));
         }
         if (samples.length > visibleSamples.length) {
-          rows.push(renderDetailLine(`+${samples.length - visibleSamples.length} more samples`));
+          rows.push(renderDetailLine(`+${samples.length - visibleSamples.length} more samples`, contentWidth));
         }
       }
     }

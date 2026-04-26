@@ -5,7 +5,7 @@ import { COLORS, BOLD } from '../lib/theme.js';
 
 const HEATMAP_BLOCKS = [' ', '\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'];
 const HEATMAP_SLOTS = 48;
-const CONTENT_WIDTH = 78;
+export const REPLAY_MAX_CONTENT_WIDTH = 78;
 const REPLAY_EVENT_DETAIL_LIMIT = 4;
 export const REPLAY_VISIBLE_BLOCKS = 8;
 
@@ -53,14 +53,15 @@ function renderActivityBar(report: ReplayReport) {
   );
 }
 
-function renderDetailLine(content: string, fg: string = COLORS.dimWhite) {
-  return Text({ content: truncate(`    ${content}`, CONTENT_WIDTH), fg });
+function renderDetailLine(content: string, contentWidth: number, fg: string = COLORS.dimWhite) {
+  return Text({ content: truncate(`    ${content}`, contentWidth), fg });
 }
 
 function renderFlowBlockCard(
   block: FlowBlock,
   selected: boolean,
   expanded: boolean,
+  contentWidth: number,
   onToggleBlock?: ReplayToggleHandler,
 ) {
   const timeRange = `${formatTime(block.start)}\u2013${formatTime(block.end)}`;
@@ -69,7 +70,7 @@ function renderFlowBlockCard(
   const expandIcon = expanded ? '\u25BC' : '\u25B6';
 
   const headerLine = Text({
-    content: truncate(` ${cursor} ${expandIcon} ${headerText}`, CONTENT_WIDTH),
+    content: truncate(` ${cursor} ${expandIcon} ${headerText}`, contentWidth),
     fg: block.label === 'Deep Flow' ? COLORS.cyan : block.label === 'Quick Lookup' ? COLORS.dimWhite : COLORS.white,
     attributes: BOLD,
   });
@@ -90,9 +91,10 @@ function renderFlowBlockCard(
   const switchText = block.modelSwitches > 0
     ? `, ${block.modelSwitches} switch${block.modelSwitches === 1 ? '' : 'es'}`
     : '';
-  children.push(renderDetailLine(`Model: ${block.dominantModel}${switchText}`, COLORS.white));
+  children.push(renderDetailLine(`Model: ${block.dominantModel}${switchText}`, contentWidth, COLORS.white));
   children.push(renderDetailLine(
     `Input ${formatTokens(block.inputTokens)} | Output ${formatTokens(block.outputTokens)} | Cache read ${formatTokens(block.cacheReadTokens)} | Cache write ${formatTokens(block.cacheWriteTokens)}`,
+    contentWidth,
   ));
 
   const events = block.events.slice(0, REPLAY_EVENT_DETAIL_LIMIT);
@@ -102,11 +104,11 @@ function renderFlowBlockCard(
       ? event.cacheReadTokens / (event.inputTokens + event.cacheReadTokens)
       : 0;
     const line = `${padRight(time, 6)} ${padRight(truncate(event.model, 20), 21)} ${padLeft(formatTokens(event.totalTokens), 8)} tok  cache ${padLeft(formatPercent(cacheRate), 6)}  ${padLeft(formatCost(event.cost), 8)}`;
-    children.push(renderDetailLine(line, COLORS.white));
+    children.push(renderDetailLine(line, contentWidth, COLORS.white));
   }
   const hiddenEventCount = block.events.length - events.length;
   if (hiddenEventCount > 0) {
-    children.push(renderDetailLine(`+${hiddenEventCount} more events`, COLORS.dimWhite));
+    children.push(renderDetailLine(`+${hiddenEventCount} more events`, contentWidth, COLORS.dimWhite));
   }
 
   const trend = block.cacheHitRateTrend;
@@ -118,6 +120,7 @@ function renderFlowBlockCard(
       children.push(
         renderDetailLine(
           `Cache trend: ${first}% \u2192 ${last}% ${direction}`,
+          contentWidth,
           Number(last) > Number(first) ? COLORS.green : COLORS.red,
         ),
       );
@@ -180,7 +183,7 @@ function renderPulseChart(velocity: TokenVelocityPoint[]) {
   );
 }
 
-function renderDaySummary(report: ReplayReport) {
+function renderDaySummary(report: ReplayReport, contentWidth: number) {
   const s = report.summary;
   const parts = [
     `Sessions: ${s.totalSessions}`,
@@ -193,7 +196,7 @@ function renderDaySummary(report: ReplayReport) {
     parts.push(`Peak: ${formatTokens(s.peakMinute.tokensPerMinute)} tok/min at ${formatTime(s.peakMinute.minute)}`);
   }
 
-  const lines = wrapText(parts.join('  |  '), CONTENT_WIDTH - 2, 2);
+  const lines = wrapText(parts.join('  |  '), contentWidth - 2, 2);
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     ...lines.map((line) => Text({ content: line, fg: COLORS.white })),
@@ -206,6 +209,7 @@ export function createReplayPanel(
   selectedBlockIndex: number,
   expandedBlockIndex: number | null,
   scrollOffset: number,
+  contentWidth: number = REPLAY_MAX_CONTENT_WIDTH,
   onToggleBlock?: ReplayToggleHandler,
 ) {
   const dateLabel = replayDate ? formatShortDate(replayDate) : '\u2014';
@@ -239,6 +243,7 @@ export function createReplayPanel(
       block,
       block.blockIndex === selectedBlockIndex,
       block.blockIndex === expandedBlockIndex,
+      contentWidth,
       onToggleBlock,
     ));
 
@@ -284,6 +289,6 @@ export function createReplayPanel(
     Text({ content: '', fg: COLORS.dimWhite }),
     renderPulseChart(report.tokenVelocity),
     Text({ content: '', fg: COLORS.dimWhite }),
-    renderDaySummary(report),
+    renderDaySummary(report, contentWidth),
   );
 }
