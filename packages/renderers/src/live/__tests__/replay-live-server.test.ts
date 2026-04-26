@@ -131,6 +131,15 @@ describe('generateReplayLiveHtml', () => {
     expect(html).not.toContain('id="timeline"');
   });
 
+  it('emits the activeBlockIndex padding logic so playback does not skip zero-duration blocks', () => {
+    const html = generateReplayLiveHtml(makeReport());
+    // Tripwire: if someone reverts the padding around active-block hit-testing,
+    // playback at high speeds will visibly skip past single-event blocks.
+    expect(html).toContain('ACTIVE_BLOCK_MIN_PAD_MS');
+    expect(html).toContain('padBefore');
+    expect(html).toContain('padAfter');
+  });
+
   it('escapes the embedded JSON so a closing </script> in data does not break the page', () => {
     const r = makeReport();
     r.events[0].model = 'evil</script><script>alert(1)</script>';

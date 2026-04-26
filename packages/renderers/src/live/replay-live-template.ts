@@ -733,9 +733,25 @@ header.bar .meta strong {
     return { cost: cost, tokens: tokens, count: count, mix: mix, inputT: inputT, cacheReadT: cacheReadT };
   }
 
+  // Pad short blocks to a minimum hit-test window. Playback advances
+  // currentTimeMs by dt*speed each frame (multi-second jumps at high speeds),
+  // so a block whose [startTs,endTs] interval is shorter than that jump can
+  // be stepped over without ever landing inside it. The pad keeps the block
+  // active while the playhead is in its neighborhood, falling back to its
+  // nearest neighbor's gap so adjacent blocks stay disjoint.
+  const ACTIVE_BLOCK_MIN_PAD_MS = 30_000;
   function activeBlockIndex(t) {
     for (let i = 0; i < flowBlocks.length; i++) {
-      if (t >= flowBlocks[i].startTs && t <= flowBlocks[i].endTs) return i;
+      const b = flowBlocks[i];
+      if (b.durationMs >= ACTIVE_BLOCK_MIN_PAD_MS * 2) {
+        if (t >= b.startTs && t <= b.endTs) return i;
+        continue;
+      }
+      const prevEnd = i > 0 ? flowBlocks[i - 1].endTs : -Infinity;
+      const nextStart = i + 1 < flowBlocks.length ? flowBlocks[i + 1].startTs : Infinity;
+      const padBefore = Math.min(ACTIVE_BLOCK_MIN_PAD_MS, Math.max(0, (b.startTs - prevEnd) / 2));
+      const padAfter = Math.min(ACTIVE_BLOCK_MIN_PAD_MS, Math.max(0, (nextStart - b.endTs) / 2));
+      if (t >= b.startTs - padBefore && t <= b.endTs + padAfter) return i;
     }
     return -1;
   }
