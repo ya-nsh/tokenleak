@@ -78,10 +78,12 @@ export interface AppState {
   // replay view state
   replayDate: string | null;
   replayScrollOffset: number;
-  replayExpandedBlocks: Set<number>;
+  replaySelectedBlockIndex: number;
+  replayExpandedBlockIndex: number | null;
 
   // receipts view state
   receiptsScrollOffset: number;
+  receiptsSelectedLineIndex: number;
   receiptsExpandedLineIndex: number | null;
   receiptsSortMode: ReceiptsSortMode;
   receiptsCategoryFilter: ReceiptCategory | null;
@@ -136,8 +138,10 @@ export function createInitialState(): AppState {
     cursorSetupStatusOverride: null,
     replayDate: null,
     replayScrollOffset: 0,
-    replayExpandedBlocks: new Set(),
+    replaySelectedBlockIndex: 0,
+    replayExpandedBlockIndex: null,
     receiptsScrollOffset: 0,
+    receiptsSelectedLineIndex: 0,
     receiptsExpandedLineIndex: null,
     receiptsSortMode: 'cost',
     receiptsCategoryFilter: null,

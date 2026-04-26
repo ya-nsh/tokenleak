@@ -84,9 +84,16 @@ export function createHelpPanel() {
           ['h', 'Previous day'],
           ['l', 'Next day'],
         ]),
+        ...helpSection('REPLAY VIEW', [
+          ['h / l', 'Previous / next day'],
+          ['j / k', 'Select flow block'],
+          ['Enter / Space', 'Toggle selected flow block'],
+          ['Click', 'Select and toggle a flow block'],
+        ]),
         ...helpSection('RECEIPTS VIEW', [
-          ['j / k', 'Scroll line items'],
-          ['enter', 'Expand top line into sample prompts'],
+          ['j / k', 'Select line item'],
+          ['Enter / Space', 'Toggle selected line item'],
+          ['Click', 'Select and toggle a line item'],
           ['o', 'Cycle sort (cost / qty / alpha)'],
           ['f', 'Cycle category filter'],
         ]),

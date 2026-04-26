@@ -1,10 +1,15 @@
 import { Box, Text } from '@opentui/core';
 import type { FlowBlock, ReplayReport, TokenVelocityPoint } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft, truncate } from '../lib/format.js';
+import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft, truncate, wrapText } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 
 const HEATMAP_BLOCKS = [' ', '\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'];
 const HEATMAP_SLOTS = 48;
+export const REPLAY_MAX_CONTENT_WIDTH = 78;
+const REPLAY_EVENT_DETAIL_LIMIT = 4;
+export const REPLAY_VISIBLE_BLOCKS = 8;
+
+type ReplayToggleHandler = (blockIndex: number) => void;
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
@@ -48,39 +53,62 @@ function renderActivityBar(report: ReplayReport) {
   );
 }
 
-function renderFlowBlockCard(block: FlowBlock, expanded: boolean) {
+function renderDetailLine(content: string, contentWidth: number, fg: string = COLORS.dimWhite) {
+  return Text({ content: truncate(`    ${content}`, contentWidth), fg });
+}
+
+function renderFlowBlockCard(
+  block: FlowBlock,
+  selected: boolean,
+  expanded: boolean,
+  contentWidth: number,
+  onToggleBlock?: ReplayToggleHandler,
+) {
   const timeRange = `${formatTime(block.start)}\u2013${formatTime(block.end)}`;
   const headerText = `${timeRange}  ${block.label}  |  ${block.eventCount} events  |  ${formatTokens(block.totalTokens)} tok  |  ${formatCost(block.cost)}`;
+  const cursor = selected ? '\u25B8' : ' ';
   const expandIcon = expanded ? '\u25BC' : '\u25B6';
 
   const headerLine = Text({
-    content: `  ${expandIcon} ${headerText}`,
+    content: truncate(` ${cursor} ${expandIcon} ${headerText}`, contentWidth),
     fg: block.label === 'Deep Flow' ? COLORS.cyan : block.label === 'Quick Lookup' ? COLORS.dimWhite : COLORS.white,
     attributes: BOLD,
   });
 
   if (!expanded) {
-    return Box({ flexDirection: 'column', width: '100%' }, headerLine);
+    return Box(
+      {
+        flexDirection: 'column',
+        width: '100%',
+        onMouseDown: onToggleBlock ? () => onToggleBlock(block.blockIndex) : undefined,
+      },
+      headerLine,
+    );
   }
 
   const children = [headerLine];
 
-  children.push(
-    Text({
-      content: `    Model: ${block.dominantModel}${block.modelSwitches > 0 ? ` (${block.modelSwitches} switch${block.modelSwitches === 1 ? '' : 'es'})` : ''}`,
-      fg: COLORS.white,
-    }),
-  );
+  const switchText = block.modelSwitches > 0
+    ? `, ${block.modelSwitches} switch${block.modelSwitches === 1 ? '' : 'es'}`
+    : '';
+  children.push(renderDetailLine(`Model: ${block.dominantModel}${switchText}`, contentWidth, COLORS.white));
+  children.push(renderDetailLine(
+    `Input ${formatTokens(block.inputTokens)} | Output ${formatTokens(block.outputTokens)} | Cache read ${formatTokens(block.cacheReadTokens)} | Cache write ${formatTokens(block.cacheWriteTokens)}`,
+    contentWidth,
+  ));
 
-  for (const event of block.events) {
+  const events = block.events.slice(0, REPLAY_EVENT_DETAIL_LIMIT);
+  for (const event of events) {
     const time = formatTime(event.timestamp);
     const cacheRate = (event.inputTokens + event.cacheReadTokens) > 0
       ? event.cacheReadTokens / (event.inputTokens + event.cacheReadTokens)
       : 0;
-    const line = `    ${padRight(time, 7)} ${padRight(truncate(event.model, 18), 19)} ${padLeft(formatTokens(event.totalTokens), 8)}  cache:${formatPercent(cacheRate).padStart(4)}  ${formatCost(event.cost).padStart(8)}`;
-    children.push(
-      Text({ content: line, fg: COLORS.white }),
-    );
+    const line = `${padRight(time, 6)} ${padRight(truncate(event.model, 20), 21)} ${padLeft(formatTokens(event.totalTokens), 8)} tok  cache ${padLeft(formatPercent(cacheRate), 6)}  ${padLeft(formatCost(event.cost), 8)}`;
+    children.push(renderDetailLine(line, contentWidth, COLORS.white));
+  }
+  const hiddenEventCount = block.events.length - events.length;
+  if (hiddenEventCount > 0) {
+    children.push(renderDetailLine(`+${hiddenEventCount} more events`, contentWidth, COLORS.dimWhite));
   }
 
   const trend = block.cacheHitRateTrend;
@@ -90,17 +118,25 @@ function renderFlowBlockCard(block: FlowBlock, expanded: boolean) {
     if (first !== last) {
       const direction = Number(last) > Number(first) ? '\u2191' : '\u2193';
       children.push(
-        Text({
-          content: `    Cache: ${first}% \u2192 ${last}% ${direction}`,
-          fg: Number(last) > Number(first) ? COLORS.green : COLORS.red,
-        }),
+        renderDetailLine(
+          `Cache trend: ${first}% \u2192 ${last}% ${direction}`,
+          contentWidth,
+          Number(last) > Number(first) ? COLORS.green : COLORS.red,
+        ),
       );
     }
   }
 
   children.push(Text({ content: '', fg: COLORS.dimWhite }));
 
-  return Box({ flexDirection: 'column', width: '100%' }, ...children);
+  return Box(
+    {
+      flexDirection: 'column',
+      width: '100%',
+      onMouseDown: onToggleBlock ? () => onToggleBlock(block.blockIndex) : undefined,
+    },
+    ...children,
+  );
 }
 
 function renderPulseChart(velocity: TokenVelocityPoint[]) {
@@ -147,7 +183,7 @@ function renderPulseChart(velocity: TokenVelocityPoint[]) {
   );
 }
 
-function renderDaySummary(report: ReplayReport) {
+function renderDaySummary(report: ReplayReport, contentWidth: number) {
   const s = report.summary;
   const parts = [
     `Sessions: ${s.totalSessions}`,
@@ -160,17 +196,21 @@ function renderDaySummary(report: ReplayReport) {
     parts.push(`Peak: ${formatTokens(s.peakMinute.tokensPerMinute)} tok/min at ${formatTime(s.peakMinute.minute)}`);
   }
 
+  const lines = wrapText(parts.join('  |  '), contentWidth - 2, 2);
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: parts.join('  |  '), fg: COLORS.white }),
+    ...lines.map((line) => Text({ content: line, fg: COLORS.white })),
   );
 }
 
 export function createReplayPanel(
   report: ReplayReport | null,
   replayDate: string | null,
-  expandedBlocks: Set<number>,
+  selectedBlockIndex: number,
+  expandedBlockIndex: number | null,
   scrollOffset: number,
+  contentWidth: number = REPLAY_MAX_CONTENT_WIDTH,
+  onToggleBlock?: ReplayToggleHandler,
 ) {
   const dateLabel = replayDate ? formatShortDate(replayDate) : '\u2014';
 
@@ -196,9 +236,25 @@ export function createReplayPanel(
   }
 
   const totalCost = report.events.reduce((sum, e) => sum + e.cost, 0);
+  const safeOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, report.flowBlocks.length - REPLAY_VISIBLE_BLOCKS)));
   const blockCards = report.flowBlocks
-    .slice(scrollOffset, scrollOffset + 20)
-    .map((block) => renderFlowBlockCard(block, expandedBlocks.has(block.blockIndex)));
+    .slice(safeOffset, safeOffset + REPLAY_VISIBLE_BLOCKS)
+    .map((block) => renderFlowBlockCard(
+      block,
+      block.blockIndex === selectedBlockIndex,
+      block.blockIndex === expandedBlockIndex,
+      contentWidth,
+      onToggleBlock,
+    ));
+
+  const scrollIndicators: ReturnType<typeof Text>[] = [];
+  if (safeOffset > 0) {
+    scrollIndicators.push(Text({ content: `  ${safeOffset} more above`, fg: COLORS.dimWhite }));
+  }
+  const below = report.flowBlocks.length - safeOffset - blockCards.length;
+  if (below > 0) {
+    scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
+  }
 
   return Box(
     {
@@ -229,9 +285,10 @@ export function createReplayPanel(
       }),
     ),
     ...blockCards,
+    ...scrollIndicators,
     Text({ content: '', fg: COLORS.dimWhite }),
     renderPulseChart(report.tokenVelocity),
     Text({ content: '', fg: COLORS.dimWhite }),
-    renderDaySummary(report),
+    renderDaySummary(report, contentWidth),
   );
 }
