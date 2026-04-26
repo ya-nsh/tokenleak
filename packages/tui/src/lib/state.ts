@@ -1,4 +1,4 @@
-import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, NutritionReport, Receipt, ReceiptCategory } from '@tokenleak/core';
+import type { AdvisorReport, FocusReport, ExplainReport, CompareOutput, MoreStats, ReplayReport, WasteReport, NutritionReport, Receipt, ReceiptCategory } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
@@ -61,6 +61,7 @@ export interface AppState {
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
   cachedReplayReport: ReplayReport | null;
+  cachedWasteReport: WasteReport | null;
   cachedNutritionReport: NutritionReport | null;
   cachedReceipt: Receipt | null;
 }
@@ -105,6 +106,7 @@ export function createInitialState(): AppState {
     cachedCompareOutput: null,
     cachedMoreStats: null,
     cachedReplayReport: null,
+    cachedWasteReport: null,
     cachedNutritionReport: null,
     cachedReceipt: null,
   };

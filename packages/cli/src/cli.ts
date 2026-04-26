@@ -2669,6 +2669,9 @@ if (isDirectExecution) {
     await runMain(focusMain);
     process.exit(0);
   }
+  if (argv[0] === 'waste') {
+    handleError(new TokenleakError('tokenleak waste is not a standalone command. Open the TUI and use the Advisor view for Waste Patterns.'));
+  }
   if (argv[0] === 'nutrition') {
     const nutritionArgv = argv.slice(1);
     process.argv = [...process.argv.slice(0, 2), ...nutritionArgv];
