@@ -39,7 +39,7 @@ npx tokenleak --help
 ```
 
 After installing, run `tokenleak` in your terminal. It auto-detects supported providers from their local logs.
-In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 8 views:
+In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 10 views:
 
 - **Overview** — heatmap, stats, providers, and top models
 - **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
@@ -50,6 +50,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Export** — save PNG, Wrapped PNG, or launch a live server
 - **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
 - **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
+- **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
 
 Use `tokenleak --legacy` to open the classic interactive launcher instead.
 
@@ -119,6 +120,10 @@ tokenleak replay 2026-03-10 --format json
 tokenleak focus
 tokenleak focus --provider codex --days 30
 
+# Compare AI token spend against local Git output
+tokenleak nutrition
+tokenleak nutrition --days 30 --format json
+
 # Authenticate Cursor and sync its local cache
 tokenleak cursor login --name work
 
@@ -148,11 +153,18 @@ tokenleak replay
 
 # Replay a specific day with JSON output
 tokenleak replay 2026-03-10 --format json --output replay.json
+
+# Estimate AI ROI from token usage and local Git output
+tokenleak nutrition --days 30
+
+# Emit the AI ROI report as JSON
+tokenleak nutrition --format json --output ai-roi.json
 ```
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
 - `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today.
+- `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
 
 ### Cursor commands
 

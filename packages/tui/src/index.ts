@@ -20,6 +20,9 @@ import {
   ensureMoreStats,
   ensureReplayReport,
   ensureWasteReport,
+  ensureNutritionReport,
+  ensureReceipt,
+  deriveReceiptLines,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -37,6 +40,8 @@ import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
 import { createReplayPanel } from './panels/replay.js';
+import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
+import { createReceiptsPanel } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -107,6 +112,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         state.replayExpandedBlocks,
         state.replayScrollOffset,
       );
+    case 'nutrition':
+      return createNutritionPanel(state, ensureNutritionReport(state));
     case 'wrapped': {
       const output = buildTokenleakOutput(state);
       const achievements = output ? computeAchievements(output) : [];
@@ -117,6 +124,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       })) ?? [];
       return createWrappedPanel(windowStats, achievements, providers, state.wrappedScrollOffset, ensureMoreStats(state));
     }
+    case 'receipts':
+      return createReceiptsPanel(state, ensureReceipt(state));
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -182,12 +191,17 @@ function applyLoadedData(state: AppState, freshData: Awaited<ReturnType<typeof l
   state.modelScrollOffset = 0;
   state.advisorScrollOffset = 0;
   state.focusScrollOffset = 0;
+  state.nutritionScrollOffset = 0;
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
   state.replayScrollOffset = 0;
   state.replayExpandedBlocks = new Set();
   state.replayDate = null;
   state.explainDate = null;
+  state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
+  state.receiptsSortMode = 'cost';
+  state.receiptsCategoryFilter = null;
   // Fresh TUI data now carries the latest cursorSetupStatus, so the override can be cleared.
   state.cursorSetupStatusOverride = null;
 }
@@ -298,9 +312,14 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.modelScrollOffset = 0;
     currentState.advisorScrollOffset = 0;
     currentState.focusScrollOffset = 0;
+    currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
     currentState.replayScrollOffset = 0;
+    currentState.receiptsScrollOffset = 0;
+    currentState.receiptsExpandedLineIndex = null;
+    currentState.receiptsSortMode = 'cost';
+    currentState.receiptsCategoryFilter = null;
     currentState.replayExpandedBlocks = new Set();
     // Reset matrix page when switching to matrix
     if (mode === 'matrix') {
@@ -356,6 +375,12 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
   state.cachedWasteReport = null;
+  state.cachedNutritionReport = null;
+  state.cachedReceipt = null;
+  state.receiptsScrollOffset = 0;
+  state.receiptsExpandedLineIndex = null;
+  state.receiptsSortMode = 'cost';
+  state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
 }
@@ -369,6 +394,8 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
   state.cachedWasteReport = null;
+  state.cachedNutritionReport = null;
+  state.cachedReceipt = null;
 }
 
 /** Navigate replay date forward or backward by one day */
@@ -401,14 +428,16 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '7': 'export',
   '8': 'wrapped',
   '9': 'replay',
+  '0': 'nutrition',
+  'R': 'receipts',
 };
 
 const VIEW_ORDER: ViewMode[] = [
-  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay',
+  'overview', 'matrix', 'advisor', 'focus', 'explain', 'compare', 'export', 'wrapped', 'replay', 'nutrition', 'receipts',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
-const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay']);
+const SCROLLABLE_VIEWS = new Set<ViewMode>(['advisor', 'focus', 'compare', 'wrapped', 'replay', 'nutrition', 'receipts']);
 
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
@@ -427,6 +456,13 @@ function getScrollableItemCount(state: AppState): number {
       return 30; // approximate content rows
     case 'replay':
       return ensureReplayReport(state)?.flowBlocks.length ?? 0;
+    case 'nutrition':
+      return Math.min(ensureNutritionReport(state)?.repos.length ?? 0, 30);
+    case 'receipts': {
+      const receipt = ensureReceipt(state);
+      if (!receipt) return 0;
+      return deriveReceiptLines(receipt, state.receiptsSortMode, state.receiptsCategoryFilter).length;
+    }
     default:
       return 0;
   }
@@ -439,6 +475,8 @@ function getVisibleCount(view: ViewMode): number {
     case 'compare': return 6;
     case 'wrapped': return 20;
     case 'replay': return 15;
+    case 'nutrition': return NUTRITION_VISIBLE_ROWS;
+    case 'receipts': return 12;
     default: return 10;
   }
 }
@@ -450,6 +488,8 @@ function getScrollOffset(state: AppState): number {
     case 'compare': return state.compareScrollOffset;
     case 'wrapped': return state.wrappedScrollOffset;
     case 'replay': return state.replayScrollOffset;
+    case 'nutrition': return state.nutritionScrollOffset;
+    case 'receipts': return state.receiptsScrollOffset;
     default: return 0;
   }
 }
@@ -461,6 +501,8 @@ function setScrollOffset(state: AppState, value: number): void {
     case 'compare': state.compareScrollOffset = value; break;
     case 'wrapped': state.wrappedScrollOffset = value; break;
     case 'replay': state.replayScrollOffset = value; break;
+    case 'nutrition': state.nutritionScrollOffset = value; break;
+    case 'receipts': state.receiptsScrollOffset = value; break;
   }
 }
 
@@ -622,7 +664,7 @@ export async function main(): Promise<void> {
         return true;
       }
 
-      // 1-8: switch view
+      // 1-9/0: switch view
       const viewMode = VIEW_KEYS[sequence];
       if (viewMode) {
         handleViewSwitch(viewMode);
@@ -714,6 +756,44 @@ export async function main(): Promise<void> {
         } else {
           state.replayExpandedBlocks.add(blockIndex);
         }
+        render(state, renderer);
+        return true;
+      }
+
+      // Enter: expand/collapse sample prompts for the top visible line (receipts view)
+      if (sequence === '\r' && state.selectedView === 'receipts') {
+        const target = state.receiptsScrollOffset;
+        state.receiptsExpandedLineIndex =
+          state.receiptsExpandedLineIndex === target ? null : target;
+        render(state, renderer);
+        return true;
+      }
+
+      // o: cycle sort mode (receipts view)
+      if (sequence === 'o' && state.selectedView === 'receipts') {
+        const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
+        const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
+        state.receiptsSortMode = order[nextIndex]!;
+        state.receiptsScrollOffset = 0;
+        state.receiptsExpandedLineIndex = null;
+        render(state, renderer);
+        return true;
+      }
+
+      // f: cycle category filter through encountered categories + null (receipts view)
+      if (sequence === 'f' && state.selectedView === 'receipts') {
+        const receipt = state.cachedReceipt;
+        if (!receipt || receipt.lines.length === 0) {
+          return true;
+        }
+        const categories = Array.from(new Set(receipt.lines.map((l) => l.category)));
+        const current = state.receiptsCategoryFilter;
+        const currentIndex = current === null ? -1 : categories.indexOf(current);
+        const nextIndex = currentIndex + 1;
+        state.receiptsCategoryFilter =
+          nextIndex >= categories.length ? null : categories[nextIndex]!;
+        state.receiptsScrollOffset = 0;
+        state.receiptsExpandedLineIndex = null;
         render(state, renderer);
         return true;
       }

@@ -8,6 +8,7 @@ import { handleGetCostBreakdown } from './get-cost-breakdown.js';
 import { handleGetStreaksAndHabits } from './get-streaks-and-habits.js';
 import { handleComparePeriods } from './compare-periods.js';
 import { handleGetEfficiencyAdvice } from './get-efficiency-advice.js';
+import { handleGetReceiptLines } from './get-receipt-lines.js';
 
 export function registerTools(server: McpServer, registry: ProviderRegistry): void {
   server.tool(
@@ -85,5 +86,24 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
       provider: z.string().optional().describe('Filter to a specific provider by name'),
     },
     async (args) => handleGetEfficiencyAdvice(args, registry),
+  );
+
+  server.tool(
+    'get_receipt_lines',
+    'Generate an itemized receipt of AI coding spend by prompt behavior. Clusters repeated prompts into line items with categories (debugging, styling, refactoring, etc.) and aggregates cost per cluster. Prompt capture currently requires Claude Code logs.',
+    {
+      days: z.number().optional().describe('Number of days to look back (default: 30)'),
+      since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+      until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
+      provider: z.string().optional().describe('Filter to a specific provider by name'),
+      topLines: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Maximum number of line items to return (default: 12, max: 100)'),
+    },
+    async (args) => handleGetReceiptLines(args, registry),
   );
 }
