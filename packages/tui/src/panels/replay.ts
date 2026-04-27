@@ -283,39 +283,10 @@ function renderPlaybackHelp(contentWidth: number) {
 }
 
 function renderOverviewHelp(contentWidth: number) {
-  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting · [o] open browser';
+  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting';
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),
-  );
-}
-
-/**
- * Big "press [o] to open the interactive browser scrub" banner. Always
- * shown above the playback header in BOTH overview and playback modes —
- * the browser experience is the better one for visual scrubbing and we
- * want it discoverable from anywhere on this view.
- *
- * When `liveServerPort` is set, swaps to a one-line success state.
- */
-function renderBrowserBanner(contentWidth: number, liveServerPort: number | null) {
-  if (liveServerPort !== null) {
-    const status = ` ✓ browser open at http://localhost:${liveServerPort}/  ·  press [o] again to re-open`;
-    return Box(
-      { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-      Text({ content: truncate(status, contentWidth), fg: COLORS.green, attributes: BOLD }),
-    );
-  }
-  const inner = '  ▶  press [o] to open the interactive browser scrub  ⟶';
-  const innerWidth = Math.min(contentWidth - 2, 60);
-  const top = '╭' + '─'.repeat(innerWidth) + '╮';
-  const middle = '│' + truncate(inner.padEnd(innerWidth), innerWidth) + '│';
-  const bottom = '╰' + '─'.repeat(innerWidth) + '╯';
-  return Box(
-    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({ content: top, fg: COLORS.green }),
-    Text({ content: middle, fg: COLORS.green, attributes: BOLD }),
-    Text({ content: bottom, fg: COLORS.green }),
   );
 }
 
@@ -328,7 +299,6 @@ export function createReplayPanel(
   contentWidth: number = REPLAY_MAX_CONTENT_WIDTH,
   onToggleBlock?: ReplayToggleHandler,
   playback: ReplayPlaybackView | null = null,
-  liveServerPort: number | null = null,
 ) {
   const dateLabel = replayDate ? formatShortDate(replayDate) : '—';
 
@@ -348,8 +318,6 @@ export function createReplayPanel(
         fg: COLORS.amber,
         attributes: BOLD,
       }),
-      Text({ content: '', fg: COLORS.dimWhite }),
-      renderBrowserBanner(contentWidth, liveServerPort),
       Text({ content: '', fg: COLORS.dimWhite }),
       Text({ content: 'No data available for this date', fg: COLORS.dimWhite }),
     );
@@ -396,8 +364,6 @@ export function createReplayPanel(
       { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({ content: `Total: ${formatCost(totalCost)}`, fg: COLORS.green }),
     ),
-    Text({ content: '', fg: COLORS.dimWhite }),
-    renderBrowserBanner(contentWidth, liveServerPort),
   ];
   if (playbackHeader) {
     children.push(Text({ content: '', fg: COLORS.dimWhite }));

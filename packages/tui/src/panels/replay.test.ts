@@ -122,36 +122,23 @@ describe('createReplayPanel', () => {
     expect(text.split('\n').filter((l) => l.includes('[space]')).length).toBe(1);
   });
 
-  test('"press [o]" banner is visible in BOTH overview and playback', () => {
+  test('replay panel no longer carries the per-view "press [o]" banner', () => {
+    // The "open browser" affordance lives in the global footer status bar
+    // now, so the panel itself should not duplicate it.
     const overview = collectTextContent(createReplayPanel(makeReport(), '2026-04-22', 0, null, 0)).join('\n');
-    expect(overview).toContain('press [o]');
+    expect(overview).not.toContain('press [o]');
+    expect(overview).not.toContain('browser scrub');
 
     const playback = collectTextContent(
       createReplayPanel(makeReport(), '2026-04-22', 1, null, 0, undefined, undefined, makePlayback()),
     ).join('\n');
-    expect(playback).toContain('press [o]');
+    expect(playback).not.toContain('press [o]');
   });
 
-  test('once a server port is set, the banner becomes a "browser open" status', () => {
-    const panel = createReplayPanel(
-      makeReport(),
-      '2026-04-22',
-      0,
-      null,
-      0,
-      undefined,
-      undefined,
-      null,
-      3567,
-    );
-    const text = collectTextContent(panel).join('\n');
-    expect(text).toContain('browser open at http://localhost:3567/');
-    expect(text).not.toContain('press [o] to open');
-  });
-
-  test('null-report path still shows the banner', () => {
+  test('null-report path renders the date header without a banner', () => {
     const panel = createReplayPanel(null, '2026-04-22', 0, null, 0);
     const text = collectTextContent(panel).join('\n');
-    expect(text).toContain('press [o]');
+    expect(text).toContain('Replay:');
+    expect(text).not.toContain('press [o]');
   });
 });

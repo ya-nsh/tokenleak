@@ -570,6 +570,43 @@ header.bar .meta strong {
 }
 .summary-pill strong { color: var(--text); font-weight: 500; }
 
+/* Prompt detail panel — populated when an event row is clicked. */
+.prompt-card { margin-top: 18px; }
+.prompt-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.prompt-meta strong { color: var(--text); font-weight: 500; }
+.prompt-meta.empty { color: var(--dim); margin-bottom: 0; }
+.prompt-body {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+.prompt-body.empty {
+  color: var(--dim);
+  font-style: italic;
+}
+.event-row { cursor: pointer; }
+.event-row.selected {
+  border-left-color: var(--warn);
+  background: rgba(253, 224, 71, 0.06);
+}
+.event-row.selected.current {
+  border-left-color: var(--accent);
+  background: rgba(16, 185, 129, 0.08);
+}
+
 /* GitHub-style heatmap for in-page date navigation */
 .heatmap-section {
   border: 1px solid var(--border);
@@ -770,6 +807,12 @@ header.bar .meta strong {
   </div>
 </div>
 
+<div class="card prompt-card" id="promptCard">
+  <div class="label">// prompt sent to model</div>
+  <div class="prompt-meta mono" id="promptMeta">click any event in the list above to see what was asked</div>
+  <pre class="prompt-body mono" id="promptBody" hidden></pre>
+</div>
+
 <div class="help">
   <span><kbd>space</kbd>play / pause</span>
   <span><kbd>←</kbd><kbd>→</kbd>step ±1 min</span>
@@ -834,6 +877,12 @@ header.bar .meta strong {
   let lastFrameTs = 0;
   let rafId = 0;
   let prevCost = 0;
+  // selectedEventIndex tracks which row's prompt is shown in the prompt
+  // card. Until the user clicks a row, it follows the playhead — so during
+  // playback the prompt panel updates live. Once they click, it freezes
+  // there until the next click.
+  let selectedEventIndex = -1;
+  let manualSelection = false;
 
   // ── DOM refs ───────────────────────────────────────────────────────
   const $ = function (id) { return document.getElementById(id); };
@@ -857,6 +906,8 @@ header.bar .meta strong {
   const blockCost = $('blockCost');
   const blockCache = $('blockCache');
   const blockSwitches = $('blockSwitches');
+  const promptMeta = $('promptMeta');
+  const promptBody = $('promptBody');
 
   // ── Static SVG render ──────────────────────────────────────────────
   const TL_W = 1000;
@@ -1058,9 +1109,16 @@ header.bar .meta strong {
     for (let i = 0; i < events.length; i++) {
       if (events[i].ts <= currentTimeMs) cur = i; else break;
     }
+    // Auto-follow the playhead until the user manually picks a row.
+    if (!manualSelection) {
+      selectedEventIndex = cur;
+    }
     const start = Math.max(0, cur - EV_WINDOW);
     const end = Math.min(events.length, (cur === -1 ? 0 : cur) + EV_WINDOW + 1);
-    const key = start + ':' + end + ':' + cur;
+    // Selection has to be part of the cache key, otherwise clicking a row
+    // already inside the rendered window wouldn't repaint and the
+    // .selected class wouldn't move.
+    const key = start + ':' + end + ':' + cur + ':' + selectedEventIndex;
     if (key === lastWindowKey) return;
     lastWindowKey = key;
 
@@ -1068,9 +1126,12 @@ header.bar .meta strong {
     for (let i = start; i < end; i++) {
       const e = events[i];
       const future = i > cur;
-      const cls = 'event-row' + (future ? ' future' : '') + (i === cur ? ' current' : '');
+      const cls = 'event-row' +
+        (future ? ' future' : '') +
+        (i === cur ? ' current' : '') +
+        (i === selectedEventIndex ? ' selected' : '');
       parts.push(
-        '<div class="' + cls + '">' +
+        '<div class="' + cls + '" data-event-index="' + i + '">' +
           '<span class="t">' + fmtClock(e.ts).slice(0, 5) + '</span>' +
           '<span class="m" title="' + escAttr(e.model) + '">' + escHtml(e.model) + '</span>' +
           '<span class="tk">' + fmtTokens(e.totalTokens) + '</span>' +
@@ -1083,6 +1144,50 @@ header.bar .meta strong {
     const currentEl = eventList.querySelector('.event-row.current');
     if (currentEl) {
       currentEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }
+  }
+
+  // Click delegation: clicking an event row pins the prompt panel to that
+  // event. Also pauses playback so the user can read.
+  eventList.addEventListener('click', function (ev) {
+    let target = ev.target;
+    while (target && target !== eventList && !(target.getAttribute && target.getAttribute('data-event-index'))) {
+      target = target.parentNode;
+    }
+    if (!target || target === eventList) return;
+    const idx = parseInt(target.getAttribute('data-event-index'), 10);
+    if (isNaN(idx) || idx < 0 || idx >= events.length) return;
+    pause();
+    manualSelection = true;
+    selectedEventIndex = idx;
+    // Force a repaint so the .selected class moves.
+    lastWindowKey = '';
+    renderEventList();
+    renderPromptPanel();
+  });
+
+  function renderPromptPanel() {
+    if (selectedEventIndex < 0 || selectedEventIndex >= events.length) {
+      promptMeta.className = 'prompt-meta mono empty';
+      promptMeta.textContent = 'click any event in the list above to see what was asked';
+      promptBody.hidden = true;
+      promptBody.textContent = '';
+      return;
+    }
+    const e = events[selectedEventIndex];
+    promptMeta.className = 'prompt-meta mono';
+    promptMeta.innerHTML =
+      'asked at <strong>' + escHtml(fmtClock(e.ts)) + '</strong>' +
+      ' · <strong>' + escHtml(e.model) + '</strong>' +
+      ' · <strong>' + escHtml(fmtTokens(e.totalTokens)) + ' tok</strong>' +
+      ' · <strong>' + escHtml(fmtCost(e.cost)) + '</strong>';
+    promptBody.hidden = false;
+    if (typeof e.prompt === 'string' && e.prompt.length > 0) {
+      promptBody.classList.remove('empty');
+      promptBody.textContent = e.prompt;
+    } else {
+      promptBody.classList.add('empty');
+      promptBody.textContent = "this provider doesn't capture prompt text — only Claude Code stores prompts in its session logs";
     }
   }
 
@@ -1169,6 +1274,7 @@ header.bar .meta strong {
     renderActiveBlock();
     renderEventList();
     renderMix(cum);
+    renderPromptPanel();
   }
 
   function setTime(t) {

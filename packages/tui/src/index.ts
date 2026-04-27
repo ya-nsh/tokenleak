@@ -323,7 +323,6 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           getPanelContentWidth(renderer, REPLAY_MAX_CONTENT_WIDTH),
           undefined,
           null,
-          state.replayLiveServerPort,
         );
       }
       if (!state.replayDate) {
@@ -347,7 +346,6 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           render(state, renderer);
         },
         buildReplayPlaybackView(state),
-        state.replayLiveServerPort,
       );
     case 'nutrition':
       if (!hasWindowData) {
@@ -697,15 +695,6 @@ function handleReplayPlaybackInput(
   if (state.selectedView !== 'replay') return false;
   const events = state.cachedReplayReport?.events;
 
-  // Browser launcher — works from BOTH overview and playback modes, and
-  // doesn't require events to exist on the *current* day. The browser
-  // page is multi-day-aware: it'll pick the latest day with events as
-  // the initial view, which is more useful than gating on today's data.
-  if (sequence === 'o') {
-    void launchReplayBrowser(state, renderer);
-    return true;
-  }
-
   // Toggle entry from overview mode.
   if (state.replayCursorEventIndex === null) {
     if (sequence === 's' && events && events.length > 0) {
@@ -821,7 +810,7 @@ function pauseReplayPlaybackIfRunning(state: AppState): void {
   }
 }
 
-// ── In-process replay live server (launched via `b` from the replay view) ──
+// ── In-process replay live server (launched via global `o` keypress) ──
 
 let replayLiveServerStop: (() => void) | null = null;
 
@@ -848,6 +837,16 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
     openUrlInBrowser(`http://localhost:${state.replayLiveServerPort}/`);
     return;
   }
+  // Lazy-load the replay report so the launcher works from any view —
+  // when the user presses [o] from Overview/Wrapped/etc., cachedReplayReport
+  // is typically null because we only build it when the Replay panel renders.
+  if (!state.cachedReplayReport) {
+    if (!state.data) return; // still booting; nothing to render yet
+    if (!state.replayDate) {
+      state.replayDate = new Date().toISOString().slice(0, 10);
+    }
+    ensureReplayReport(state);
+  }
   if (!state.cachedReplayReport) return;
   try {
     // silent: true suppresses the server's stderr "Replay live at..." line,
@@ -863,6 +862,21 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
     // failing silently is safer than dumping to stderr (would corrupt
     // the screen).
   }
+}
+
+/**
+ * Global [o] dispatcher — fires from any view, not just Replay. Lets the
+ * footer CTA's keybind work everywhere in the TUI. Returns true when the
+ * keypress was consumed.
+ */
+function handleGlobalReplayBrowserKey(
+  sequence: string,
+  state: AppState,
+  renderer: CliRenderer,
+): boolean {
+  if (sequence !== 'o') return false;
+  void launchReplayBrowser(state, renderer);
+  return true;
 }
 
 function stopReplayLiveServer(state: AppState): void {
@@ -1348,6 +1362,12 @@ export async function main(): Promise<void> {
       return true;
     }
 
+    // Global [o] interactive replay launcher — must run before any
+    // view-specific handlers so the footer CTA works on every view.
+    if (handleGlobalReplayBrowserKey(sequence, state, renderer)) {
+      return true;
+    }
+
     if (handleReplayPlaybackInput(sequence, state, renderer)) {
       return true;
     }
@@ -1550,8 +1570,9 @@ export async function main(): Promise<void> {
       return true;
     }
 
-    // o: cycle sort mode (receipts view)
-    if (sequence === 'o' && state.selectedView === 'receipts') {
+    // S: cycle sort mode (receipts view). Moved off [o] because the
+    // global interactive-replay launcher now owns that key.
+    if (sequence === 'S' && state.selectedView === 'receipts') {
       const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
       const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
       state.receiptsSortMode = order[nextIndex]!;

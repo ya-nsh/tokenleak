@@ -105,6 +105,40 @@ describe('generateReplayLiveHtml', () => {
     expect(html).toContain('id="blockCard"');
   });
 
+  it('renders the prompt-detail card so users can see what was asked', () => {
+    const html = generateReplayLiveHtml(makeReport());
+    expect(html).toContain('id="promptCard"');
+    expect(html).toContain('id="promptMeta"');
+    expect(html).toContain('id="promptBody"');
+    expect(html).toContain('// prompt sent to model');
+  });
+
+  it('embeds prompt text from events into window.__REPLAY__', () => {
+    const baseEvent = makeEvent({
+      timestamp: '2026-04-26T09:00:00.000Z',
+      model: 'claude-sonnet-4',
+    });
+    const events: UsageEvent[] = [
+      { ...baseEvent, prompt: 'refactor the date-loader to support streaming inputs' },
+    ];
+    const report: ReplayReport = {
+      date: '2026-04-26',
+      events,
+      flowBlocks: [makeBlock({ blockIndex: 0, start: events[0].timestamp, end: events[0].timestamp, events })],
+      tokenVelocity: [],
+      summary: {
+        totalSessions: 1,
+        totalEvents: 1,
+        flowTimeMs: 0,
+        thinkTimeMs: 0,
+        flowThinkRatio: 0,
+        peakMinute: null,
+      },
+    };
+    const html = generateReplayLiveHtml(report);
+    expect(html).toContain('refactor the date-loader to support streaming inputs');
+  });
+
   it('shows the date in the page title and header', () => {
     const html = generateReplayLiveHtml(makeReport());
     expect(html).toContain('<title>tokenleak replay · 2026-04-26</title>');
