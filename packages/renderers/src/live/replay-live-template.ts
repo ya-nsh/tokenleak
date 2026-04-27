@@ -852,9 +852,9 @@ header.bar .meta strong {
   const TL_W = 1000;
   const TL_H = 180;
   const HIST_TOP = 12;
-  const HIST_HEIGHT = 120;
-  const RIBBON_TOP = 144;
-  const RIBBON_HEIGHT = 18;
+  const HIST_HEIGHT = 110;
+  const RIBBON_TOP = 138;
+  const RIBBON_HEIGHT = 26;
 
   function timeToX(ts) {
     return ((ts - dayStart) / dayDuration) * TL_W;
@@ -881,13 +881,22 @@ header.bar .meta strong {
       parts.push('<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '" fill="' + ACCENT + '" fill-opacity="' + alpha.toFixed(2) + '"/>');
     });
 
-    // Flow block ribbon.
+    // Flow block ribbon. Min width bumped to 10 SVG units (~12px on screen)
+    // so short bursts (Quick Lookups, 30s–3min Deep Flows) stay visible
+    // instead of collapsing into invisible 2px slivers. Centered around
+    // the block's true midpoint so visual position remains accurate.
     flowBlocks.forEach(function (b, i) {
-      const x = timeToX(b.startTs);
-      const w = Math.max(2, timeToX(b.endTs) - x);
+      const xStart = timeToX(b.startTs);
+      const xEnd = timeToX(b.endTs);
+      const trueWidth = Math.max(0, xEnd - xStart);
+      const minWidth = 10;
+      const w = Math.max(minWidth, trueWidth);
+      const x = trueWidth < minWidth
+        ? Math.max(0, xStart + trueWidth / 2 - minWidth / 2)
+        : xStart;
       const colorMap = { 'Deep Flow': ACCENT, 'Quick Lookup': WARN, 'Moderate Session': MUTED };
       const fill = colorMap[b.label] || MUTED;
-      parts.push('<rect data-block="' + i + '" x="' + x.toFixed(2) + '" y="' + RIBBON_TOP + '" width="' + w.toFixed(2) + '" height="' + RIBBON_HEIGHT + '" rx="3" fill="' + fill + '" fill-opacity="0.28" stroke="' + fill + '" stroke-opacity="0.6" stroke-width="0.6" style="cursor:pointer"/>');
+      parts.push('<rect data-block="' + i + '" x="' + x.toFixed(2) + '" y="' + RIBBON_TOP + '" width="' + w.toFixed(2) + '" height="' + RIBBON_HEIGHT + '" rx="3" fill="' + fill + '" fill-opacity="0.55" stroke="' + fill + '" stroke-opacity="0.95" stroke-width="1" style="cursor:pointer"/>');
     });
 
     // Playhead (drawn last, on top).

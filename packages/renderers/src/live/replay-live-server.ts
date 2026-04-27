@@ -3,6 +3,12 @@ import { generateReplayLiveHtml } from './replay-live-template';
 
 export interface ReplayLiveServerOptions {
   port?: number;
+  /**
+   * Suppress the "Replay live at http://..." stderr line on successful start.
+   * Set this when calling from a full-screen TUI process — the stderr write
+   * corrupts the rendered screen and makes the terminal look frozen.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -151,9 +157,11 @@ export async function startReplayLiveServer(
     const result = tryServe(buildHandler, port);
     if (result.server) {
       const actualPort = result.server.port ?? port;
-      process.stderr.write(
-        `Replay live at http://localhost:${String(actualPort)}\n`,
-      );
+      if (!options.silent) {
+        process.stderr.write(
+          `Replay live at http://localhost:${String(actualPort)}\n`,
+        );
+      }
       return { port: actualPort, stop: () => result.server.stop(true) };
     }
 

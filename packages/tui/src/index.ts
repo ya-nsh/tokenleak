@@ -847,14 +847,18 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
   }
   if (!state.cachedReplayReport) return;
   try {
-    const { port, stop } = await startReplayLiveServer(state.cachedReplayReport);
+    // silent: true suppresses the server's stderr "Replay live at..." line,
+    // which would otherwise corrupt the full-screen TUI render and make
+    // the terminal look frozen until the user hits another key.
+    const { port, stop } = await startReplayLiveServer(state.cachedReplayReport, { silent: true });
     state.replayLiveServerPort = port;
     replayLiveServerStop = stop;
     render(state, renderer);
     openUrlInBrowser(`http://localhost:${port}/`);
-  } catch (err) {
-    // surface the error in the help row briefly; for now just log to stderr
-    process.stderr.write(`failed to start replay live server: ${err instanceof Error ? err.message : String(err)}\n`);
+  } catch {
+    // best-effort. The TUI render path doesn't have an error toast yet —
+    // failing silently is safer than dumping to stderr (would corrupt
+    // the screen).
   }
 }
 
