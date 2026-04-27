@@ -283,7 +283,7 @@ function renderPlaybackHelp(contentWidth: number) {
 }
 
 function renderOverviewHelp(contentWidth: number) {
-  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting · [b] open browser';
+  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting · [o] open browser';
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),
@@ -291,7 +291,7 @@ function renderOverviewHelp(contentWidth: number) {
 }
 
 /**
- * Big "press [b] to open the interactive browser scrub" banner. Always
+ * Big "press [o] to open the interactive browser scrub" banner. Always
  * shown above the playback header in BOTH overview and playback modes —
  * the browser experience is the better one for visual scrubbing and we
  * want it discoverable from anywhere on this view.
@@ -300,13 +300,13 @@ function renderOverviewHelp(contentWidth: number) {
  */
 function renderBrowserBanner(contentWidth: number, liveServerPort: number | null) {
   if (liveServerPort !== null) {
-    const status = ` ✓ browser open at http://localhost:${liveServerPort}/  ·  press [b] again to re-open`;
+    const status = ` ✓ browser open at http://localhost:${liveServerPort}/  ·  press [o] again to re-open`;
     return Box(
       { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
       Text({ content: truncate(status, contentWidth), fg: COLORS.green, attributes: BOLD }),
     );
   }
-  const inner = '  ▶  press [b] to open the interactive browser scrub  ⟶';
+  const inner = '  ▶  press [o] to open the interactive browser scrub  ⟶';
   const innerWidth = Math.min(contentWidth - 2, 60);
   const top = '╭' + '─'.repeat(innerWidth) + '╮';
   const middle = '│' + truncate(inner.padEnd(innerWidth), innerWidth) + '│';

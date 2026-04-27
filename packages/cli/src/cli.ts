@@ -1967,19 +1967,21 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
 
 export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
   let date: string | null = null;
+  let dateExplicit = false;
 
   if (argv.length > 0 && !argv[0]!.startsWith('-')) {
     date = argv[0]!;
     if (!isValidDateArgument(date)) {
       throw new TokenleakError('tokenleak replay date must be in YYYY-MM-DD format');
     }
+    dateExplicit = true;
   }
 
   if (date === null) {
     date = getTodayLocal();
   }
 
-  const cliArgs: Record<string, unknown> = {};
+  const cliArgs: Record<string, unknown> = { dateExplicit };
   let index = argv[0]?.startsWith('-') ? 0 : 1;
 
   while (index < argv.length) {
@@ -2482,10 +2484,25 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
       const heatmapRange = computeDateRange({ days: 90, until: date });
       const heatmapOutput = await loadTokenleakData(available, heatmapRange);
       const heatmapEntries = buildReplayHeatmap(heatmapOutput.providers);
-      const initialReport = buildReplayReport(heatmapOutput.providers, date);
+
+      // If the user didn't pass an explicit date, default the initial view
+      // to the most recent day with events instead of "today" — otherwise
+      // a quiet today renders 0 flow blocks even though plenty of usable
+      // data sits one cell to the left in the heatmap.
+      const dateExplicit = cliArgs['dateExplicit'] === true;
+      let initialDate = date;
+      if (!dateExplicit && heatmapEntries.length > 0) {
+        const latestActive = heatmapEntries
+          .filter((e) => e.events > 0)
+          .reduce<string | null>((acc, e) => (acc === null || e.date > acc ? e.date : acc), null);
+        if (latestActive !== null) {
+          initialDate = latestActive;
+        }
+      }
+      const initialReport = buildReplayReport(heatmapOutput.providers, initialDate);
       serverArg = {
         heatmap: heatmapEntries,
-        initialDate: date,
+        initialDate,
         initialReport,
         getReport: (d: string) => buildReplayReport(heatmapOutput.providers, d),
       };

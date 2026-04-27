@@ -107,6 +107,11 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
       const style = c.tokens > 0
         ? `--hm-alpha:${intensity.toFixed(3)};grid-column:${c.col + 1};grid-row:${c.weekday + 1};`
         : `grid-column:${c.col + 1};grid-row:${c.weekday + 1};`;
+      // Empty days render as a non-link <span> — clicking them would land on
+      // "0 flow blocks" with nothing to scrub, which is just confusing.
+      if (c.tokens === 0) {
+        return `<span class="${klass.join(' ')}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></span>`;
+      }
       return `<a class="${klass.join(' ')}" href="/?date=${esc(c.date)}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></a>`;
     })
     .join('');
@@ -641,6 +646,11 @@ header.bar .meta strong {
 .hm-cell--empty {
   background: rgba(255, 255, 255, 0.03);
   border-color: var(--border);
+  cursor: default;
+}
+.hm-cell--empty:hover {
+  border-color: var(--border);
+  transform: none;
 }
 .hm-cell--active {
   border-color: var(--text) !important;

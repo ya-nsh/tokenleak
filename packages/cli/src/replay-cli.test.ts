@@ -6,7 +6,12 @@ describe('parseReplayArgs', () => {
   it('defaults date to today when no positional argument is given', () => {
     const { date, cliArgs } = parseReplayArgs([]);
     expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(cliArgs).toEqual({});
+    expect(cliArgs).toEqual({ dateExplicit: false });
+  });
+
+  it('flags explicit positional dates so the interactive view can pin to them', () => {
+    const { cliArgs } = parseReplayArgs(['2026-04-22']);
+    expect(cliArgs['dateExplicit']).toBe(true);
   });
 
   it('parses a YYYY-MM-DD positional date', () => {

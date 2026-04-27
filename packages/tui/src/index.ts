@@ -697,8 +697,11 @@ function handleReplayPlaybackInput(
   if (state.selectedView !== 'replay') return false;
   const events = state.cachedReplayReport?.events;
 
-  // Browser launcher — works from BOTH overview and playback modes.
-  if (sequence === 'b' && events && events.length > 0) {
+  // Browser launcher — works from BOTH overview and playback modes, and
+  // doesn't require events to exist on the *current* day. The browser
+  // page is multi-day-aware: it'll pick the latest day with events as
+  // the initial view, which is more useful than gating on today's data.
+  if (sequence === 'o') {
     void launchReplayBrowser(state, renderer);
     return true;
   }
