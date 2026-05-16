@@ -2504,7 +2504,10 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
         heatmap: heatmapEntries,
         initialDate,
         initialReport,
-        getReport: (d: string) => buildReplayReport(heatmapOutput.providers, d),
+        getReport: (d: string) => {
+          const reportForDay = buildReplayReport(heatmapOutput.providers, d);
+          return reportForDay.events.length > 0 ? reportForDay : null;
+        },
       };
     }
 

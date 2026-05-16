@@ -283,7 +283,7 @@ function renderPlaybackHelp(contentWidth: number) {
 }
 
 function renderOverviewHelp(contentWidth: number) {
-  const line = ' [s] enter step/playback · [n/p] step · [space] play · [i] interesting';
+  const line = ' [s] enter step/playback';
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
     Text({ content: truncate(line, contentWidth), fg: COLORS.dimWhite }),

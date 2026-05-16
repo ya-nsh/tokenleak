@@ -131,6 +131,7 @@ describe('buildReplayLiveDataProvider', () => {
     ]);
     const march10Report = liveData.getReport('2026-03-10') as ReplayReport;
     expect(march10Report.events).toHaveLength(2);
+    expect(liveData.getReport('2026-03-12')).toBeNull();
   });
 
   test('returns an empty initial report for empty scoped data', () => {
@@ -197,6 +198,33 @@ describe('moveReplayOverviewSelection', () => {
     moveReplayOverviewSelection(state, 1, 3);
 
     expect(state.replaySelectedBlockIndex).toBe(4);
+    expect(state.replayScrollOffset).toBe(2);
+  });
+
+  test('does not adjust scroll offset when visible count is zero', () => {
+    const state = createInitialState();
+    state.cachedReplayReport = {
+      date: '2026-03-10',
+      events: [],
+      flowBlocks: Array.from({ length: 6 }, (_, index) =>
+        block(index, `2026-03-10T1${index}:00:00.000Z`, `2026-03-10T1${index}:00:00.000Z`),
+      ),
+      tokenVelocity: [],
+      summary: {
+        totalSessions: 0,
+        totalEvents: 0,
+        flowTimeMs: 0,
+        thinkTimeMs: 0,
+        flowThinkRatio: 0,
+        peakMinute: null,
+      },
+    };
+    state.replaySelectedBlockIndex = 4;
+    state.replayScrollOffset = 2;
+
+    moveReplayOverviewSelection(state, 1, 0);
+
+    expect(state.replaySelectedBlockIndex).toBe(5);
     expect(state.replayScrollOffset).toBe(2);
   });
 });

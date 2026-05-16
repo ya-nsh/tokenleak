@@ -13,6 +13,9 @@ function clampItemIndex(index: number, itemCount: number): number {
 }
 
 function keepSelectedItemVisible(selectedIndex: number, scrollOffset: number, visibleCount: number): number {
+  if (visibleCount <= 0) {
+    return scrollOffset;
+  }
   if (selectedIndex < scrollOffset) {
     return selectedIndex;
   }
@@ -116,6 +119,9 @@ export function buildReplayLiveDataProvider(
     heatmap,
     initialDate,
     initialReport: buildReplayReport(providers, initialDate),
-    getReport: (date: string) => buildReplayReport(providers, date),
+    getReport: (date: string) => {
+      const report = buildReplayReport(providers, date);
+      return report.events.length > 0 ? report : null;
+    },
   };
 }

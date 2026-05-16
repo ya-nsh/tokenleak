@@ -97,6 +97,8 @@ describe('createReplayPanel', () => {
     expect(text).toContain('Pulse (tok/min)');
     expect(text).toContain('Sessions: 2');
     expect(text).toContain('Flow Blocks (2)');
+    expect(text).toContain('[s] enter step/playback');
+    expect(text).not.toContain('[n/p] step');
   });
 
   test('playback mode SLIMS the panel: no pulse chart, no day summary, fewer blocks', () => {

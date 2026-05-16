@@ -163,6 +163,34 @@ describe('generateReplayLiveHtml', () => {
     expect(html).not.toContain('<strong>$102.00</strong>');
   });
 
+  it('anchors the heatmap to old replay data instead of wall-clock today', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2000-01-01',
+      heatmap: [
+        { date: '2000-01-01', tokens: 1_000, cost: 1, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('href="/?date=2000-01-01"');
+  });
+
+  it('uses enough columns when the heatmap starts mid-week', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2099-04-01',
+      heatmap: [
+        { date: '2099-04-01', tokens: 1_000, cost: 1, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('grid-template-columns:repeat(14, 14px)');
+  });
+
+  it('does not render an empty heatmap section', () => {
+    const html = generateReplayLiveHtml(makeReport(), { heatmap: [] });
+
+    expect(html).not.toContain('<section class="section heatmap-section"');
+  });
+
   it('renders the empty-state body when there are no events', () => {
     const empty: ReplayReport = {
       date: '2026-04-26',
@@ -273,10 +301,39 @@ describe('startReplayLiveServer (multi-day mode)', () => {
   function makeProvider() {
     const initial = makeReport();
     const otherDate = '2026-04-21';
+    const otherEvents = initial.events.map((e) => ({
+      ...e,
+      date: otherDate,
+      timestamp: e.timestamp.replace('2026-04-26', otherDate),
+    }));
     const otherReport: ReplayReport = {
       ...initial,
       date: otherDate,
-      events: initial.events.map((e) => ({ ...e, date: otherDate, timestamp: e.timestamp.replace('2026-04-26', otherDate) })),
+      events: otherEvents,
+      flowBlocks: initial.flowBlocks.map((b, blockIndex) => ({
+        ...b,
+        blockIndex,
+        start: b.start.replace('2026-04-26', otherDate),
+        end: b.end.replace('2026-04-26', otherDate),
+        events: b.events.map((e) => ({
+          ...e,
+          date: otherDate,
+          timestamp: e.timestamp.replace('2026-04-26', otherDate),
+        })),
+      })),
+      tokenVelocity: initial.tokenVelocity.map((v) => ({
+        ...v,
+        minute: v.minute.replace('2026-04-26', otherDate),
+      })),
+      summary: {
+        ...initial.summary,
+        peakMinute: initial.summary.peakMinute
+          ? {
+              ...initial.summary.peakMinute,
+              minute: initial.summary.peakMinute.minute.replace('2026-04-26', otherDate),
+            }
+          : null,
+      },
     };
     return {
       heatmap: [

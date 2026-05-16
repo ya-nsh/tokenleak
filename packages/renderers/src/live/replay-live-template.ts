@@ -57,25 +57,25 @@ const HEATMAP_DAYS = 91; // 13 weeks × 7 days
  * navigation. Each cell is an `<a>` so clicks just navigate to `/?date=X`
  * — no JS required.
  *
- * Layout: 7 rows (Sun-Sat) × ~13 cols (weeks), latest day on the right.
+ * Layout: 7 rows (Sun-Sat) × 13-14 cols (weeks), latest day on the right.
  */
 function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string): string {
   const byDate = new Map<string, ReplayHeatmapEntry>();
   for (const e of entries) byDate.set(e.date, e);
 
-  // Determine the day window: anchor on today (or the latest entry, whichever is later).
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const latestEntryDate = entries.reduce((acc, e) => (e.date > acc ? e.date : acc), todayStr);
+  // Determine the day window from the replay data, not wall-clock today.
+  const latestEntryDate = entries.reduce((acc, e) => (e.date > acc ? e.date : acc), activeDate);
   const end = new Date(latestEntryDate + 'T00:00:00Z');
   const start = new Date(end.getTime() - (HEATMAP_DAYS - 1) * 86_400_000);
 
-  // Walk forward from start; bucket into weeks (column = week index).
+  // Walk forward from start; bucket into calendar weeks (column = week index).
+  const startWeekday = start.getUTCDay(); // 0 = Sun
   const cells: Array<{ date: string; tokens: number; cost: number; events: number; weekday: number; col: number }> = [];
   for (let i = 0; i < HEATMAP_DAYS; i++) {
     const d = new Date(start.getTime() + i * 86_400_000);
     const dateStr = d.toISOString().slice(0, 10);
     const weekday = d.getUTCDay(); // 0 = Sun
-    const col = Math.floor(i / 7);
+    const col = Math.floor((i + startWeekday) / 7);
     const e = byDate.get(dateStr);
     cells.push({
       date: dateStr,
@@ -92,6 +92,8 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
   const totalTokens = visibleEntries.reduce((acc, e) => acc + e.tokens, 0);
   const totalCost = visibleEntries.reduce((acc, e) => acc + e.cost, 0);
   const activeDays = visibleEntries.length;
+  const columnCount = Math.max(13, (cells[cells.length - 1]?.col ?? 12) + 1);
+  const columnStyle = `grid-template-columns:repeat(${columnCount}, 14px)`;
 
   const cellHtml = cells
     .map((c) => {
@@ -121,7 +123,7 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
   // day is the start of a new month (or the very first column).
   const monthLabels: string[] = [];
   const seenMonths = new Set<string>();
-  for (let week = 0; week < Math.ceil(HEATMAP_DAYS / 7); week++) {
+  for (let week = 0; week < columnCount; week++) {
     const firstDay = cells.find((c) => c.col === week);
     if (!firstDay) continue;
     const d = new Date(firstDay.date + 'T00:00:00Z');
@@ -154,8 +156,8 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
       <span></span>
     </div>
     <div class="heatmap-body">
-      <div class="heatmap-months mono">${monthLabels.join('')}</div>
-      <div class="heatmap-grid">${cellHtml}</div>
+      <div class="heatmap-months mono" style="${columnStyle}">${monthLabels.join('')}</div>
+      <div class="heatmap-grid" style="${columnStyle}">${cellHtml}</div>
     </div>
   </div>
 </section>`;
@@ -168,7 +170,7 @@ export function generateReplayLiveHtml(report: ReplayReport, options: ReplayLive
   const safeReport = JSON.stringify(report);
   const dateLong = formatDateLong(report.date);
   const isEmpty = report.events.length === 0;
-  const heatmap = options.heatmap ?? null;
+  const heatmap = options.heatmap && options.heatmap.length > 0 ? options.heatmap : null;
   const activeDate = options.initialDate ?? report.date;
 
   const styles = `
