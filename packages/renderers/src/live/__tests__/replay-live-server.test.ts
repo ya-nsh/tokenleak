@@ -147,6 +147,22 @@ describe('generateReplayLiveHtml', () => {
     expect(html).toContain('April 26, 2026');
   });
 
+  it('computes heatmap stats from the rendered 91-day window only', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2099-04-01',
+      heatmap: [
+        { date: '2098-01-01', tokens: 1_000_000, cost: 100, events: 1 },
+        { date: '2099-04-01', tokens: 1_000, cost: 2, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('<strong>1</strong> active days');
+    expect(html).toContain('<strong>1.0K tok</strong>');
+    expect(html).toContain('<strong>$2.00</strong>');
+    expect(html).not.toContain('<strong>1.0M tok</strong>');
+    expect(html).not.toContain('<strong>$102.00</strong>');
+  });
+
   it('renders the empty-state body when there are no events', () => {
     const empty: ReplayReport = {
       date: '2026-04-26',

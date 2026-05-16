@@ -69,11 +69,6 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
   const end = new Date(latestEntryDate + 'T00:00:00Z');
   const start = new Date(end.getTime() - (HEATMAP_DAYS - 1) * 86_400_000);
 
-  const maxTokens = entries.reduce((acc, e) => Math.max(acc, e.tokens), 0);
-  const totalTokens = entries.reduce((acc, e) => acc + e.tokens, 0);
-  const totalCost = entries.reduce((acc, e) => acc + e.cost, 0);
-  const activeDays = entries.filter((e) => e.tokens > 0).length;
-
   // Walk forward from start; bucket into weeks (column = week index).
   const cells: Array<{ date: string; tokens: number; cost: number; events: number; weekday: number; col: number }> = [];
   for (let i = 0; i < HEATMAP_DAYS; i++) {
@@ -91,6 +86,12 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
       col,
     });
   }
+
+  const visibleEntries = cells.filter((c) => c.tokens > 0);
+  const maxTokens = visibleEntries.reduce((acc, e) => Math.max(acc, e.tokens), 0);
+  const totalTokens = visibleEntries.reduce((acc, e) => acc + e.tokens, 0);
+  const totalCost = visibleEntries.reduce((acc, e) => acc + e.cost, 0);
+  const activeDays = visibleEntries.length;
 
   const cellHtml = cells
     .map((c) => {

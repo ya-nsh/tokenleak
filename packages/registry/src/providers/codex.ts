@@ -70,6 +70,8 @@ interface SessionContext {
   lastUserPrompt?: string;
 }
 
+const MAX_PROMPT_CHARS = 2_000;
+
 /**
  * Narrows an unknown parsed JSONL record to a CodexResponseEvent,
  * returning `null` if the record doesn't match the expected shape.
@@ -242,6 +244,14 @@ function extractTextElementText(value: unknown): string | null {
   return null;
 }
 
+function normalizePromptText(text: string): string | null {
+  const trimmed = text.replace(/\s+$/g, '').trimStart();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
+}
+
 function extractUserPrompt(record: unknown): string | null {
   if (typeof record !== 'object' || record === null) {
     return null;
@@ -263,7 +273,7 @@ function extractUserPrompt(record: unknown): string | null {
   }
 
   if (typeof eventPayload['message'] === 'string' && eventPayload['message'].trim().length > 0) {
-    return eventPayload['message'].replace(/\s+$/g, '').trimStart();
+    return normalizePromptText(eventPayload['message']);
   }
 
   const parts: string[] = [];
@@ -277,8 +287,7 @@ function extractUserPrompt(record: unknown): string | null {
     }
   }
 
-  const prompt = parts.join('\n\n').replace(/\s+$/g, '').trimStart();
-  return prompt.length > 0 ? prompt : null;
+  return normalizePromptText(parts.join('\n\n'));
 }
 
 function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUsageRecord | null {

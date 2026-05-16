@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DateRange } from '@tokenleak/core';
 import { CodexProvider } from './codex';
@@ -111,6 +113,47 @@ describe('CodexProvider', () => {
     expect(data.warnings ?? []).not.toContainEqual(
       expect.objectContaining({ kind: 'unknown-pricing', file: 'gpt-5.4' }),
     );
+  });
+
+  it('truncates captured prompts before attaching them to usage events', async () => {
+    const sessionsDir = mkdtempSync(join(tmpdir(), 'tokenleak-codex-'));
+    try {
+      const dayDir = join(sessionsDir, '2026', '03', '12');
+      mkdirSync(dayDir, { recursive: true });
+      const longPrompt = 'x'.repeat(2_500);
+      const records = [
+        { timestamp: '2026-03-12T10:00:01Z', type: 'turn_context', payload: { model: 'gpt-5.4' } },
+        {
+          timestamp: '2026-03-12T10:02:00Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: longPrompt, images: [], local_images: [], text_elements: [] },
+        },
+        {
+          timestamp: '2026-03-12T10:05:00Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: {
+                input_tokens: 1000,
+                cached_input_tokens: 200,
+                output_tokens: 150,
+                total_tokens: 1150,
+              },
+            },
+          },
+        },
+      ];
+      writeFileSync(join(dayDir, 'session-long.jsonl'), records.map((r) => JSON.stringify(r)).join('\n'));
+
+      const provider = new CodexProvider(sessionsDir);
+      const data = await provider.load(CURRENT_RANGE);
+
+      expect(data.events).toHaveLength(1);
+      expect(data.events?.[0]?.prompt).toBe('x'.repeat(2_000));
+    } finally {
+      rmSync(sessionsDir, { recursive: true, force: true });
+    }
   });
 
   // -- load: empty directory ----------------------------------------------
