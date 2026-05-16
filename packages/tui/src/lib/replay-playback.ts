@@ -13,9 +13,8 @@ export function eventsPerTick(speed: ReplayPlaybackSpeed): number {
 export function enterReplayPlayback(state: AppState): void {
   const events = state.cachedReplayReport?.events;
   if (!events || events.length === 0) return;
-  state.replayCursorEventIndex = 0;
+  selectReplayCursorEvent(state, 0);
   state.replayPlaybackActive = false;
-  state.replaySelectedBlockIndex = blockIndexForEvent(state.cachedReplayReport!, 0);
 }
 
 /** Exit playback mode entirely. Caller is responsible for clearing any timer. */
@@ -32,8 +31,7 @@ export function stepReplayCursor(state: AppState, delta: number): void {
   const report = state.cachedReplayReport;
   if (!report || state.replayCursorEventIndex === null || report.events.length === 0) return;
   const next = clamp(state.replayCursorEventIndex + delta, 0, report.events.length - 1);
-  state.replayCursorEventIndex = next;
-  state.replaySelectedBlockIndex = blockIndexForEvent(report, next);
+  selectReplayCursorEvent(state, next);
 }
 
 /**
@@ -55,15 +53,13 @@ export function jumpReplayCursorToBlockBoundary(state: AppState, dir: 1 | -1): v
       if (startTs > currentEventTs) {
         const idx = firstEventIndexOnOrAfter(report.events, startTs);
         if (idx !== null) {
-          state.replayCursorEventIndex = idx;
-          state.replaySelectedBlockIndex = blockIndexForEvent(report, idx);
+          selectReplayCursorEvent(state, idx);
           return;
         }
       }
     }
     // No next block — jump to last event.
-    state.replayCursorEventIndex = report.events.length - 1;
-    state.replaySelectedBlockIndex = blockIndexForEvent(report, state.replayCursorEventIndex);
+    selectReplayCursorEvent(state, report.events.length - 1);
     return;
   }
 
@@ -72,8 +68,7 @@ export function jumpReplayCursorToBlockBoundary(state: AppState, dir: 1 | -1): v
   if (currentEventTs > currentBlockStartTs) {
     const idx = firstEventIndexOnOrAfter(report.events, currentBlockStartTs);
     if (idx !== null) {
-      state.replayCursorEventIndex = idx;
-      state.replaySelectedBlockIndex = currentBlock;
+      selectReplayCursorEvent(state, idx);
       return;
     }
   }
@@ -81,13 +76,11 @@ export function jumpReplayCursorToBlockBoundary(state: AppState, dir: 1 | -1): v
     const startTs = Date.parse(report.flowBlocks[i].start);
     const idx = firstEventIndexOnOrAfter(report.events, startTs);
     if (idx !== null) {
-      state.replayCursorEventIndex = idx;
-      state.replaySelectedBlockIndex = i;
+      selectReplayCursorEvent(state, idx);
       return;
     }
   }
-  state.replayCursorEventIndex = 0;
-  state.replaySelectedBlockIndex = blockIndexForEvent(report, 0);
+  selectReplayCursorEvent(state, 0);
 }
 
 /**
@@ -120,8 +113,7 @@ export function jumpReplayCursorToInteresting(state: AppState, dir: 1 | -1): voi
     }
     if (target === null) target = points[points.length - 1]; // wrap
   }
-  state.replayCursorEventIndex = target;
-  state.replaySelectedBlockIndex = blockIndexForEvent(report, target);
+  selectReplayCursorEvent(state, target);
 }
 
 /** Toggle the play loop. Returns the new active state. */
@@ -139,8 +131,7 @@ export function tickReplayPlayback(state: AppState): boolean {
   }
   const advance = eventsPerTick(state.replayPlaybackSpeed);
   const next = clamp(state.replayCursorEventIndex + advance, 0, report.events.length - 1);
-  state.replayCursorEventIndex = next;
-  state.replaySelectedBlockIndex = blockIndexForEvent(report, next);
+  selectReplayCursorEvent(state, next);
   if (next >= report.events.length - 1) {
     state.replayPlaybackActive = false;
     return false;
@@ -203,6 +194,14 @@ export function computePlaybackSummary(report: ReplayReport, cursorIndex: number
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+export function selectReplayCursorEvent(state: AppState, eventIndex: number): void {
+  const report = state.cachedReplayReport;
+  if (!report || report.events.length === 0) return;
+  const next = clamp(eventIndex, 0, report.events.length - 1);
+  state.replayCursorEventIndex = next;
+  state.replaySelectedBlockIndex = blockIndexForEvent(report, next);
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));

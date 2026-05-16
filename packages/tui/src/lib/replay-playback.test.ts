@@ -14,6 +14,7 @@ import {
   stepReplayCursor,
   tickReplayPlayback,
   toggleReplayPlayback,
+  selectReplayCursorEvent,
 } from './replay-playback';
 
 function ev(timestamp: string, model: string, totalTokens: number, cost: number): UsageEvent {
@@ -134,6 +135,20 @@ describe('enterReplayPlayback / exitReplayPlayback', () => {
 });
 
 describe('stepReplayCursor', () => {
+  it('selectReplayCursorEvent clamps and keeps the selected block synced', () => {
+    const state = withReport();
+
+    selectReplayCursorEvent(state, 100);
+
+    expect(state.replayCursorEventIndex).toBe(5);
+    expect(state.replaySelectedBlockIndex).toBe(2);
+
+    selectReplayCursorEvent(state, -10);
+
+    expect(state.replayCursorEventIndex).toBe(0);
+    expect(state.replaySelectedBlockIndex).toBe(0);
+  });
+
   it('moves forward and back', () => {
     const state = withReport();
     enterReplayPlayback(state);

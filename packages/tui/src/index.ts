@@ -50,7 +50,12 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
-import { createReplayPanel, REPLAY_MAX_CONTENT_WIDTH, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
+import {
+  createReplayPanel,
+  REPLAY_MAX_CONTENT_WIDTH,
+  REPLAY_VISIBLE_BLOCKS,
+  REPLAY_VISIBLE_BLOCKS_PLAYBACK,
+} from './panels/replay.js';
 import type { ReplayPlaybackView } from './panels/replay.js';
 import {
   REPLAY_PLAYBACK_TICK_MS,
@@ -60,10 +65,18 @@ import {
   jumpReplayCursorToBlockBoundary,
   jumpReplayCursorToInteresting,
   setReplayPlaybackSpeed,
+  selectReplayCursorEvent,
   stepReplayCursor,
   tickReplayPlayback,
   toggleReplayPlayback,
 } from './lib/replay-playback.js';
+import {
+  buildReplayLiveDataProvider,
+  keepReplaySelectionVisible,
+  moveReplayOverviewSelection,
+  resetReplayDataInteraction,
+  resetReplayPanelInteraction,
+} from './lib/replay-interaction.js';
 import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
@@ -505,9 +518,7 @@ function applyLoadedData(
   state.nutritionScrollOffset = 0;
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
-  state.replayScrollOffset = 0;
-  state.replaySelectedBlockIndex = 0;
-  state.replayExpandedBlockIndex = null;
+  resetReplayDataState(state);
   state.replayDate = null;
   state.explainDate = null;
   state.receiptsScrollOffset = 0;
@@ -643,15 +654,6 @@ function keepSelectedItemVisible(selectedIndex: number, scrollOffset: number, vi
   return scrollOffset;
 }
 
-function resetReplayInteraction(state: AppState): void {
-  state.replayScrollOffset = 0;
-  state.replaySelectedBlockIndex = 0;
-  state.replayExpandedBlockIndex = null;
-  exitReplayPlayback(state);
-  stopReplayPlaybackTimer();
-  stopReplayLiveServer(state);
-}
-
 let replayPlaybackTimer: ReturnType<typeof setInterval> | null = null;
 
 function startReplayPlaybackTimer(): void {
@@ -662,11 +664,20 @@ function startReplayPlaybackTimer(): void {
       return;
     }
     const advanced = tickReplayPlayback(currentState);
+    keepReplaySelectionVisible(currentState, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     if (!advanced) {
       stopReplayPlaybackTimer();
     }
     render(currentState, currentRenderer);
   }, REPLAY_PLAYBACK_TICK_MS);
+}
+
+function resetReplayPanelState(state: AppState): void {
+  resetReplayPanelInteraction(state, stopReplayPlaybackTimer);
+}
+
+function resetReplayDataState(state: AppState): void {
+  resetReplayDataInteraction(state, stopReplayPlaybackTimer, stopReplayLiveServer);
 }
 
 function stopReplayPlaybackTimer(): void {
@@ -699,6 +710,7 @@ function handleReplayPlaybackInput(
   if (state.replayCursorEventIndex === null) {
     if (sequence === 's' && events && events.length > 0) {
       enterReplayPlayback(state);
+      keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
       render(state, renderer);
       return true;
     }
@@ -725,52 +737,56 @@ function handleReplayPlaybackInput(
   if (sequence === 'n' || sequence === '\x1b[C') {
     pauseReplayPlaybackIfRunning(state);
     stepReplayCursor(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === 'p' || sequence === '\x1b[D') {
     pauseReplayPlaybackIfRunning(state);
     stepReplayCursor(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === 'N') {
     pauseReplayPlaybackIfRunning(state);
     jumpReplayCursorToBlockBoundary(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === 'P') {
     pauseReplayPlaybackIfRunning(state);
     jumpReplayCursorToBlockBoundary(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === 'i') {
     pauseReplayPlaybackIfRunning(state);
     jumpReplayCursorToInteresting(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === 'I') {
     pauseReplayPlaybackIfRunning(state);
     jumpReplayCursorToInteresting(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === '\x1b[H' || sequence === '\x1bOH') {
     pauseReplayPlaybackIfRunning(state);
-    state.replayCursorEventIndex = 0;
-    state.replaySelectedBlockIndex = 0;
+    selectReplayCursorEvent(state, 0);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
   if (sequence === '\x1b[F' || sequence === '\x1bOF') {
     pauseReplayPlaybackIfRunning(state);
-    state.replayCursorEventIndex = events.length - 1;
-    state.replaySelectedBlockIndex = state.cachedReplayReport!.flowBlocks.length > 0
-      ? state.cachedReplayReport!.flowBlocks.length - 1
-      : 0;
+    selectReplayCursorEvent(state, events.length - 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
     render(state, renderer);
     return true;
   }
@@ -781,7 +797,8 @@ function handleReplayPlaybackInput(
     if (active) {
       // If we're at the end, restart from the beginning.
       if (state.replayCursorEventIndex! >= events.length - 1) {
-        state.replayCursorEventIndex = 0;
+        selectReplayCursorEvent(state, 0);
+        keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
       }
       startReplayPlaybackTimer();
     } else {
@@ -837,22 +854,17 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
     openUrlInBrowser(`http://localhost:${state.replayLiveServerPort}/`);
     return;
   }
-  // Lazy-load the replay report so the launcher works from any view —
-  // when the user presses [o] from Overview/Wrapped/etc., cachedReplayReport
-  // is typically null because we only build it when the Replay panel renders.
-  if (!state.cachedReplayReport) {
-    if (!state.data) return; // still booting; nothing to render yet
-    if (!state.replayDate) {
-      state.replayDate = new Date().toISOString().slice(0, 10);
-    }
-    ensureReplayReport(state);
-  }
-  if (!state.cachedReplayReport) return;
+  if (!state.data) return; // still booting; nothing to render yet
+  const scoped = getScopedWindowData(state);
+  const providers = scoped?.scopedProviders ?? state.data.providers;
+  const replayLiveData = buildReplayLiveDataProvider(providers, state.replayDate, getTodayLocal());
+  state.replayDate = replayLiveData.initialDate;
+  state.cachedReplayReport = replayLiveData.initialReport;
   try {
     // silent: true suppresses the server's stderr "Replay live at..." line,
     // which would otherwise corrupt the full-screen TUI render and make
     // the terminal look frozen until the user hits another key.
-    const { port, stop } = await startReplayLiveServer(state.cachedReplayReport, { silent: true });
+    const { port, stop } = await startReplayLiveServer(replayLiveData, { silent: true });
     state.replayLiveServerPort = port;
     replayLiveServerStop = stop;
     render(state, renderer);
@@ -918,6 +930,7 @@ function getReceiptLineCount(state: AppState): number {
 }
 
 function toggleReplayBlock(state: AppState, blockIndex: number = state.replaySelectedBlockIndex): void {
+  if (state.replayCursorEventIndex !== null) return;
   const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
   if (itemCount <= 0) return;
   const selected = clampItemIndex(blockIndex, itemCount);
@@ -944,15 +957,7 @@ function toggleReceiptLine(state: AppState, lineIndex: number = state.receiptsSe
 }
 
 function moveReplaySelection(state: AppState, direction: number): void {
-  const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
-  if (itemCount <= 0) return;
-  const selected = clampItemIndex(state.replaySelectedBlockIndex + direction, itemCount);
-  state.replaySelectedBlockIndex = selected;
-  state.replayScrollOffset = keepSelectedItemVisible(
-    selected,
-    state.replayScrollOffset,
-    REPLAY_VISIBLE_BLOCKS,
-  );
+  moveReplayOverviewSelection(state, direction, REPLAY_VISIBLE_BLOCKS);
 }
 
 function moveReceiptSelection(state: AppState, direction: number): void {
@@ -976,7 +981,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
-    resetReplayInteraction(currentState);
+    resetReplayPanelState(currentState);
     resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
     currentState.receiptsCategoryFilter = null;
@@ -1041,7 +1046,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
   clearViewTaskState(state);
 }
 
@@ -1056,7 +1061,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
   resetReceiptsInteraction(state);
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
@@ -1070,7 +1075,7 @@ function shiftReplayDate(state: AppState, direction: number): void {
   d.setUTCDate(d.getUTCDate() + direction);
   state.replayDate = d.toISOString().slice(0, 10);
   state.cachedReplayReport = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
 }
 
 /** Navigate explain date forward or backward by one day */
