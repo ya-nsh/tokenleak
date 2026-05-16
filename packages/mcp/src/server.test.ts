@@ -105,19 +105,22 @@ async function createConnectedClient(registry?: ProviderRegistry) {
 // ---------------------------------------------------------------------------
 
 describe('MCP Server', () => {
-  it('lists all 8 tools', async () => {
+  it('lists all 11 tools', async () => {
     const { client } = await createConnectedClient();
 
     const result = await client.listTools();
 
-    expect(result.tools).toHaveLength(8);
+    expect(result.tools).toHaveLength(11);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'compare_periods',
+      'get_agent_behavior_diff',
+      'get_agent_waste',
       'get_cost_breakdown',
       'get_daily_usage',
       'get_efficiency_advice',
       'get_receipt_lines',
+      'get_routing_simulation',
       'get_streaks_and_habits',
       'get_usage_summary',
       'list_providers',
@@ -286,6 +289,41 @@ describe('MCP Server', () => {
     expect(typeof parsed.totalCurrentMonthlyCost).toBe('number');
     expect(typeof parsed.totalMonthlySavings).toBe('number');
     expect(typeof parsed.analyzedDays).toBe('number');
+  });
+
+  it('calls optimization intelligence tools and returns reports', async () => {
+    const { client } = await createConnectedClient();
+
+    const routing = await client.callTool({
+      name: 'get_routing_simulation',
+      arguments: { days: 30 },
+    });
+    expect(routing.isError).toBeUndefined();
+    const routingJson = JSON.parse((routing.content as Array<{ text: string }>)[0]!.text);
+    expect(routingJson.strategy).toBe('conservative');
+    expect(Array.isArray(routingJson.candidates)).toBe(true);
+
+    const waste = await client.callTool({
+      name: 'get_agent_waste',
+      arguments: { days: 30 },
+    });
+    expect(waste.isError).toBeUndefined();
+    const wasteJson = JSON.parse((waste.content as Array<{ text: string }>)[0]!.text);
+    expect(wasteJson.summary).toBeDefined();
+    expect(Array.isArray(wasteJson.signals)).toBe(true);
+
+    const diff = await client.callTool({
+      name: 'get_agent_behavior_diff',
+      arguments: {
+        days: 30,
+        baseline: { label: 'A', dimension: 'provider', provider: 'test-provider-a' },
+        comparison: { label: 'B', dimension: 'provider', provider: 'test-provider-b' },
+      },
+    });
+    expect(diff.isError).toBeUndefined();
+    const diffJson = JSON.parse((diff.content as Array<{ text: string }>)[0]!.text);
+    expect(diffJson.takeaways).toBeDefined();
+    expect(diffJson.baseline.selector.label).toBe('A');
   });
 
   it('handles empty registry gracefully for get_usage_summary', async () => {

@@ -127,6 +127,9 @@ export function buildStatusBar(state: AppState) {
     state.selectedView === 'compare' ||
     state.selectedView === 'wrapped' ||
     state.selectedView === 'nutrition'
+    || state.selectedView === 'simulator'
+    || state.selectedView === 'waste'
+    || state.selectedView === 'behavior'
   ) {
     keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'export') {

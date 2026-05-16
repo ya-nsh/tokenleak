@@ -222,6 +222,29 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
     </div>`;
   }).join('');
 
+  const optimization = output.optimization;
+  const optimizationHtml = optimization
+    ? `<hr class="divider" style="margin-top:8px">
+    <div class="models-section">
+      <div class="models-label">OPTIMIZATION INTELLIGENCE</div>
+      <div class="model-row">
+        <span class="model-name">Routing savings</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.routingSimulation?.estimatedSavingsPercent ?? 0) * 100))}%"></div></div>
+        <span class="model-pct">${esc(formatCost(optimization.routingSimulation?.estimatedSavings ?? 0))}</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">Waste signals</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.agentWaste?.summary.totalSignals ?? 0) * 8))}%"></div></div>
+        <span class="model-pct">${optimization.agentWaste?.summary.totalSignals ?? 0}</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">${esc(optimization.behaviorDiff?.baseline.selector.label ?? 'Baseline')} vs ${esc(optimization.behaviorDiff?.comparison.selector.label ?? 'Compare')}</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:50%"></div></div>
+        <span class="model-pct">${optimization.behaviorDiff?.deltas.cost === null || optimization.behaviorDiff?.deltas.cost === undefined ? '-' : esc(formatCost(optimization.behaviorDiff.deltas.cost))}</span>
+      </div>
+    </div>`
+    : '';
+
   const overallLabel = providers.length > 1
     ? '<div class="overall-label">OVERALL</div>'
     : '';
@@ -371,6 +394,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       <div class="models-label">TOP MODELS</div>
       ${modelsHtml}
     </div>
+    ${optimizationHtml}
     <button class="refresh-btn" onclick="location.reload()">&#x21bb; Refresh</button>
   </div>
 </div>

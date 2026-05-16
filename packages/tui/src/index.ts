@@ -30,6 +30,9 @@ import {
   ensureMoreStats,
   ensureReplayReport,
   ensureWasteReport,
+  ensureAgentWasteReport,
+  ensureRoutingSimulationReport,
+  ensureAgentBehaviorDiffReport,
   ensureNutritionReport,
   ensureReceipt,
   deriveReceiptLines,
@@ -80,6 +83,9 @@ import {
 import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
+import { createSimulatorPanel } from './panels/simulator.js';
+import { createWastePanel } from './panels/waste.js';
+import { createBehaviorPanel } from './panels/behavior.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -154,6 +160,12 @@ function getSelectedViewTaskKey(state: AppState, view: ViewMode = state.selected
       return `nutrition:${base}`;
     case 'receipts':
       return `receipts:${base}`;
+    case 'simulator':
+      return `simulator:${base}`;
+    case 'waste':
+      return `waste:${base}`;
+    case 'behavior':
+      return `behavior:${base}`;
     default:
       return `${view}:${base}`;
   }
@@ -431,6 +443,39 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           render(state, renderer);
         },
       );
+    case 'simulator':
+      if (!hasWindowData) {
+        return createSimulatorPanel(null);
+      }
+      if (!state.cachedRoutingSimulationReport) {
+        const key = getSelectedViewTaskKey(state, 'simulator');
+        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', () => {
+          ensureRoutingSimulationReport(state);
+        });
+      }
+      return createSimulatorPanel(state.cachedRoutingSimulationReport);
+    case 'waste':
+      if (!hasWindowData) {
+        return createWastePanel(null);
+      }
+      if (!state.cachedAgentWasteReport) {
+        const key = getSelectedViewTaskKey(state, 'waste');
+        return deferredPanelForTask(state, renderer, key, 'Waste Signals', () => {
+          ensureAgentWasteReport(state);
+        });
+      }
+      return createWastePanel(state.cachedAgentWasteReport);
+    case 'behavior':
+      if (!hasWindowData) {
+        return createBehaviorPanel(null);
+      }
+      if (!state.cachedBehaviorDiffReport) {
+        const key = getSelectedViewTaskKey(state, 'behavior');
+        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', () => {
+          ensureAgentBehaviorDiffReport(state);
+        });
+      }
+      return createBehaviorPanel(state.cachedBehaviorDiffReport);
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -526,6 +571,9 @@ function applyLoadedData(
   state.receiptsExpandedLineIndex = null;
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
+  state.simulatorScrollOffset = 0;
+  state.wasteScrollOffset = 0;
+  state.behaviorScrollOffset = 0;
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
   clearViewTaskState(state);
@@ -981,6 +1029,9 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
+    currentState.simulatorScrollOffset = 0;
+    currentState.wasteScrollOffset = 0;
+    currentState.behaviorScrollOffset = 0;
     resetReplayPanelState(currentState);
     resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
@@ -1041,6 +1092,9 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  state.cachedRoutingSimulationReport = null;
+  state.cachedAgentWasteReport = null;
+  state.cachedBehaviorDiffReport = null;
   resetReceiptsInteraction(state);
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
@@ -1061,6 +1115,9 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  state.cachedRoutingSimulationReport = null;
+  state.cachedAgentWasteReport = null;
+  state.cachedBehaviorDiffReport = null;
   resetReplayDataState(state);
   resetReceiptsInteraction(state);
   state.nutritionSignalsLoading = false;
@@ -1099,6 +1156,9 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '9': 'replay',
   '0': 'nutrition',
   R: 'receipts',
+  X: 'simulator',
+  Y: 'waste',
+  Z: 'behavior',
 };
 
 const VIEW_ORDER: ViewMode[] = [
@@ -1113,6 +1173,9 @@ const VIEW_ORDER: ViewMode[] = [
   'replay',
   'nutrition',
   'receipts',
+  'simulator',
+  'waste',
+  'behavior',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
@@ -1124,6 +1187,9 @@ const SCROLLABLE_VIEWS = new Set<ViewMode>([
   'replay',
   'nutrition',
   'receipts',
+  'simulator',
+  'waste',
+  'behavior',
 ]);
 
 function getScrollableItemCount(state: AppState): number {
@@ -1146,6 +1212,12 @@ function getScrollableItemCount(state: AppState): number {
     case 'receipts': {
       return getReceiptLineCount(state);
     }
+    case 'simulator':
+      return state.cachedRoutingSimulationReport?.candidates.length ?? 0;
+    case 'waste':
+      return state.cachedAgentWasteReport?.signals.length ?? 0;
+    case 'behavior':
+      return 12;
     default:
       return 0;
   }
@@ -1167,6 +1239,10 @@ function getVisibleCount(view: ViewMode): number {
       return NUTRITION_VISIBLE_ROWS;
     case 'receipts':
       return RECEIPTS_VISIBLE_ROWS;
+    case 'simulator':
+    case 'waste':
+    case 'behavior':
+      return 8;
     default:
       return 10;
   }
@@ -1188,6 +1264,12 @@ function getScrollOffset(state: AppState): number {
       return state.nutritionScrollOffset;
     case 'receipts':
       return state.receiptsScrollOffset;
+    case 'simulator':
+      return state.simulatorScrollOffset;
+    case 'waste':
+      return state.wasteScrollOffset;
+    case 'behavior':
+      return state.behaviorScrollOffset;
     default:
       return 0;
   }
@@ -1215,6 +1297,15 @@ function setScrollOffset(state: AppState, value: number): void {
       break;
     case 'receipts':
       state.receiptsScrollOffset = value;
+      break;
+    case 'simulator':
+      state.simulatorScrollOffset = value;
+      break;
+    case 'waste':
+      state.wasteScrollOffset = value;
+      break;
+    case 'behavior':
+      state.behaviorScrollOffset = value;
       break;
   }
 }
