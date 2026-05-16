@@ -101,11 +101,11 @@ export function createReceiptsPanel(
         fg: COLORS.dimWhite,
       }),
       Text({
-        content: 'Prompt capture currently only works for Claude Code logs.',
+        content: 'Prompt capture currently works for Claude Code and Codex logs when prompt text is present.',
         fg: COLORS.dimWhite,
       }),
       Text({
-        content: 'Run Claude Code locally to generate logs with prompt text, then press r to refresh.',
+        content: 'Run Claude Code or Codex locally to generate logs with prompt text, then press r to refresh.',
         fg: COLORS.dimWhite,
       }),
     );

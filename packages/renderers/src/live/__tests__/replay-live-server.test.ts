@@ -105,10 +105,90 @@ describe('generateReplayLiveHtml', () => {
     expect(html).toContain('id="blockCard"');
   });
 
+  it('renders the prompt-detail card so users can see what was asked', () => {
+    const html = generateReplayLiveHtml(makeReport());
+    expect(html).toContain('id="promptCard"');
+    expect(html).toContain('id="promptMeta"');
+    expect(html).toContain('id="promptBody"');
+    expect(html).toContain('// prompt sent to model');
+    expect(html).toContain("this provider doesn't capture prompt text for this event");
+    expect(html).not.toContain('only Claude Code stores prompts');
+  });
+
+  it('embeds prompt text from events into window.__REPLAY__', () => {
+    const baseEvent = makeEvent({
+      timestamp: '2026-04-26T09:00:00.000Z',
+      model: 'claude-sonnet-4',
+    });
+    const events: UsageEvent[] = [
+      { ...baseEvent, prompt: 'refactor the date-loader to support streaming inputs' },
+    ];
+    const report: ReplayReport = {
+      date: '2026-04-26',
+      events,
+      flowBlocks: [makeBlock({ blockIndex: 0, start: events[0].timestamp, end: events[0].timestamp, events })],
+      tokenVelocity: [],
+      summary: {
+        totalSessions: 1,
+        totalEvents: 1,
+        flowTimeMs: 0,
+        thinkTimeMs: 0,
+        flowThinkRatio: 0,
+        peakMinute: null,
+      },
+    };
+    const html = generateReplayLiveHtml(report);
+    expect(html).toContain('refactor the date-loader to support streaming inputs');
+  });
+
   it('shows the date in the page title and header', () => {
     const html = generateReplayLiveHtml(makeReport());
     expect(html).toContain('<title>tokenleak replay · 2026-04-26</title>');
     expect(html).toContain('April 26, 2026');
+  });
+
+  it('computes heatmap stats from the rendered 91-day window only', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2099-04-01',
+      heatmap: [
+        { date: '2098-01-01', tokens: 1_000_000, cost: 100, events: 1 },
+        { date: '2099-04-01', tokens: 1_000, cost: 2, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('<strong>1</strong> active days');
+    expect(html).toContain('<strong>1.0K tok</strong>');
+    expect(html).toContain('<strong>$2.00</strong>');
+    expect(html).not.toContain('<strong>1.0M tok</strong>');
+    expect(html).not.toContain('<strong>$102.00</strong>');
+  });
+
+  it('anchors the heatmap to old replay data instead of wall-clock today', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2000-01-01',
+      heatmap: [
+        { date: '2000-01-01', tokens: 1_000, cost: 1, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('href="/?date=2000-01-01"');
+  });
+
+  it('uses enough columns when the heatmap starts mid-week', () => {
+    const html = generateReplayLiveHtml(makeReport(), {
+      initialDate: '2099-04-01',
+      heatmap: [
+        { date: '2099-04-01', tokens: 1_000, cost: 1, events: 1 },
+      ],
+    });
+
+    expect(html).toContain('grid-template-columns:repeat(14, 14px)');
+  });
+
+  it('does not render an empty heatmap section', () => {
+    const html = generateReplayLiveHtml(makeReport(), { heatmap: [] });
+
+    expect(html).not.toContain('<section class="section heatmap-section"');
   });
 
   it('renders the empty-state body when there are no events', () => {
@@ -205,5 +285,171 @@ describe('startReplayLiveServer', () => {
     cleanups.push(b.stop);
     expect(a.port).toBe(seed);
     expect(b.port).toBeGreaterThan(a.port);
+  });
+});
+
+describe('startReplayLiveServer (multi-day mode)', () => {
+  const cleanups: Array<() => void> = [];
+
+  afterEach(() => {
+    while (cleanups.length > 0) {
+      const stop = cleanups.pop();
+      try { stop?.(); } catch { /* noop */ }
+    }
+  });
+
+  function makeProvider() {
+    const initial = makeReport();
+    const otherDate = '2026-04-21';
+    const otherEvents = initial.events.map((e) => ({
+      ...e,
+      date: otherDate,
+      timestamp: e.timestamp.replace('2026-04-26', otherDate),
+    }));
+    const otherReport: ReplayReport = {
+      ...initial,
+      date: otherDate,
+      events: otherEvents,
+      flowBlocks: initial.flowBlocks.map((b, blockIndex) => ({
+        ...b,
+        blockIndex,
+        start: b.start.replace('2026-04-26', otherDate),
+        end: b.end.replace('2026-04-26', otherDate),
+        events: b.events.map((e) => ({
+          ...e,
+          date: otherDate,
+          timestamp: e.timestamp.replace('2026-04-26', otherDate),
+        })),
+      })),
+      tokenVelocity: initial.tokenVelocity.map((v) => ({
+        ...v,
+        minute: v.minute.replace('2026-04-26', otherDate),
+      })),
+      summary: {
+        ...initial.summary,
+        peakMinute: initial.summary.peakMinute
+          ? {
+              ...initial.summary.peakMinute,
+              minute: initial.summary.peakMinute.minute.replace('2026-04-26', otherDate),
+            }
+          : null,
+      },
+    };
+    return {
+      heatmap: [
+        { date: '2026-04-21', tokens: 7_200, cost: 0.04, events: 4 },
+        { date: '2026-04-26', tokens: 7_200, cost: 0.04, events: 4 },
+      ],
+      initialDate: '2026-04-26',
+      initialReport: initial,
+      otherReport,
+    };
+  }
+
+  it('renders the heatmap on GET /', async () => {
+    const p = makeProvider();
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async (d) => (d === p.otherReport.date ? p.otherReport : null),
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('class="heatmap-grid"');
+    expect(html).toContain('hm-cell--active');
+    expect(html).toContain('href="/?date=2026-04-21"');
+  });
+
+  it('serves a different day for /?date=YYYY-MM-DD via getReport', async () => {
+    const p = makeProvider();
+    let lookedUp: string | null = null;
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async (d) => {
+        lookedUp = d;
+        return d === p.otherReport.date ? p.otherReport : null;
+      },
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/?date=2026-04-21`);
+    expect(res.status).toBe(200);
+    expect(lookedUp).toBe('2026-04-21');
+    const html = await res.text();
+    expect(html).toContain('window.__REPLAY__');
+    expect(html).toContain('"date":"2026-04-21"');
+  });
+
+  it('falls back to an empty report (not 404) for an unknown day on GET /', async () => {
+    const p = makeProvider();
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async () => null,
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/?date=2025-01-01`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('nothing happened on 2025-01-01');
+  });
+
+  it('GET /api/replay?date=X returns 200 + JSON for a known day', async () => {
+    const p = makeProvider();
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async (d) => (d === p.otherReport.date ? p.otherReport : null),
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/api/replay?date=2026-04-21`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type') ?? '').toContain('application/json');
+    const body = await res.json() as ReplayReport;
+    expect(body.date).toBe('2026-04-21');
+  });
+
+  it('GET /api/replay?date=invalid returns 400', async () => {
+    const p = makeProvider();
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async () => null,
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/api/replay?date=foo`);
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/replay?date=missing returns 404', async () => {
+    const p = makeProvider();
+    const { port, stop } = await startReplayLiveServer({
+      heatmap: p.heatmap,
+      initialDate: p.initialDate,
+      initialReport: p.initialReport,
+      getReport: async () => null,
+    }, { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/api/replay?date=2024-12-31`);
+    expect(res.status).toBe(404);
+  });
+
+  it('single-day mode (passing a ReplayReport) does NOT render the heatmap', async () => {
+    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
+    cleanups.push(stop);
+    const res = await fetch(`http://localhost:${port}/`);
+    const html = await res.text();
+    // Structural element: only emitted when the heatmap section is rendered.
+    // (The CSS class names live in the inlined stylesheet either way, so we
+    // can't grep on `hm-cell--active` to detect single- vs multi-day mode.)
+    expect(html).not.toContain('<section class="section heatmap-section"');
+    expect(html).not.toContain('href="/?date=');
   });
 });

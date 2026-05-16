@@ -52,6 +52,7 @@ export function createHelpPanel() {
         ...helpSection('ACTIONS', [
           ['s', 'Toggle sort mode'],
           ['r', 'Refresh data'],
+          ['o', 'Open interactive replay (any view)'],
           ['c', 'Open Cursor setup'],
           ['q', 'Quit'],
         ]),
@@ -94,7 +95,7 @@ export function createHelpPanel() {
           ['j / k', 'Select line item'],
           ['Enter / Space', 'Toggle selected line item'],
           ['Click', 'Select and toggle a line item'],
-          ['o', 'Cycle sort (cost / qty / alpha)'],
+          ['S', 'Cycle sort (cost / qty / alpha)'],
           ['f', 'Cycle category filter'],
         ]),
       ),

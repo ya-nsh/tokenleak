@@ -14,7 +14,7 @@ import {
   saveCursorCredentials,
   validateCursorSession,
 } from '@tokenleak/registry';
-import { computeAchievements } from '@tokenleak/renderers';
+import { computeAchievements, startReplayLiveServer } from '@tokenleak/renderers';
 import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
@@ -50,7 +50,34 @@ import { createComparePanel } from './panels/compare.js';
 import { createExportPanel } from './panels/export.js';
 import { createWrappedPanel } from './panels/wrapped.js';
 import { createHelpPanel } from './panels/help.js';
-import { createReplayPanel, REPLAY_MAX_CONTENT_WIDTH, REPLAY_VISIBLE_BLOCKS } from './panels/replay.js';
+import {
+  createReplayPanel,
+  REPLAY_MAX_CONTENT_WIDTH,
+  REPLAY_VISIBLE_BLOCKS,
+  REPLAY_VISIBLE_BLOCKS_PLAYBACK,
+} from './panels/replay.js';
+import type { ReplayPlaybackView } from './panels/replay.js';
+import {
+  REPLAY_PLAYBACK_TICK_MS,
+  computePlaybackSummary,
+  enterReplayPlayback,
+  exitReplayPlayback,
+  jumpReplayCursorToBlockBoundary,
+  jumpReplayCursorToInteresting,
+  setReplayPlaybackSpeed,
+  selectReplayCursorEvent,
+  stepReplayCursor,
+  tickReplayPlayback,
+  toggleReplayPlayback,
+} from './lib/replay-playback.js';
+import {
+  buildReplayLiveDataProvider,
+  keepReplaySelectionVisible,
+  moveReplayOverviewSelection,
+  resetReplayDataInteraction,
+  resetReplayPanelInteraction,
+} from './lib/replay-interaction.js';
+import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
@@ -307,6 +334,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           state.replayExpandedBlockIndex,
           state.replayScrollOffset,
           getPanelContentWidth(renderer, REPLAY_MAX_CONTENT_WIDTH),
+          undefined,
+          null,
         );
       }
       if (!state.replayDate) {
@@ -329,6 +358,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           toggleReplayBlock(state, blockIndex);
           render(state, renderer);
         },
+        buildReplayPlaybackView(state),
       );
     case 'nutrition':
       if (!hasWindowData) {
@@ -488,9 +518,7 @@ function applyLoadedData(
   state.nutritionScrollOffset = 0;
   state.compareScrollOffset = 0;
   state.wrappedScrollOffset = 0;
-  state.replayScrollOffset = 0;
-  state.replaySelectedBlockIndex = 0;
-  state.replayExpandedBlockIndex = null;
+  resetReplayDataState(state);
   state.replayDate = null;
   state.explainDate = null;
   state.receiptsScrollOffset = 0;
@@ -626,11 +654,268 @@ function keepSelectedItemVisible(selectedIndex: number, scrollOffset: number, vi
   return scrollOffset;
 }
 
-function resetReplayInteraction(state: AppState): void {
-  state.replayScrollOffset = 0;
-  state.replaySelectedBlockIndex = 0;
-  state.replayExpandedBlockIndex = null;
+let replayPlaybackTimer: ReturnType<typeof setInterval> | null = null;
+
+function startReplayPlaybackTimer(): void {
+  if (replayPlaybackTimer !== null) return;
+  replayPlaybackTimer = setInterval(() => {
+    if (!currentState.replayPlaybackActive) {
+      stopReplayPlaybackTimer();
+      return;
+    }
+    const advanced = tickReplayPlayback(currentState);
+    keepReplaySelectionVisible(currentState, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    if (!advanced) {
+      stopReplayPlaybackTimer();
+    }
+    render(currentState, currentRenderer);
+  }, REPLAY_PLAYBACK_TICK_MS);
 }
+
+function resetReplayPanelState(state: AppState): void {
+  resetReplayPanelInteraction(state, stopReplayPlaybackTimer);
+}
+
+function resetReplayDataState(state: AppState): void {
+  resetReplayDataInteraction(state, stopReplayPlaybackTimer, stopReplayLiveServer);
+}
+
+function stopReplayPlaybackTimer(): void {
+  if (replayPlaybackTimer !== null) {
+    clearInterval(replayPlaybackTimer);
+    replayPlaybackTimer = null;
+  }
+}
+
+/**
+ * Replay playback / step-mode keyboard dispatch. Returns true when the
+ * sequence was consumed. Activates only on the replay view.
+ *
+ * Mode entry/exit is bound to `s` so the rest of the TUI's keymap is
+ * unaffected. Once in playback mode we intercept playback-specific keys
+ * (n/p step, N/P block, i/I interesting, space play/pause, 1/2/3 speed,
+ * Home/End jump, Esc exit) and let everything else (q, view switches,
+ * date shift via h/l, j/k block selection) fall through to the regular
+ * handlers downstream.
+ */
+function handleReplayPlaybackInput(
+  sequence: string,
+  state: AppState,
+  renderer: CliRenderer,
+): boolean {
+  if (state.selectedView !== 'replay') return false;
+  const events = state.cachedReplayReport?.events;
+
+  // Toggle entry from overview mode.
+  if (state.replayCursorEventIndex === null) {
+    if (sequence === 's' && events && events.length > 0) {
+      enterReplayPlayback(state);
+      keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+      render(state, renderer);
+      return true;
+    }
+    return false;
+  }
+
+  // We're in playback mode from here on.
+  if (!events || events.length === 0) {
+    exitReplayPlayback(state);
+    stopReplayPlaybackTimer();
+    render(state, renderer);
+    return true;
+  }
+
+  // Exit
+  if (sequence === 's' || isEscapeKeySequence(sequence)) {
+    exitReplayPlayback(state);
+    stopReplayPlaybackTimer();
+    render(state, renderer);
+    return true;
+  }
+
+  // Step controls
+  if (sequence === 'n' || sequence === '\x1b[C') {
+    pauseReplayPlaybackIfRunning(state);
+    stepReplayCursor(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'p' || sequence === '\x1b[D') {
+    pauseReplayPlaybackIfRunning(state);
+    stepReplayCursor(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'N') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToBlockBoundary(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'P') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToBlockBoundary(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'i') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToInteresting(state, 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === 'I') {
+    pauseReplayPlaybackIfRunning(state);
+    jumpReplayCursorToInteresting(state, -1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === '\x1b[H' || sequence === '\x1bOH') {
+    pauseReplayPlaybackIfRunning(state);
+    selectReplayCursorEvent(state, 0);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+  if (sequence === '\x1b[F' || sequence === '\x1bOF') {
+    pauseReplayPlaybackIfRunning(state);
+    selectReplayCursorEvent(state, events.length - 1);
+    keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+    render(state, renderer);
+    return true;
+  }
+
+  // Play / pause
+  if (sequence === ' ') {
+    const active = toggleReplayPlayback(state);
+    if (active) {
+      // If we're at the end, restart from the beginning.
+      if (state.replayCursorEventIndex! >= events.length - 1) {
+        selectReplayCursorEvent(state, 0);
+        keepReplaySelectionVisible(state, REPLAY_VISIBLE_BLOCKS_PLAYBACK);
+      }
+      startReplayPlaybackTimer();
+    } else {
+      stopReplayPlaybackTimer();
+    }
+    render(state, renderer);
+    return true;
+  }
+
+  // Speed selection
+  if (sequence === '1' || sequence === '2' || sequence === '3') {
+    const speedMap: Record<string, ReplayPlaybackSpeed> = { '1': 60, '2': 240, '3': 600 };
+    setReplayPlaybackSpeed(state, speedMap[sequence]);
+    render(state, renderer);
+    return true;
+  }
+
+  // Pass through everything else (q, j/k, h/l, view switches, etc.)
+  return false;
+}
+
+function pauseReplayPlaybackIfRunning(state: AppState): void {
+  if (state.replayPlaybackActive) {
+    state.replayPlaybackActive = false;
+    stopReplayPlaybackTimer();
+  }
+}
+
+// ── In-process replay live server (launched via global `o` keypress) ──
+
+let replayLiveServerStop: (() => void) | null = null;
+
+const OS_OPEN_COMMANDS: Record<string, string> = {
+  darwin: 'open',
+  linux: 'xdg-open',
+  win32: 'start',
+};
+
+function openUrlInBrowser(url: string): void {
+  const cmd = OS_OPEN_COMMANDS[process.platform];
+  if (!cmd) return;
+  const args = process.platform === 'win32' ? ['cmd', '/c', 'start', '', url] : [cmd, url];
+  try {
+    Bun.spawn(args, { stdout: 'ignore', stderr: 'ignore' });
+  } catch {
+    // best-effort; the in-TUI banner still shows the URL the user can open manually
+  }
+}
+
+async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Promise<void> {
+  // Idempotent — second press just re-opens the browser to the existing server.
+  if (state.replayLiveServerPort !== null) {
+    openUrlInBrowser(`http://localhost:${state.replayLiveServerPort}/`);
+    return;
+  }
+  if (!state.data) return; // still booting; nothing to render yet
+  const scoped = getScopedWindowData(state);
+  const providers = scoped?.scopedProviders ?? state.data.providers;
+  const replayLiveData = buildReplayLiveDataProvider(providers, state.replayDate, getTodayLocal());
+  state.replayDate = replayLiveData.initialDate;
+  state.cachedReplayReport = replayLiveData.initialReport;
+  try {
+    // silent: true suppresses the server's stderr "Replay live at..." line,
+    // which would otherwise corrupt the full-screen TUI render and make
+    // the terminal look frozen until the user hits another key.
+    const { port, stop } = await startReplayLiveServer(replayLiveData, { silent: true });
+    state.replayLiveServerPort = port;
+    replayLiveServerStop = stop;
+    render(state, renderer);
+    openUrlInBrowser(`http://localhost:${port}/`);
+  } catch {
+    // best-effort. The TUI render path doesn't have an error toast yet —
+    // failing silently is safer than dumping to stderr (would corrupt
+    // the screen).
+  }
+}
+
+/**
+ * Global [o] dispatcher — fires from any view, not just Replay. Lets the
+ * footer CTA's keybind work everywhere in the TUI. Returns true when the
+ * keypress was consumed.
+ */
+function handleGlobalReplayBrowserKey(
+  sequence: string,
+  state: AppState,
+  renderer: CliRenderer,
+): boolean {
+  if (sequence !== 'o') return false;
+  void launchReplayBrowser(state, renderer);
+  return true;
+}
+
+function stopReplayLiveServer(state: AppState): void {
+  if (replayLiveServerStop !== null) {
+    try { replayLiveServerStop(); } catch { /* noop */ }
+    replayLiveServerStop = null;
+  }
+  state.replayLiveServerPort = null;
+}
+
+function buildReplayPlaybackView(state: AppState): ReplayPlaybackView | null {
+  const report = state.cachedReplayReport;
+  if (!report || state.replayCursorEventIndex === null || report.events.length === 0) {
+    return null;
+  }
+  const summary = computePlaybackSummary(report, state.replayCursorEventIndex);
+  if (!summary) return null;
+  const totalDayCost = report.events.reduce((s, e) => s + e.cost, 0);
+  return {
+    cursorIndex: summary.cursorIndex,
+    active: state.replayPlaybackActive,
+    speed: state.replayPlaybackSpeed,
+    summary,
+    totalDayCost,
+  };
+}
+
 
 function resetReceiptsInteraction(state: AppState): void {
   state.receiptsScrollOffset = 0;
@@ -645,6 +930,7 @@ function getReceiptLineCount(state: AppState): number {
 }
 
 function toggleReplayBlock(state: AppState, blockIndex: number = state.replaySelectedBlockIndex): void {
+  if (state.replayCursorEventIndex !== null) return;
   const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
   if (itemCount <= 0) return;
   const selected = clampItemIndex(blockIndex, itemCount);
@@ -671,15 +957,7 @@ function toggleReceiptLine(state: AppState, lineIndex: number = state.receiptsSe
 }
 
 function moveReplaySelection(state: AppState, direction: number): void {
-  const itemCount = state.cachedReplayReport?.flowBlocks.length ?? 0;
-  if (itemCount <= 0) return;
-  const selected = clampItemIndex(state.replaySelectedBlockIndex + direction, itemCount);
-  state.replaySelectedBlockIndex = selected;
-  state.replayScrollOffset = keepSelectedItemVisible(
-    selected,
-    state.replayScrollOffset,
-    REPLAY_VISIBLE_BLOCKS,
-  );
+  moveReplayOverviewSelection(state, direction, REPLAY_VISIBLE_BLOCKS);
 }
 
 function moveReceiptSelection(state: AppState, direction: number): void {
@@ -703,7 +981,7 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
-    resetReplayInteraction(currentState);
+    resetReplayPanelState(currentState);
     resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
     currentState.receiptsCategoryFilter = null;
@@ -768,7 +1046,7 @@ function invalidateWindowCaches(state: AppState): void {
   state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
   clearViewTaskState(state);
 }
 
@@ -783,7 +1061,7 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
   resetReceiptsInteraction(state);
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
@@ -797,7 +1075,7 @@ function shiftReplayDate(state: AppState, direction: number): void {
   d.setUTCDate(d.getUTCDate() + direction);
   state.replayDate = d.toISOString().slice(0, 10);
   state.cachedReplayReport = null;
-  resetReplayInteraction(state);
+  resetReplayDataState(state);
 }
 
 /** Navigate explain date forward or backward by one day */
@@ -1089,6 +1367,16 @@ export async function main(): Promise<void> {
       return true;
     }
 
+    // Global [o] interactive replay launcher — must run before any
+    // view-specific handlers so the footer CTA works on every view.
+    if (handleGlobalReplayBrowserKey(sequence, state, renderer)) {
+      return true;
+    }
+
+    if (handleReplayPlaybackInput(sequence, state, renderer)) {
+      return true;
+    }
+
     // Help toggle: ? key
     if (sequence === '?') {
       state.showHelp = !state.showHelp;
@@ -1287,8 +1575,9 @@ export async function main(): Promise<void> {
       return true;
     }
 
-    // o: cycle sort mode (receipts view)
-    if (sequence === 'o' && state.selectedView === 'receipts') {
+    // S: cycle sort mode (receipts view). Moved off [o] because the
+    // global interactive-replay launcher now owns that key.
+    if (sequence === 'S' && state.selectedView === 'receipts') {
       const order: Array<'cost' | 'qty' | 'alpha'> = ['cost', 'qty', 'alpha'];
       const nextIndex = (order.indexOf(state.receiptsSortMode) + 1) % order.length;
       state.receiptsSortMode = order[nextIndex]!;
@@ -1329,6 +1618,7 @@ export async function main(): Promise<void> {
 
     // q: quit
     if (sequence === 'q') {
+      stopReplayLiveServer(state);
       renderer.destroy();
       process.exit(0);
     }

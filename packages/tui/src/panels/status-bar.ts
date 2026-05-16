@@ -1,5 +1,5 @@
 import { Box, Text } from '@opentui/core';
-import { COLORS } from '../lib/theme.js';
+import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
 function formatUpdateTime(): string {
@@ -7,6 +7,27 @@ function formatUpdateTime(): string {
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
+}
+
+/**
+ * Build the bright-emerald global CTA chip. Always shown in the footer
+ * (any view) so the interactive browser replay is one keystroke away
+ * from anywhere in the TUI. When the server is already running, swap
+ * the text to a status indicator instead.
+ */
+export function buildReplayCtaChip(state: AppState) {
+  if (state.replayLiveServerPort !== null) {
+    return Text({
+      content: ` ✓ replay open :${state.replayLiveServerPort}  · `,
+      fg: COLORS.green,
+      attributes: BOLD,
+    });
+  }
+  return Text({
+    content: ' ▶ [o] interactive replay  · ',
+    fg: COLORS.green,
+    attributes: BOLD,
+  });
 }
 
 export function buildStatusBar(state: AppState) {
@@ -86,7 +107,7 @@ export function buildStatusBar(state: AppState) {
   }
 
   const helpHint = '?:keys';
-  const nav = `\u2190\u2192:view  tab/\u21E7tab:period`;
+  const nav = `←→:view  tab/⇧tab:period`;
   const cursorHint = '  c:cursor';
 
   let keys: string;
@@ -99,7 +120,7 @@ export function buildStatusBar(state: AppState) {
   } else if (state.selectedView === 'replay') {
     keys = `${nav}  h/l:date  j/k:select  enter/space:toggle  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'receipts') {
-    keys = `${nav}  j/k:select  enter/space:toggle  o:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
+    keys = `${nav}  j/k:select  enter/space:toggle  S:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (
     state.selectedView === 'advisor' ||
     state.selectedView === 'focus' ||
@@ -114,6 +135,9 @@ export function buildStatusBar(state: AppState) {
     keys = `${nav}  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   }
 
+  // Always-visible CTA on the left, view-specific keymap immediately
+  // after, timestamp on the right. The bright emerald chip next to
+  // dim-white hints is the "highlighted at any cost" affordance.
   return Box(
     {
       flexDirection: 'row',
@@ -123,7 +147,11 @@ export function buildStatusBar(state: AppState) {
       paddingRight: 1,
       height: 1,
     },
-    Text({ content: keys, fg: COLORS.dimWhite }),
+    Box(
+      { flexDirection: 'row' },
+      buildReplayCtaChip(state),
+      Text({ content: keys, fg: COLORS.dimWhite }),
+    ),
     Text({
       content: `Updated ${formatUpdateTime()}`,
       fg: COLORS.dimWhite,

@@ -1,4 +1,12 @@
 import type { ReplayReport } from '@tokenleak/core';
+import type { ReplayHeatmapEntry } from './replay-live-server';
+
+export interface ReplayLiveHtmlOptions {
+  /** Optional heatmap to render above the cost odometer for date navigation. */
+  heatmap?: ReplayHeatmapEntry[];
+  /** Date to mark as active in the heatmap. Defaults to the report's date. */
+  initialDate?: string;
+}
 
 function esc(s: string): string {
   return s
@@ -26,13 +34,144 @@ function formatDateLong(dateStr: string): string {
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
+function formatHeatmapDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function formatHeatmapTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tok`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K tok`;
+  return `${Math.round(n)} tok`;
+}
+
+function formatHeatmapCost(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+const HEATMAP_DAYS = 91; // 13 weeks × 7 days
+
+/**
+ * Render the GitHub-style heatmap above the cost odometer for in-page date
+ * navigation. Each cell is an `<a>` so clicks just navigate to `/?date=X`
+ * — no JS required.
+ *
+ * Layout: 7 rows (Sun-Sat) × 13-14 cols (weeks), latest day on the right.
+ */
+function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string): string {
+  const byDate = new Map<string, ReplayHeatmapEntry>();
+  for (const e of entries) byDate.set(e.date, e);
+
+  // Determine the day window from the replay data, not wall-clock today.
+  const latestEntryDate = entries.reduce((acc, e) => (e.date > acc ? e.date : acc), activeDate);
+  const end = new Date(latestEntryDate + 'T00:00:00Z');
+  const start = new Date(end.getTime() - (HEATMAP_DAYS - 1) * 86_400_000);
+
+  // Walk forward from start; bucket into calendar weeks (column = week index).
+  const startWeekday = start.getUTCDay(); // 0 = Sun
+  const cells: Array<{ date: string; tokens: number; cost: number; events: number; weekday: number; col: number }> = [];
+  for (let i = 0; i < HEATMAP_DAYS; i++) {
+    const d = new Date(start.getTime() + i * 86_400_000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const weekday = d.getUTCDay(); // 0 = Sun
+    const col = Math.floor((i + startWeekday) / 7);
+    const e = byDate.get(dateStr);
+    cells.push({
+      date: dateStr,
+      tokens: e?.tokens ?? 0,
+      cost: e?.cost ?? 0,
+      events: e?.events ?? 0,
+      weekday,
+      col,
+    });
+  }
+
+  const visibleEntries = cells.filter((c) => c.tokens > 0);
+  const maxTokens = visibleEntries.reduce((acc, e) => Math.max(acc, e.tokens), 0);
+  const totalTokens = visibleEntries.reduce((acc, e) => acc + e.tokens, 0);
+  const totalCost = visibleEntries.reduce((acc, e) => acc + e.cost, 0);
+  const activeDays = visibleEntries.length;
+  const columnCount = Math.max(13, (cells[cells.length - 1]?.col ?? 12) + 1);
+  const columnStyle = `grid-template-columns:repeat(${columnCount}, 14px)`;
+
+  const cellHtml = cells
+    .map((c) => {
+      const intensity = maxTokens > 0 && c.tokens > 0
+        ? Math.max(0.18, Math.log(1 + c.tokens) / Math.log(1 + maxTokens))
+        : 0;
+      const isActive = c.date === activeDate;
+      const klass = ['hm-cell'];
+      if (isActive) klass.push('hm-cell--active');
+      if (c.tokens === 0) klass.push('hm-cell--empty');
+      const tooltip = c.tokens > 0
+        ? `${formatHeatmapDate(c.date)} · ${formatHeatmapTokens(c.tokens)} · ${formatHeatmapCost(c.cost)}`
+        : `${formatHeatmapDate(c.date)} · no events`;
+      const style = c.tokens > 0
+        ? `--hm-alpha:${intensity.toFixed(3)};grid-column:${c.col + 1};grid-row:${c.weekday + 1};`
+        : `grid-column:${c.col + 1};grid-row:${c.weekday + 1};`;
+      // Empty days render as a non-link <span> — clicking them would land on
+      // "0 flow blocks" with nothing to scrub, which is just confusing.
+      if (c.tokens === 0) {
+        return `<span class="${klass.join(' ')}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></span>`;
+      }
+      return `<a class="${klass.join(' ')}" href="/?date=${esc(c.date)}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></a>`;
+    })
+    .join('');
+
+  // Month labels along the top: emit one label per week-column whose first
+  // day is the start of a new month (or the very first column).
+  const monthLabels: string[] = [];
+  const seenMonths = new Set<string>();
+  for (let week = 0; week < columnCount; week++) {
+    const firstDay = cells.find((c) => c.col === week);
+    if (!firstDay) continue;
+    const d = new Date(firstDay.date + 'T00:00:00Z');
+    const monthKey = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+    if (!seenMonths.has(monthKey)) {
+      seenMonths.add(monthKey);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      monthLabels.push(`<span style="grid-column:${week + 1}">${months[d.getUTCMonth()]}</span>`);
+    }
+  }
+
+  return `
+<section class="section heatmap-section">
+  <div class="heatmap-head">
+    <div class="kicker">// last 90 days · click any day to replay</div>
+    <div class="heatmap-stats mono">
+      <span><strong>${activeDays}</strong> active days</span>
+      <span><strong>${formatHeatmapTokens(totalTokens)}</strong></span>
+      <span><strong>${formatHeatmapCost(totalCost)}</strong></span>
+    </div>
+  </div>
+  <div class="heatmap-wrap">
+    <div class="heatmap-dow mono">
+      <span></span>
+      <span>Mon</span>
+      <span></span>
+      <span>Wed</span>
+      <span></span>
+      <span>Fri</span>
+      <span></span>
+    </div>
+    <div class="heatmap-body">
+      <div class="heatmap-months mono" style="${columnStyle}">${monthLabels.join('')}</div>
+      <div class="heatmap-grid" style="${columnStyle}">${cellHtml}</div>
+    </div>
+  </div>
+</section>`;
+}
+
 const FONTS_HREF =
   'https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600&display=swap';
 
-export function generateReplayLiveHtml(report: ReplayReport): string {
+export function generateReplayLiveHtml(report: ReplayReport, options: ReplayLiveHtmlOptions = {}): string {
   const safeReport = JSON.stringify(report);
   const dateLong = formatDateLong(report.date);
   const isEmpty = report.events.length === 0;
+  const heatmap = options.heatmap && options.heatmap.length > 0 ? options.heatmap : null;
+  const activeDate = options.initialDate ?? report.date;
 
   const styles = `
 :root {
@@ -434,6 +573,130 @@ header.bar .meta strong {
 }
 .summary-pill strong { color: var(--text); font-weight: 500; }
 
+/* Prompt detail panel — populated when an event row is clicked. */
+.prompt-card { margin-top: 18px; }
+.prompt-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.prompt-meta strong { color: var(--text); font-weight: 500; }
+.prompt-meta.empty { color: var(--dim); margin-bottom: 0; }
+.prompt-body {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+.prompt-body.empty {
+  color: var(--dim);
+  font-style: italic;
+}
+.event-row { cursor: pointer; }
+.event-row.selected {
+  border-left-color: var(--warn);
+  background: rgba(253, 224, 71, 0.06);
+}
+.event-row.selected.current {
+  border-left-color: var(--accent);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+/* GitHub-style heatmap for in-page date navigation */
+.heatmap-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px 18px;
+}
+.heatmap-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.heatmap-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.heatmap-stats strong { color: var(--text); font-weight: 500; margin-right: 4px; }
+.heatmap-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.heatmap-dow {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  gap: 3px;
+  font-size: 9px;
+  color: var(--dim);
+  padding-top: 18px; /* line up with cells, accounting for the months row above */
+  flex: 0 0 auto;
+}
+.heatmap-dow span { line-height: 14px; }
+.heatmap-body {
+  flex: 0 0 auto;
+}
+.heatmap-months {
+  display: grid;
+  grid-template-columns: repeat(13, 14px);
+  gap: 3px;
+  font-size: 9px;
+  color: var(--dim);
+  height: 14px;
+  margin-bottom: 4px;
+}
+.heatmap-months span { grid-row: 1; white-space: nowrap; }
+.heatmap-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  grid-template-columns: repeat(13, 14px);
+  gap: 3px;
+}
+.hm-cell {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, calc(var(--hm-alpha, 0.18) * 0.9));
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  text-decoration: none;
+}
+.hm-cell:hover {
+  border-color: var(--accent);
+  transform: scale(1.2);
+}
+.hm-cell--empty {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+  cursor: default;
+}
+.hm-cell--empty:hover {
+  border-color: var(--border);
+  transform: none;
+}
+.hm-cell--active {
+  border-color: var(--text) !important;
+  box-shadow: 0 0 0 1px var(--bg), 0 0 0 2px var(--accent);
+}
+
 /* Help footer */
 .help {
   margin-top: 24px;
@@ -547,6 +810,12 @@ header.bar .meta strong {
   </div>
 </div>
 
+<div class="card prompt-card" id="promptCard">
+  <div class="label">// prompt sent to model</div>
+  <div class="prompt-meta mono" id="promptMeta">click any event in the list above to see what was asked</div>
+  <pre class="prompt-body mono" id="promptBody" hidden></pre>
+</div>
+
 <div class="help">
   <span><kbd>space</kbd>play / pause</span>
   <span><kbd>←</kbd><kbd>→</kbd>step ±1 min</span>
@@ -611,6 +880,12 @@ header.bar .meta strong {
   let lastFrameTs = 0;
   let rafId = 0;
   let prevCost = 0;
+  // selectedEventIndex tracks which row's prompt is shown in the prompt
+  // card. Until the user clicks a row, it follows the playhead — so during
+  // playback the prompt panel updates live. Once they click, it freezes
+  // there until the next click.
+  let selectedEventIndex = -1;
+  let manualSelection = false;
 
   // ── DOM refs ───────────────────────────────────────────────────────
   const $ = function (id) { return document.getElementById(id); };
@@ -634,14 +909,16 @@ header.bar .meta strong {
   const blockCost = $('blockCost');
   const blockCache = $('blockCache');
   const blockSwitches = $('blockSwitches');
+  const promptMeta = $('promptMeta');
+  const promptBody = $('promptBody');
 
   // ── Static SVG render ──────────────────────────────────────────────
   const TL_W = 1000;
   const TL_H = 180;
   const HIST_TOP = 12;
-  const HIST_HEIGHT = 120;
-  const RIBBON_TOP = 144;
-  const RIBBON_HEIGHT = 18;
+  const HIST_HEIGHT = 110;
+  const RIBBON_TOP = 138;
+  const RIBBON_HEIGHT = 26;
 
   function timeToX(ts) {
     return ((ts - dayStart) / dayDuration) * TL_W;
@@ -668,13 +945,22 @@ header.bar .meta strong {
       parts.push('<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '" fill="' + ACCENT + '" fill-opacity="' + alpha.toFixed(2) + '"/>');
     });
 
-    // Flow block ribbon.
+    // Flow block ribbon. Min width bumped to 10 SVG units (~12px on screen)
+    // so short bursts (Quick Lookups, 30s–3min Deep Flows) stay visible
+    // instead of collapsing into invisible 2px slivers. Centered around
+    // the block's true midpoint so visual position remains accurate.
     flowBlocks.forEach(function (b, i) {
-      const x = timeToX(b.startTs);
-      const w = Math.max(2, timeToX(b.endTs) - x);
+      const xStart = timeToX(b.startTs);
+      const xEnd = timeToX(b.endTs);
+      const trueWidth = Math.max(0, xEnd - xStart);
+      const minWidth = 10;
+      const w = Math.max(minWidth, trueWidth);
+      const x = trueWidth < minWidth
+        ? Math.max(0, xStart + trueWidth / 2 - minWidth / 2)
+        : xStart;
       const colorMap = { 'Deep Flow': ACCENT, 'Quick Lookup': WARN, 'Moderate Session': MUTED };
       const fill = colorMap[b.label] || MUTED;
-      parts.push('<rect data-block="' + i + '" x="' + x.toFixed(2) + '" y="' + RIBBON_TOP + '" width="' + w.toFixed(2) + '" height="' + RIBBON_HEIGHT + '" rx="3" fill="' + fill + '" fill-opacity="0.28" stroke="' + fill + '" stroke-opacity="0.6" stroke-width="0.6" style="cursor:pointer"/>');
+      parts.push('<rect data-block="' + i + '" x="' + x.toFixed(2) + '" y="' + RIBBON_TOP + '" width="' + w.toFixed(2) + '" height="' + RIBBON_HEIGHT + '" rx="3" fill="' + fill + '" fill-opacity="0.55" stroke="' + fill + '" stroke-opacity="0.95" stroke-width="1" style="cursor:pointer"/>');
     });
 
     // Playhead (drawn last, on top).
@@ -826,9 +1112,16 @@ header.bar .meta strong {
     for (let i = 0; i < events.length; i++) {
       if (events[i].ts <= currentTimeMs) cur = i; else break;
     }
+    // Auto-follow the playhead until the user manually picks a row.
+    if (!manualSelection) {
+      selectedEventIndex = cur;
+    }
     const start = Math.max(0, cur - EV_WINDOW);
     const end = Math.min(events.length, (cur === -1 ? 0 : cur) + EV_WINDOW + 1);
-    const key = start + ':' + end + ':' + cur;
+    // Selection has to be part of the cache key, otherwise clicking a row
+    // already inside the rendered window wouldn't repaint and the
+    // .selected class wouldn't move.
+    const key = start + ':' + end + ':' + cur + ':' + selectedEventIndex;
     if (key === lastWindowKey) return;
     lastWindowKey = key;
 
@@ -836,9 +1129,12 @@ header.bar .meta strong {
     for (let i = start; i < end; i++) {
       const e = events[i];
       const future = i > cur;
-      const cls = 'event-row' + (future ? ' future' : '') + (i === cur ? ' current' : '');
+      const cls = 'event-row' +
+        (future ? ' future' : '') +
+        (i === cur ? ' current' : '') +
+        (i === selectedEventIndex ? ' selected' : '');
       parts.push(
-        '<div class="' + cls + '">' +
+        '<div class="' + cls + '" data-event-index="' + i + '">' +
           '<span class="t">' + fmtClock(e.ts).slice(0, 5) + '</span>' +
           '<span class="m" title="' + escAttr(e.model) + '">' + escHtml(e.model) + '</span>' +
           '<span class="tk">' + fmtTokens(e.totalTokens) + '</span>' +
@@ -851,6 +1147,50 @@ header.bar .meta strong {
     const currentEl = eventList.querySelector('.event-row.current');
     if (currentEl) {
       currentEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }
+  }
+
+  // Click delegation: clicking an event row pins the prompt panel to that
+  // event. Also pauses playback so the user can read.
+  eventList.addEventListener('click', function (ev) {
+    let target = ev.target;
+    while (target && target !== eventList && !(target.getAttribute && target.getAttribute('data-event-index'))) {
+      target = target.parentNode;
+    }
+    if (!target || target === eventList) return;
+    const idx = parseInt(target.getAttribute('data-event-index'), 10);
+    if (isNaN(idx) || idx < 0 || idx >= events.length) return;
+    pause();
+    manualSelection = true;
+    selectedEventIndex = idx;
+    // Force a repaint so the .selected class moves.
+    lastWindowKey = '';
+    renderEventList();
+    renderPromptPanel();
+  });
+
+  function renderPromptPanel() {
+    if (selectedEventIndex < 0 || selectedEventIndex >= events.length) {
+      promptMeta.className = 'prompt-meta mono empty';
+      promptMeta.textContent = 'click any event in the list above to see what was asked';
+      promptBody.hidden = true;
+      promptBody.textContent = '';
+      return;
+    }
+    const e = events[selectedEventIndex];
+    promptMeta.className = 'prompt-meta mono';
+    promptMeta.innerHTML =
+      'asked at <strong>' + escHtml(fmtClock(e.ts)) + '</strong>' +
+      ' · <strong>' + escHtml(e.model) + '</strong>' +
+      ' · <strong>' + escHtml(fmtTokens(e.totalTokens)) + ' tok</strong>' +
+      ' · <strong>' + escHtml(fmtCost(e.cost)) + '</strong>';
+    promptBody.hidden = false;
+    if (typeof e.prompt === 'string' && e.prompt.length > 0) {
+      promptBody.classList.remove('empty');
+      promptBody.textContent = e.prompt;
+    } else {
+      promptBody.classList.add('empty');
+      promptBody.textContent = "this provider doesn't capture prompt text for this event";
     }
   }
 
@@ -937,6 +1277,7 @@ header.bar .meta strong {
     renderActiveBlock();
     renderEventList();
     renderMix(cum);
+    renderPromptPanel();
   }
 
   function setTime(t) {
@@ -1093,6 +1434,7 @@ header.bar .meta strong {
       <span>${report.flowBlocks.length} flow blocks</span>
     </div>
   </header>
+  ${heatmap ? renderHeatmapSection(heatmap, activeDate) : ''}
   ${isEmpty ? emptyBody : mainBody}
 </div>
 <script>window.__REPLAY__ = ${escScript(safeReport)};</script>

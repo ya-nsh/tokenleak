@@ -27,6 +27,7 @@ import type {
   NutritionReport,
   ProviderWarning,
   RenderOptions,
+  ReplayReport,
   TokenleakOutput,
   ProviderData,
 } from '@tokenleak/core';
@@ -61,6 +62,8 @@ import {
   startLiveServer,
   startWrappedLiveServer,
   startReplayLiveServer,
+  type ReplayHeatmapEntry,
+  type ReplayLiveDataProvider,
   colorize256,
   bold256,
   dim,
@@ -82,6 +85,7 @@ import {
 import { TokenleakError, handleError } from './errors.js';
 import { buildExplainHelpText, renderExplainTerminal } from './explain.js';
 import { buildReplayHelpText, renderReplayTerminal } from './replay.js';
+import { CAST_DEFAULT_SPEED, buildReplayCast } from './replay-cast.js';
 import {
   buildReceiptsHelpText,
   collectEventsForReceipt,
@@ -1963,19 +1967,21 @@ function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<strin
 
 export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
   let date: string | null = null;
+  let dateExplicit = false;
 
   if (argv.length > 0 && !argv[0]!.startsWith('-')) {
     date = argv[0]!;
     if (!isValidDateArgument(date)) {
       throw new TokenleakError('tokenleak replay date must be in YYYY-MM-DD format');
     }
+    dateExplicit = true;
   }
 
   if (date === null) {
     date = getTodayLocal();
   }
 
-  const cliArgs: Record<string, unknown> = {};
+  const cliArgs: Record<string, unknown> = { dateExplicit };
   let index = argv[0]?.startsWith('-') ? 0 : 1;
 
   while (index < argv.length) {
@@ -2059,6 +2065,11 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
         cliArgs['interactive'] = true;
         index += 1;
         break;
+      case '--noHeatmap':
+      case '--no-heatmap':
+        cliArgs['noHeatmap'] = true;
+        index += 1;
+        break;
       case '--open':
         cliArgs['open'] = true;
         index += 1;
@@ -2075,6 +2086,31 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
           );
         }
         cliArgs['port'] = port;
+        index += 2;
+        break;
+      }
+      case '--record':
+      case '--cast': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires an output path`);
+        }
+        cliArgs['record'] = raw;
+        index += 2;
+        break;
+      }
+      case '--speed': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        const speed = Number(raw);
+        if (!Number.isFinite(speed) || speed <= 0 || speed > 10_000) {
+          throw new TokenleakError(
+            `--speed must be a positive number ≤ 10000 (got "${raw}")`,
+          );
+        }
+        cliArgs['speed'] = speed;
         index += 2;
         break;
       }
@@ -2328,6 +2364,27 @@ function runCommonsInspect(file: string): void {
   process.stdout.write(`${renderCommonsInspect(report)}\n`);
 }
 
+/**
+ * Group all loaded provider events by date to produce the heatmap entries
+ * that drive the in-browser day-navigation strip.
+ */
+function buildReplayHeatmap(providers: ProviderData[]): ReplayHeatmapEntry[] {
+  const byDate = new Map<string, { tokens: number; cost: number; events: number }>();
+  for (const provider of providers) {
+    const events = provider.events ?? [];
+    for (const e of events) {
+      const cur = byDate.get(e.date) ?? { tokens: 0, cost: 0, events: 0 };
+      cur.tokens += e.totalTokens;
+      cur.cost += e.cost;
+      cur.events += 1;
+      byDate.set(e.date, cur);
+    }
+  }
+  return Array.from(byDate.entries())
+    .map(([date, v]) => ({ date, tokens: v.tokens, cost: v.cost, events: v.events }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'terminal' {
   if (typeof cliArgs['format'] === 'string') {
     const format = cliArgs['format'];
@@ -2351,7 +2408,11 @@ function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'termin
 async function runReplay(date: string, cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const interactive = cliArgs['interactive'] === true;
-  const format = interactive ? 'terminal' : resolveReplayFormat(cliArgs);
+  const recordPath = typeof cliArgs['record'] === 'string' ? cliArgs['record'] : null;
+  if (interactive && recordPath !== null) {
+    throw new TokenleakError('--interactive and --record are mutually exclusive');
+  }
+  const format = interactive || recordPath ? 'terminal' : resolveReplayFormat(cliArgs);
 
   if (
     config.allProviders &&
@@ -2376,11 +2437,34 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   emitProviderWarnings(replayOutput.providers, 'Warning');
   const report = buildReplayReport(replayOutput.providers, date);
 
+  if (recordPath !== null) {
+    const ignored: string[] = [];
+    if (cliArgs['format']) ignored.push('--format');
+    if (cliArgs['output']) ignored.push('--output');
+    if (cliArgs['width']) ignored.push('--width');
+    if (cliArgs['port']) ignored.push('--port');
+    if (cliArgs['open']) ignored.push('--open');
+    if (ignored.length > 0) {
+      process.stderr.write(
+        `Warning: ${ignored.join(', ')} ignored when --record is set.\n`,
+      );
+    }
+    const speed = typeof cliArgs['speed'] === 'number' ? cliArgs['speed'] : CAST_DEFAULT_SPEED;
+    const cast = buildReplayCast(report, { speed });
+    writeFileSync(recordPath, cast);
+    const eventCount = report.events.length;
+    process.stderr.write(
+      `Wrote asciinema cast to ${recordPath} (${eventCount} frame${eventCount === 1 ? '' : 's'} at ${speed}× — play with: asciinema play ${recordPath})\n`,
+    );
+    return;
+  }
+
   if (interactive) {
     const ignored: string[] = [];
     if (cliArgs['format']) ignored.push('--format');
     if (cliArgs['output']) ignored.push('--output');
     if (cliArgs['width']) ignored.push('--width');
+    if (cliArgs['speed']) ignored.push('--speed');
     if (ignored.length > 0) {
       process.stderr.write(
         `Warning: ${ignored.join(', ')} ignored when --interactive is set.\n`,
@@ -2389,7 +2473,48 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
 
     const rawPort = cliArgs['port'];
     const port = typeof rawPort === 'number' && Number.isFinite(rawPort) ? rawPort : undefined;
-    const { port: actualPort, stop } = await startReplayLiveServer(report, port !== undefined ? { port } : {});
+    const noHeatmap = cliArgs['noHeatmap'] === true;
+
+    let serverArg: ReplayReport | ReplayLiveDataProvider = report;
+    if (!noHeatmap) {
+      // Load the last 90 days once. buildReplayReport filters by date, so
+      // navigating between days in the browser just calls it again with a
+      // different date — no re-load.
+      process.stderr.write('Loading 90 days of data for heatmap navigation...\n');
+      const heatmapRange = computeDateRange({ days: 90, until: date });
+      const heatmapOutput = await loadTokenleakData(available, heatmapRange);
+      const heatmapEntries = buildReplayHeatmap(heatmapOutput.providers);
+
+      // If the user didn't pass an explicit date, default the initial view
+      // to the most recent day with events instead of "today" — otherwise
+      // a quiet today renders 0 flow blocks even though plenty of usable
+      // data sits one cell to the left in the heatmap.
+      const dateExplicit = cliArgs['dateExplicit'] === true;
+      let initialDate = date;
+      if (!dateExplicit && heatmapEntries.length > 0) {
+        const latestActive = heatmapEntries
+          .filter((e) => e.events > 0)
+          .reduce<string | null>((acc, e) => (acc === null || e.date > acc ? e.date : acc), null);
+        if (latestActive !== null) {
+          initialDate = latestActive;
+        }
+      }
+      const initialReport = buildReplayReport(heatmapOutput.providers, initialDate);
+      serverArg = {
+        heatmap: heatmapEntries,
+        initialDate,
+        initialReport,
+        getReport: (d: string) => {
+          const reportForDay = buildReplayReport(heatmapOutput.providers, d);
+          return reportForDay.events.length > 0 ? reportForDay : null;
+        },
+      };
+    }
+
+    const { port: actualPort, stop } = await startReplayLiveServer(
+      serverArg,
+      port !== undefined ? { port } : {},
+    );
 
     if (cliArgs['open'] === true) {
       try {

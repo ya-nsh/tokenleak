@@ -6,7 +6,12 @@ describe('parseReplayArgs', () => {
   it('defaults date to today when no positional argument is given', () => {
     const { date, cliArgs } = parseReplayArgs([]);
     expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(cliArgs).toEqual({});
+    expect(cliArgs).toEqual({ dateExplicit: false });
+  });
+
+  it('flags explicit positional dates so the interactive view can pin to them', () => {
+    const { cliArgs } = parseReplayArgs(['2026-04-22']);
+    expect(cliArgs['dateExplicit']).toBe(true);
   });
 
   it('parses a YYYY-MM-DD positional date', () => {
@@ -38,6 +43,29 @@ describe('parseReplayArgs', () => {
 
   it('rejects unknown flags', () => {
     expect(() => parseReplayArgs(['--bogus'])).toThrow(TokenleakError);
+  });
+
+  describe('--record / --cast / --speed', () => {
+    it('parses --record and --cast as the same flag', () => {
+      expect(parseReplayArgs(['--record', 'day.cast']).cliArgs['record']).toBe('day.cast');
+      expect(parseReplayArgs(['--cast', 'day.cast']).cliArgs['record']).toBe('day.cast');
+    });
+
+    it('--record requires an output path', () => {
+      expect(() => parseReplayArgs(['--record'])).toThrow(TokenleakError);
+    });
+
+    it('parses --speed as a positive number', () => {
+      expect(parseReplayArgs(['--speed', '600']).cliArgs['speed']).toBe(600);
+      expect(parseReplayArgs(['--speed', '0.5']).cliArgs['speed']).toBe(0.5);
+    });
+
+    it('rejects non-positive or out-of-range speeds', () => {
+      expect(() => parseReplayArgs(['--speed', '0'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', '-1'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', 'abc'])).toThrow(TokenleakError);
+      expect(() => parseReplayArgs(['--speed', '20000'])).toThrow(TokenleakError);
+    });
   });
 
   describe('--port validation', () => {

@@ -44,6 +44,35 @@ describe('buildStatusBar', () => {
     expect(text).toContain('Refresh failed: provider blew up');
     expect(text).toContain('r:retry');
   });
+
+  test('always shows the [o] interactive replay CTA chip on every non-modal view', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+
+    const overviewText = collectTextContent(buildStatusBar(state)).join('');
+    expect(overviewText).toContain('[o] interactive replay');
+
+    state.selectedView = 'wrapped';
+    const wrappedText = collectTextContent(buildStatusBar(state)).join('');
+    expect(wrappedText).toContain('[o] interactive replay');
+
+    state.selectedView = 'receipts';
+    const receiptsText = collectTextContent(buildStatusBar(state)).join('');
+    expect(receiptsText).toContain('[o] interactive replay');
+    // Receipts sort moved off [o] — make sure the new key shows up.
+    expect(receiptsText).toContain('S:sort');
+    expect(receiptsText).not.toContain('o:sort');
+  });
+
+  test('CTA chip swaps to the open-status form once the live server is running', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    state.replayLiveServerPort = 3567;
+
+    const text = collectTextContent(buildStatusBar(state)).join('');
+    expect(text).toContain('replay open :3567');
+    expect(text).not.toContain('[o] interactive replay');
+  });
 });
 
 describe('createHelpPanel', () => {
