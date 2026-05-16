@@ -123,7 +123,7 @@ export function buildReceiptsHelpText(): string {
     '      --no-color          Accepted for parity with terminal output',
     '      --help              Show receipts help',
     '',
-    'Note: prompt capture currently only works for Claude Code logs.',
+    'Note: prompt capture currently works for Claude Code and Codex logs when prompt text is present.',
     '',
     'Examples:',
     '  tokenleak receipts',

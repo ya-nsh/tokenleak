@@ -90,7 +90,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_receipt_lines',
-    'Generate an itemized receipt of AI coding spend by prompt behavior. Clusters repeated prompts into line items with categories (debugging, styling, refactoring, etc.) and aggregates cost per cluster. Prompt capture currently requires Claude Code logs.',
+    'Generate an itemized receipt of AI coding spend by prompt behavior. Clusters repeated prompts into line items with categories (debugging, styling, refactoring, etc.) and aggregates cost per cluster. Prompt capture currently uses Claude Code and Codex logs when prompt text is present.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 30)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),

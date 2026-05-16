@@ -1187,7 +1187,7 @@ header.bar .meta strong {
       promptBody.textContent = e.prompt;
     } else {
       promptBody.classList.add('empty');
-      promptBody.textContent = "this provider doesn't capture prompt text — only Claude Code stores prompts in its session logs";
+      promptBody.textContent = "this provider doesn't capture prompt text for this event";
     }
   }
 

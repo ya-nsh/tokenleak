@@ -54,6 +54,7 @@ interface CodexUsageRecord {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  prompt?: string;
   sessionId?: string;
   projectId?: string;
 }
@@ -66,6 +67,7 @@ interface SessionContext {
     outputTokens: number;
     cachedInputTokens: number;
   } | null;
+  lastUserPrompt?: string;
 }
 
 /**
@@ -222,6 +224,63 @@ function inferProjectIdFromContext(record: unknown): string | null {
   return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null;
 }
 
+function extractTextElementText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const obj = value as Record<string, unknown>;
+  for (const key of ['text', 'content', 'message'] as const) {
+    if (typeof obj[key] === 'string') {
+      return obj[key];
+    }
+  }
+
+  return null;
+}
+
+function extractUserPrompt(record: unknown): string | null {
+  if (typeof record !== 'object' || record === null) {
+    return null;
+  }
+
+  const obj = record as Record<string, unknown>;
+  if (obj['type'] !== 'event_msg') {
+    return null;
+  }
+
+  const payload = obj['payload'];
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+
+  const eventPayload = payload as Record<string, unknown>;
+  if (eventPayload['type'] !== 'user_message') {
+    return null;
+  }
+
+  if (typeof eventPayload['message'] === 'string' && eventPayload['message'].trim().length > 0) {
+    return eventPayload['message'].replace(/\s+$/g, '').trimStart();
+  }
+
+  const parts: string[] = [];
+  const textElements = eventPayload['text_elements'];
+  if (Array.isArray(textElements)) {
+    for (const element of textElements) {
+      const text = extractTextElementText(element);
+      if (text) {
+        parts.push(text);
+      }
+    }
+  }
+
+  const prompt = parts.join('\n\n').replace(/\s+$/g, '').trimStart();
+  return prompt.length > 0 ? prompt : null;
+}
+
 function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUsageRecord | null {
   if (typeof record !== 'object' || record === null) {
     return null;
@@ -314,6 +373,7 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     outputTokens: usage.outputTokens,
     cacheReadTokens,
     cacheWriteTokens: 0,
+    prompt: context.lastUserPrompt,
   };
 }
 
@@ -329,6 +389,12 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
       context.model = inferredModel;
       context.previousTotals = null;
     }
+    return null;
+  }
+
+  const userPrompt = extractUserPrompt(record);
+  if (userPrompt) {
+    context.lastUserPrompt = userPrompt;
     return null;
   }
 
@@ -355,6 +421,7 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     outputTokens: legacyEvent.usage.output_tokens,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    prompt: context.lastUserPrompt,
   };
 }
 
@@ -396,6 +463,7 @@ export class CodexProvider implements IProvider {
         model: 'gpt-5',
         projectId: undefined,
         previousTotals: null,
+        lastUserPrompt: undefined,
       };
       const relativeFile = relative(this.sessionsDir, file).split(sep).join('/');
       const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
@@ -445,6 +513,7 @@ export class CodexProvider implements IProvider {
             unpricedTokens: cost.unpricedTokens,
             sessionId: usage.sessionId,
             projectId: usage.projectId,
+            prompt: usage.prompt,
           });
         }
       } catch {

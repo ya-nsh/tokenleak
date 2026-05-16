@@ -111,6 +111,8 @@ describe('generateReplayLiveHtml', () => {
     expect(html).toContain('id="promptMeta"');
     expect(html).toContain('id="promptBody"');
     expect(html).toContain('// prompt sent to model');
+    expect(html).toContain("this provider doesn't capture prompt text for this event");
+    expect(html).not.toContain('only Claude Code stores prompts');
   });
 
   it('embeds prompt text from events into window.__REPLAY__', () => {

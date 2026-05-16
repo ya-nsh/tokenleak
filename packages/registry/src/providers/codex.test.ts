@@ -97,6 +97,10 @@ describe('CodexProvider', () => {
     expect(data.daily[0]!.totalTokens).toBe(2880);
     expect(data.totalTokens).toBe(2880);
     expect(data.totalCost).toBeCloseTo(0.010375, 8);
+    expect(data.events?.map((event) => event.prompt)).toEqual([
+      'implement replay prompt capture for Codex',
+      'show me the latest replay token delta',
+    ]);
     expect(data.costCompleteness).toMatchObject({
       status: 'complete',
       totalTokens: 2880,

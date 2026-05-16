@@ -47,7 +47,7 @@ export async function handleGetReceiptLines(
               warnings,
               note:
                 events.length > 0 && receipt.lines.length === 0
-                  ? 'No events carried captured prompts. Prompt capture currently only works for Claude Code logs.'
+                  ? 'No events carried captured prompts. Prompt capture currently works for Claude Code and Codex logs when prompt text is present.'
                   : undefined,
             },
             null,
