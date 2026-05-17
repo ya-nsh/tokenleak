@@ -43,7 +43,7 @@ export async function handleGetUsageSummary(
     }
 
     const merged = mergeProviderData(data);
-    const stats = aggregate(merged, range.until);
+    const stats = aggregate(merged, range.until, range);
 
     return {
       content: [

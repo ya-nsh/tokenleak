@@ -272,6 +272,24 @@ describe('MCP Server', () => {
     expect(typeof parsed.deltas.cost).toBe('number');
   });
 
+  it('rejects invalid compare_periods ranges', async () => {
+    const { client } = await createConnectedClient();
+
+    const result = await client.callTool({
+      name: 'compare_periods',
+      arguments: {
+        current_since: '2025-02-30',
+        current_until: '2025-01-31',
+        previous_since: '2024-12-01',
+        previous_until: '2024-12-31',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]!.text).toContain('Invalid since date');
+  });
+
   it('calls get_efficiency_advice and returns advisor report', async () => {
     const { client } = await createConnectedClient();
 

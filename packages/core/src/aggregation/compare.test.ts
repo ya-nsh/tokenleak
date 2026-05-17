@@ -335,6 +335,20 @@ describe('compareRanges', () => {
     expect(result.deltas.activeDays).toBe(4 - 3);
   });
 
+  it('uses full period lengths for sparse average daily deltas', () => {
+    const sparseDaily: DailyUsage[] = [
+      makeDailyUsage('2026-01-31', 3100, 0.31),
+      makeDailyUsage('2026-02-28', 2800, 0.28),
+    ];
+    const result = compareRanges(sparseDaily, rangeA, rangeB);
+
+    expect(result.periodA.stats.totalDays).toBe(31);
+    expect(result.periodB.stats.totalDays).toBe(28);
+    expect(result.periodA.stats.averageDailyTokens).toBe(100);
+    expect(result.periodB.stats.averageDailyTokens).toBe(100);
+    expect(result.deltas.averageDailyTokens).toBe(0);
+  });
+
   it('correctly filters data to each range', () => {
     const result = compareRanges(daily, rangeA, rangeB);
 
