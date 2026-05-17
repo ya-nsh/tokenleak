@@ -92,7 +92,7 @@ async function loadAndAggregate(
   }
 
   const mergedDaily = mergeProviderData(providerDataList);
-  const stats = aggregate(mergedDaily, range.until);
+  const stats = aggregate(mergedDaily, range.until, range);
   stats.costCompleteness = mergeCostCompleteness(providerDataList);
 
   return { data: providerDataList, stats };

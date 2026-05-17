@@ -286,7 +286,7 @@ export async function loadAllData(options: LoadAllDataOptions = {}): Promise<Tui
     const since = daysAgoStr(days - 1); // trailing N days including today
     const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
-    const stats = aggregate(filtered, today);
+    const stats = aggregate(filtered, today, dateRange);
     windows.push({ label, days, stats, dateRange, daily: filtered, nutritionOutcomeSignals: [] });
   }
 

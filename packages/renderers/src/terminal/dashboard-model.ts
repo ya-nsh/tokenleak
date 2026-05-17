@@ -220,8 +220,8 @@ function buildTopModelPatterns(stats: AggregatedStats): PatternEntry[] {
     }));
 }
 
-function buildProviderModel(provider: ProviderData, until: string): ProviderDashboardModel | null {
-  const stats = aggregate(provider.daily, until);
+function buildProviderModel(provider: ProviderData, dateRange: TokenleakOutput['dateRange']): ProviderDashboardModel | null {
+  const stats = aggregate(provider.daily, dateRange.until, dateRange);
   if (stats.totalTokens <= 0) {
     return null;
   }
@@ -283,7 +283,7 @@ export function buildDashboardModel(
   const inactiveProviders: string[] = [];
 
   for (const provider of output.providers) {
-    const model = buildProviderModel(provider, output.dateRange.until);
+    const model = buildProviderModel(provider, output.dateRange);
     if (model) {
       activeProviders.push(model);
     } else {

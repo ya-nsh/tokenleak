@@ -1661,7 +1661,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);
-  const stats = aggregate(mergedDaily, dateRange.until);
+  const stats = aggregate(mergedDaily, dateRange.until, dateRange);
 
   // Force --more when --advisor is used (needs event data)
   const needsMore =

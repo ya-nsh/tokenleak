@@ -31,7 +31,7 @@ export async function handleOverview(registry: ProviderRegistry): Promise<string
   }
 
   const merged = mergeProviderData(data);
-  const stats = aggregate(merged, range.until);
+  const stats = aggregate(merged, range.until, range);
 
   return JSON.stringify(
     {

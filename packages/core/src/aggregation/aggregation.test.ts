@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type {
+  DateRange,
   DailyUsage,
   ProviderData,
   ProviderColors,
@@ -450,6 +451,21 @@ describe('aggregate', () => {
     expect(result.totalInputTokens).toBe(150);
     expect(result.totalOutputTokens).toBe(150);
     expect(result.rolling30dTopModel).toBe('claude-3-opus');
+  });
+
+  test('uses the selected date range when averaging sparse data', () => {
+    const range: DateRange = { since: '2025-01-01', until: '2025-01-30' };
+    const days = [
+      makeDay('2025-01-29', 300, 0.03),
+      makeDay('2025-01-30', 600, 0.06),
+    ];
+
+    const result = aggregate(days, range.until, range);
+
+    expect(result.activeDays).toBe(2);
+    expect(result.totalDays).toBe(30);
+    expect(result.averageDailyTokens).toBe(30);
+    expect(result.averageDailyCost).toBeCloseTo(0.003);
   });
 
   test('rolling30dTopModel returns model with most tokens in 30-day window', () => {

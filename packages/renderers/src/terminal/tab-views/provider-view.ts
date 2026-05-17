@@ -26,7 +26,7 @@ function getLastActiveDate(output: TokenleakOutput, providerName: string): strin
 export function renderProviderView(output: TokenleakOutput, width: number, noColor: boolean): string {
   const rows = output.providers
     .map((provider) => {
-      const stats = aggregate(provider.daily, output.dateRange.until);
+      const stats = aggregate(provider.daily, output.dateRange.until, output.dateRange);
       return {
         provider,
         stats,
