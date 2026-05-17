@@ -83,8 +83,8 @@ import {
 import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
-import { createSimulatorPanel } from './panels/simulator.js';
-import { createWastePanel } from './panels/waste.js';
+import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, SIMULATOR_VISIBLE_ROWS } from './panels/simulator.js';
+import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, WASTE_VISIBLE_ROWS } from './panels/waste.js';
 import { createBehaviorPanel } from './panels/behavior.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
@@ -453,7 +453,11 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           ensureRoutingSimulationReport(state);
         });
       }
-      return createSimulatorPanel(state.cachedRoutingSimulationReport);
+      return createSimulatorPanel(
+        state.cachedRoutingSimulationReport,
+        state.simulatorScrollOffset,
+        getPanelContentWidth(renderer, SIMULATOR_MAX_CONTENT_WIDTH),
+      );
     case 'waste':
       if (!hasWindowData) {
         return createWastePanel(null);
@@ -464,7 +468,11 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           ensureAgentWasteReport(state);
         });
       }
-      return createWastePanel(state.cachedAgentWasteReport);
+      return createWastePanel(
+        state.cachedAgentWasteReport,
+        state.wasteScrollOffset,
+        getPanelContentWidth(renderer, WASTE_MAX_CONTENT_WIDTH),
+      );
     case 'behavior':
       if (!hasWindowData) {
         return createBehaviorPanel(null);
@@ -1241,6 +1249,7 @@ function getVisibleCount(view: ViewMode): number {
       return RECEIPTS_VISIBLE_ROWS;
     case 'simulator':
     case 'waste':
+      return view === 'simulator' ? SIMULATOR_VISIBLE_ROWS : WASTE_VISIBLE_ROWS;
     case 'behavior':
       return 8;
     default:
