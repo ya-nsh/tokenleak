@@ -9,6 +9,20 @@ import { handleGetStreaksAndHabits } from './get-streaks-and-habits.js';
 import { handleComparePeriods } from './compare-periods.js';
 import { handleGetEfficiencyAdvice } from './get-efficiency-advice.js';
 import { handleGetReceiptLines } from './get-receipt-lines.js';
+import { handleGetRoutingSimulation } from './get-routing-simulation.js';
+import { handleGetAgentWaste } from './get-agent-waste.js';
+import { handleGetAgentBehaviorDiff } from './get-agent-behavior-diff.js';
+
+const behaviorSelectorSchema = z.object({
+  label: z.string(),
+  dimension: z.enum(['provider', 'model', 'project', 'repo', 'date-range', 'session-style']),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  projectId: z.string().optional(),
+  repoRoot: z.string().optional(),
+  dateRange: z.object({ since: z.string(), until: z.string() }).optional(),
+  taskStyle: z.enum(['quick-hit', 'iterative', 'deep-work', 'mixed']).optional(),
+});
 
 export function registerTools(server: McpServer, registry: ProviderRegistry): void {
   server.tool(
@@ -105,5 +119,44 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
         .describe('Maximum number of line items to return (default: 12, max: 100)'),
     },
     async (args) => handleGetReceiptLines(args, registry),
+  );
+
+  server.tool(
+    'get_routing_simulation',
+    'Simulate model-routing savings by re-pricing historical events under conservative or manual downgrade rules.',
+    {
+      days: z.number().optional().describe('Number of days to look back (default: 30)'),
+      since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+      until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
+      provider: z.string().optional().describe('Filter to a specific provider by name'),
+      strategy: z.string().optional().describe('Routing strategy name, default conservative'),
+    },
+    async (args) => handleGetRoutingSimulation(args, registry),
+  );
+
+  server.tool(
+    'get_agent_waste',
+    'Detect agent waste signals such as context drag, repeated prompts, model churn, and cache waste.',
+    {
+      days: z.number().optional().describe('Number of days to look back (default: 30)'),
+      since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+      until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
+      provider: z.string().optional().describe('Filter to a specific provider by name'),
+      severity: z.enum(['all', 'high', 'medium', 'low']).optional().describe('Optional severity filter'),
+    },
+    async (args) => handleGetAgentWaste(args, registry),
+  );
+
+  server.tool(
+    'get_agent_behavior_diff',
+    'Compare two cohorts by provider, model, project, repo, date range, or session style.',
+    {
+      days: z.number().optional().describe('Number of days to look back (default: 30)'),
+      since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+      until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
+      baseline: behaviorSelectorSchema.describe('Baseline cohort selector'),
+      comparison: behaviorSelectorSchema.describe('Comparison cohort selector'),
+    },
+    async (args) => handleGetAgentBehaviorDiff(args, registry),
   );
 }

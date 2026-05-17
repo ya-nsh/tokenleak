@@ -11,6 +11,9 @@ import {
   renderModelView,
   renderTokenView,
   renderCwdView,
+  renderRoutingSimulatorView,
+  renderAgentWasteView,
+  renderAgentBehaviorDiffView,
   TIME_RANGES,
   METRIC_TABS,
 } from '@tokenleak/renderers';
@@ -82,8 +85,8 @@ async function loadForRange(
 
   const range = resolveRange(state, timeRange);
   const loadPromise = (state.compare
-    ? loadCompareTokenleakData(providers, range, state.compare).then((result) => result.output)
-    : loadTokenleakData(providers, range))
+    ? loadCompareTokenleakData(providers, range, state.compare, { includeOptimization: true }).then((result) => result.output)
+    : loadTokenleakData(providers, range, { includeOptimization: true }))
     .then((output) => {
       state.dataCache.set(timeRange, output);
       return output;
@@ -138,6 +141,9 @@ function renderActiveView(
     case 'cwd': return renderCwdView(output, width, noColor);
     case 'dow': return renderDowView(output, width, noColor);
     case 'tod': return renderTodView(output, width, noColor);
+    case 'sim': return renderRoutingSimulatorView(output, width, noColor);
+    case 'waste': return renderAgentWasteView(output, width, noColor);
+    case 'diff': return renderAgentBehaviorDiffView(output, width, noColor);
     default: return renderOverviewView(output, options);
   }
 }
@@ -351,8 +357,9 @@ export async function startTabbedDashboard(
 
         // Number keys 1-9 to jump to specific tab
         const digit = key.sequence?.match(/^[1-9]$/)?.[0];
-        if (digit) {
-          const tabIdx = Number(digit) - 1;
+        const zero = key.sequence === '0';
+        if (digit || zero) {
+          const tabIdx = zero ? 9 : Number(digit) - 1;
           if (tabIdx < METRIC_TABS.length) {
             state.metricTab = METRIC_TABS[tabIdx]!;
             state.scrollOffset = 0;

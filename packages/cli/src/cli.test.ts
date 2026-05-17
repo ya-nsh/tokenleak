@@ -797,7 +797,9 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('--more');
     expect(stdout).toContain('tokenleak explain <date>');
     expect(stdout).toContain('focus');
-    expect(stdout).not.toContain('tokenleak waste');
+    expect(stdout).toContain('tokenleak simulate-routing');
+    expect(stdout).toContain('tokenleak waste');
+    expect(stdout).toContain('tokenleak behavior-diff');
     expect(stdout).toContain('interactive launcher');
     expect(stdout).toContain('Examples:');
   });
@@ -874,16 +876,74 @@ describe('CLI invocation', () => {
     expect(stderr).toContain('--days must be a positive number');
   });
 
-  test('waste is not exposed as a standalone command', async () => {
+  test('waste --help exits with code 0 and prints waste usage', async () => {
     const proc = Bun.spawn(['bun', cliPath, 'waste', '--help'], {
       stdout: 'pipe',
       stderr: 'pipe',
     });
     const exitCode = await proc.exited;
-    const stderr = await new Response(proc.stderr).text();
+    const stdout = await new Response(proc.stdout).text();
 
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain('Advisor view for Waste Patterns');
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('tokenleak waste');
+    expect(stdout).toContain('agent waste signals');
+  });
+
+  test('waste emits a JSON agent waste report', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const waste = Bun.spawn(['bun', cliPath, 'waste', '--format', 'json', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const wasteExit = await waste.exited;
+      const wasteStdout = await new Response(waste.stdout).text();
+      expect(wasteExit).toBe(0);
+      expect(JSON.parse(wasteStdout).summary).toBeDefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('simulate-routing emits a JSON routing report', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const simulate = Bun.spawn(['bun', cliPath, 'simulate-routing', '--format', 'json', '--provider', 'pi'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env,
+      });
+      const simulateExit = await simulate.exited;
+      const simulateStdout = await new Response(simulate.stdout).text();
+      expect(simulateExit).toBe(0);
+      expect(JSON.parse(simulateStdout).strategy).toBe('conservative');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('behavior-diff emits a JSON behavior diff report', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const diff = Bun.spawn(
+        ['bun', cliPath, 'behavior-diff', '--format', 'json', '--provider', 'pi,claude-code'],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
+      const diffExit = await diff.exited;
+      const diffStdout = await new Response(diff.stdout).text();
+      expect(diffExit).toBe(0);
+      expect(JSON.parse(diffStdout).takeaways).toBeArray();
+    } finally {
+      cleanup();
+    }
   });
 
   test('--version prints version', async () => {

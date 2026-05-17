@@ -142,6 +142,11 @@ tokenleak focus --provider codex --days 30
 tokenleak nutrition
 tokenleak nutrition --days 30 --format json
 
+# Optimization intelligence
+tokenleak simulate-routing --days 30
+tokenleak waste --severity high
+tokenleak behavior-diff --provider claude-code,codex --days 30 --format json
+
 # Authenticate Cursor and sync its local cache
 tokenleak cursor login --name work
 
@@ -151,7 +156,7 @@ tokenleak --list-providers
 
 ### Analysis commands
 
-Tokenleak ships three dedicated investigation commands in addition to the main dashboard flow:
+Tokenleak ships dedicated investigation and optimization commands in addition to the main dashboard flow:
 
 ```bash
 # Explain what drove a specific day
@@ -181,12 +186,24 @@ tokenleak nutrition --days 30
 
 # Emit the AI ROI report as JSON
 tokenleak nutrition --format json --output ai-roi.json
+
+# Estimate savings from model routing
+tokenleak simulate-routing --days 30
+
+# Detect agent waste signals with evidence and recipes
+tokenleak waste --days 30
+
+# Compare two agent/provider/model cohorts
+tokenleak behavior-diff --provider claude-code,codex --days 30
 ```
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
 - `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI on `http://localhost:3567` — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
+- `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.
+- `tokenleak waste` detects deterministic waste signals such as context drag, repeated prompt clusters, model churn, cache misses, and premium models used for small tasks.
+- `tokenleak behavior-diff` compares cohorts such as provider-vs-provider or model-vs-model and emits deterministic takeaways for engineering teams.
 
 ### Cursor commands
 
