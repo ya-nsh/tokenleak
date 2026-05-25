@@ -9,6 +9,7 @@ import {
   loadCursorCredentialsStore,
   removeAllCursorAccounts,
   resetCursorProviderState,
+  runCursorCommand,
   saveCursorCredentials,
   setActiveCursorAccount,
   shouldSyncCursorForRun,
@@ -24,21 +25,47 @@ const SAMPLE_CSV = [
 ].join('\n');
 
 describe('cursor auth and sync helpers', () => {
-  const originalCursorDir = process.env['TOKENLEAK_CURSOR_DIR'];
   const originalFetch = globalThis.fetch;
+  const originalEnv = { ...process.env };
   let tempRoot = '';
 
   beforeEach(() => {
     tempRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cursor-'));
     process.env['TOKENLEAK_CURSOR_DIR'] = tempRoot;
+    for (const key of [
+      'TOKENLEAK_CURSOR_PROXY',
+      'TOKENLEAK_CURSOR_CA_FILE',
+      'TOKENLEAK_CURSOR_TIMEOUT_MS',
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
+      'NO_PROXY',
+      'no_proxy',
+    ]) {
+      delete process.env[key];
+    }
     globalThis.fetch = originalFetch;
   });
 
   afterEach(() => {
-    if (originalCursorDir === undefined) {
-      delete process.env['TOKENLEAK_CURSOR_DIR'];
-    } else {
-      process.env['TOKENLEAK_CURSOR_DIR'] = originalCursorDir;
+    for (const key of [
+      'TOKENLEAK_CURSOR_DIR',
+      'TOKENLEAK_CURSOR_PROXY',
+      'TOKENLEAK_CURSOR_CA_FILE',
+      'TOKENLEAK_CURSOR_TIMEOUT_MS',
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
+      'NO_PROXY',
+      'no_proxy',
+    ]) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
     }
     globalThis.fetch = originalFetch;
     rmSync(tempRoot, { recursive: true, force: true });
@@ -167,5 +194,77 @@ describe('cursor auth and sync helpers', () => {
     expect(existsSync(getCursorCredentialsPath())).toBe(false);
     expect(existsSync(join(getCursorCacheDir(), 'usage.csv'))).toBe(false);
     expect(listCursorAccounts()).toEqual([]);
+  });
+
+  test('cursor help includes doctor diagnostics', async () => {
+    let output = '';
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      await runCursorCommand(['--help']);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    expect(output).toContain('tokenleak cursor doctor [--name <label>] [--with-token] [--insecure-skip-tls-verify]');
+  });
+
+  test('cursor doctor redacts proxy credentials and saved token details', async () => {
+    process.env['TOKENLEAK_CURSOR_PROXY'] = 'http://user:secret@proxy.company:8080';
+    saveCursorCredentials('user-work::super-secret-token', 'work');
+    globalThis.fetch = (async (url, init) => {
+      const cookie = String((init?.headers as Record<string, string> | undefined)?.['Cookie'] ?? '');
+      const hasToken = cookie.includes('super-secret-token');
+      if (String(url).includes('/api/usage-summary')) {
+        if (!hasToken) {
+          return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401 });
+        }
+        return new Response(JSON.stringify({
+          billingCycleStart: '2026-03-01',
+          billingCycleEnd: '2026-03-31',
+          membershipType: 'pro',
+        }), { status: 200 });
+      }
+      if (!hasToken) {
+        return new Response('', { status: 307, headers: { location: 'https://api.workos.com' } });
+      }
+      return new Response(SAMPLE_CSV, { status: 200 });
+    }) as typeof fetch;
+
+    let output = '';
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      await runCursorCommand(['doctor', '--name', 'work', '--with-token']);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    expect(output).toContain('Cursor network doctor');
+    expect(output).toContain('Proxy: http://***:***@proxy.company:8080');
+    expect(output).toContain('Token check: enabled');
+    expect(output).not.toContain('super-secret-token');
+    expect(output).not.toContain('user:secret');
+    expect(output).not.toContain('Set-Cookie');
+  });
+
+  test('cursor login network errors point to doctor and Cursor network env vars', async () => {
+    globalThis.fetch = (async () => {
+      throw new Error('self signed certificate in certificate chain');
+    }) as typeof fetch;
+
+    await expect(validateCursorSession('token-123')).resolves.toMatchObject({
+      valid: false,
+      reason: 'network',
+      error: expect.stringContaining('TOKENLEAK_CURSOR_CA_FILE'),
+    });
   });
 });

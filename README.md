@@ -196,6 +196,7 @@ Use these commands to manage Cursor authentication and the local cache that Toke
 tokenleak cursor login --name work
 tokenleak cursor status
 tokenleak cursor accounts --json
+tokenleak cursor doctor
 tokenleak cursor switch work
 tokenleak cursor logout --name work
 tokenleak cursor logout --all --purge-cache
@@ -237,6 +238,28 @@ bun packages/cli/dist/cli.js --provider cursor --format json
 - `tokenleak --list-providers` reports whether local provider data exists. For Cursor, that means `cursor-cache/usage*.csv` must already be present.
 - If `cursor status` is valid but `--list-providers` still shows Cursor as unavailable, run `tokenleak --provider cursor` once to sync the cache, then rerun `--list-providers`.
 - Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
+
+#### Corporate VPN / protected network
+
+If `tokenleak cursor login` works off VPN but fails on a company protected VPN with a connection, proxy, or certificate error, run the token-free doctor first:
+
+```bash
+tokenleak cursor doctor
+```
+
+For managed proxy networks, pass a Cursor-specific proxy or use your standard shell proxy variables:
+
+```bash
+TOKENLEAK_CURSOR_PROXY=http://proxy.company:8080 tokenleak cursor doctor
+```
+
+For TLS inspection networks, export the company root CA as a PEM file and point Tokenleak at it:
+
+```bash
+TOKENLEAK_CURSOR_CA_FILE=/path/company-root-ca.pem tokenleak cursor doctor --with-token
+```
+
+Tokenleak also honors `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, and `TOKENLEAK_CURSOR_TIMEOUT_MS` for Cursor API requests. `tokenleak cursor doctor --insecure-skip-tls-verify` exists only to prove that TLS inspection is the failure mode; do not use it for normal login or sync.
 
 ### Date filtering
 
