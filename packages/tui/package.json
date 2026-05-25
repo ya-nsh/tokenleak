@@ -18,7 +18,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@opentui/core": "^0.1.88",
+    "@opentui/core": "^0.2.15",
     "@tokenleak/core": "workspace:*",
     "@tokenleak/registry": "workspace:*",
     "@tokenleak/renderers": "workspace:*"
