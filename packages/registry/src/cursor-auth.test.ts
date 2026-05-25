@@ -3,9 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  classifyCursorNetworkError,
+  diagnoseCursorConnection,
   getCursorCacheDir,
   removeAllCursorAccounts,
   resolveCursorSetupStatus,
+  resolveCursorNetworkSettings,
   saveCursorCredentials,
   validateCursorSession,
 } from './cursor-auth';
@@ -17,21 +20,47 @@ const SAMPLE_CSV = [
 ].join('\n');
 
 describe('resolveCursorSetupStatus', () => {
-  const originalCursorDir = process.env['TOKENLEAK_CURSOR_DIR'];
   const originalFetch = globalThis.fetch;
+  const originalEnv = { ...process.env };
   let tempRoot = '';
 
   beforeEach(() => {
     tempRoot = mkdtempSync(join(tmpdir(), 'tokenleak-cursor-status-'));
     process.env['TOKENLEAK_CURSOR_DIR'] = tempRoot;
+    for (const key of [
+      'TOKENLEAK_CURSOR_PROXY',
+      'TOKENLEAK_CURSOR_CA_FILE',
+      'TOKENLEAK_CURSOR_TIMEOUT_MS',
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
+      'NO_PROXY',
+      'no_proxy',
+    ]) {
+      delete process.env[key];
+    }
     globalThis.fetch = originalFetch;
   });
 
   afterEach(() => {
-    if (originalCursorDir === undefined) {
-      delete process.env['TOKENLEAK_CURSOR_DIR'];
-    } else {
-      process.env['TOKENLEAK_CURSOR_DIR'] = originalCursorDir;
+    for (const key of [
+      'TOKENLEAK_CURSOR_DIR',
+      'TOKENLEAK_CURSOR_PROXY',
+      'TOKENLEAK_CURSOR_CA_FILE',
+      'TOKENLEAK_CURSOR_TIMEOUT_MS',
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
+      'NO_PROXY',
+      'no_proxy',
+    ]) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
     }
     globalThis.fetch = originalFetch;
     rmSync(tempRoot, { recursive: true, force: true });
@@ -134,5 +163,106 @@ describe('resolveCursorSetupStatus', () => {
 
     expect(existsSync(join(getCursorCacheDir(), 'usage.csv'))).toBe(false);
     expect(existsSync(join(getCursorCacheDir(), 'archive'))).toBe(false);
+  });
+
+  test('resolves Cursor proxy settings and honors NO_PROXY for Cursor hosts', () => {
+    process.env['TOKENLEAK_CURSOR_PROXY'] = 'http://user:secret@proxy.company:8080';
+    process.env['HTTPS_PROXY'] = 'http://fallback.company:8080';
+
+    expect(resolveCursorNetworkSettings('https://cursor.com/api/usage-summary')).toMatchObject({
+      proxy: 'http://user:secret@proxy.company:8080',
+      proxySource: 'TOKENLEAK_CURSOR_PROXY',
+      noProxyMatched: false,
+    });
+
+    process.env['NO_PROXY'] = '.cursor.com,localhost';
+    expect(resolveCursorNetworkSettings('https://www.cursor.com/settings')).toMatchObject({
+      proxy: undefined,
+      proxySource: undefined,
+      noProxyMatched: true,
+    });
+  });
+
+  test('resolves Cursor CA file and timeout settings for fetch', () => {
+    const caPath = join(tempRoot, 'company-root-ca.pem');
+    writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n');
+    process.env['TOKENLEAK_CURSOR_CA_FILE'] = caPath;
+    process.env['TOKENLEAK_CURSOR_TIMEOUT_MS'] = '45000';
+
+    const settings = resolveCursorNetworkSettings('https://cursor.com/api/usage-summary');
+
+    expect(settings.timeoutMs).toBe(45000);
+    expect(settings.caFile).toBe(caPath);
+    expect(settings.tls?.ca).toContain('BEGIN CERTIFICATE');
+  });
+
+  test('classifies DNS, TLS, proxy, and timeout network errors', () => {
+    expect(classifyCursorNetworkError(new Error('getaddrinfo ENOTFOUND cursor.com')).kind).toBe('dns');
+    expect(classifyCursorNetworkError(new Error('self signed certificate in certificate chain')).kind).toBe('tls');
+    expect(classifyCursorNetworkError(new Error('Proxy CONNECT aborted while tunneling')).kind).toBe('proxy');
+
+    const aborted = new Error('aborted');
+    aborted.name = 'AbortError';
+    expect(classifyCursorNetworkError(aborted).kind).toBe('timeout');
+  });
+
+  test('diagnoses Cursor reachability without leaking token or proxy secrets', async () => {
+    process.env['TOKENLEAK_CURSOR_PROXY'] = 'http://user:secret@proxy.company:8080';
+    saveCursorCredentials('user-work::super-secret-token', 'work');
+    const cookies: string[] = [];
+
+    globalThis.fetch = (async (url, init) => {
+      cookies.push(String((init?.headers as Record<string, string> | undefined)?.['Cookie'] ?? ''));
+      const hasToken = cookies.at(-1)?.includes('super-secret-token') ?? false;
+      if (String(url).includes('/api/usage-summary')) {
+        if (!hasToken) {
+          return new Response(JSON.stringify({ error: 'not_authenticated' }), { status: 401 });
+        }
+        return new Response(JSON.stringify({
+          billingCycleStart: '2026-03-01',
+          billingCycleEnd: '2026-03-31',
+          membershipType: 'pro',
+        }), { status: 200 });
+      }
+      if (!hasToken) {
+        return new Response('', { status: 307, headers: { location: 'https://api.workos.com' } });
+      }
+      return new Response(SAMPLE_CSV, { status: 200 });
+    }) as typeof fetch;
+
+    const result = await diagnoseCursorConnection({
+      credentials: { sessionToken: 'user-work::super-secret-token' },
+      includeToken: true,
+    });
+
+    expect(result.network.proxy).toBe('http://***:***@proxy.company:8080');
+    expect(result.checks.every((check) => check.ok)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('super-secret-token');
+    expect(JSON.stringify(result)).not.toContain('user:secret');
+    expect(cookies.some((cookie) => cookie.includes('super-secret-token'))).toBe(true);
+  });
+
+  test('diagnoses a missing Cursor CA file instead of throwing', async () => {
+    const missingCaPath = join(tempRoot, 'missing-company-root-ca.pem');
+    process.env['TOKENLEAK_CURSOR_CA_FILE'] = missingCaPath;
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response('unexpected', { status: 200 });
+    }) as typeof fetch;
+
+    const result = await diagnoseCursorConnection();
+
+    expect(called).toBe(false);
+    expect(result.network.caFile).toBe(missingCaPath);
+    expect(result.checks).toEqual([
+      expect.objectContaining({
+        name: 'ca-file',
+        ok: false,
+        kind: 'tls',
+        message: expect.stringContaining('missing-company-root-ca.pem'),
+        hint: expect.stringContaining('TOKENLEAK_CURSOR_CA_FILE'),
+      }),
+    ]);
   });
 });
