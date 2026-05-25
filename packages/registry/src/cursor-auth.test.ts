@@ -241,4 +241,28 @@ describe('resolveCursorSetupStatus', () => {
     expect(JSON.stringify(result)).not.toContain('user:secret');
     expect(cookies.some((cookie) => cookie.includes('super-secret-token'))).toBe(true);
   });
+
+  test('diagnoses a missing Cursor CA file instead of throwing', async () => {
+    const missingCaPath = join(tempRoot, 'missing-company-root-ca.pem');
+    process.env['TOKENLEAK_CURSOR_CA_FILE'] = missingCaPath;
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response('unexpected', { status: 200 });
+    }) as typeof fetch;
+
+    const result = await diagnoseCursorConnection();
+
+    expect(called).toBe(false);
+    expect(result.network.caFile).toBe(missingCaPath);
+    expect(result.checks).toEqual([
+      expect.objectContaining({
+        name: 'ca-file',
+        ok: false,
+        kind: 'tls',
+        message: expect.stringContaining('missing-company-root-ca.pem'),
+        hint: expect.stringContaining('TOKENLEAK_CURSOR_CA_FILE'),
+      }),
+    ]);
+  });
 });

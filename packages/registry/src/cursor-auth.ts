@@ -116,6 +116,7 @@ export interface CursorNetworkSettings {
   proxyDisplay?: string;
   noProxyMatched: boolean;
   caFile?: string;
+  caFileError?: string;
   tls?: {
     ca?: string;
     rejectUnauthorized?: boolean;
@@ -300,9 +301,14 @@ export function resolveCursorNetworkSettings(
   const candidate = noProxyMatched ? {} : getProxyCandidate();
   const caFile = envValue('TOKENLEAK_CURSOR_CA_FILE');
   const tls: CursorNetworkSettings['tls'] = {};
+  let caFileError: string | undefined;
 
   if (caFile) {
-    tls.ca = readFileSync(caFile, 'utf8');
+    try {
+      tls.ca = readFileSync(caFile, 'utf8');
+    } catch (error: unknown) {
+      caFileError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   if (overrides.insecureSkipTlsVerify) {
@@ -316,6 +322,7 @@ export function resolveCursorNetworkSettings(
     proxyDisplay: candidate.proxy ? redactProxy(candidate.proxy) : undefined,
     noProxyMatched,
     caFile,
+    caFileError,
     tls: Object.keys(tls).length > 0 ? tls : undefined,
   };
 }
@@ -399,6 +406,13 @@ function buildFetchInit(
   overrides: CursorNetworkOverrides = {},
 ): { init: CursorFetchInit; settings: CursorNetworkSettings } {
   const settings = resolveCursorNetworkSettings(url, overrides);
+  if (settings.caFileError) {
+    throw new CursorAuthError(
+      `Failed to read TOKENLEAK_CURSOR_CA_FILE (${settings.caFile}): ${settings.caFileError}. Check the file path or export the company root CA as a readable PEM file.`,
+      'network',
+    );
+  }
+
   const fetchInit: CursorFetchInit = { ...init };
   if (settings.proxy) {
     fetchInit.proxy = settings.proxy;
@@ -932,6 +946,27 @@ export async function diagnoseCursorConnection(options: {
   const overrides = { insecureSkipTlsVerify: options.insecureSkipTlsVerify };
   const settings = resolveCursorNetworkSettings(CURSOR_USAGE_SUMMARY_ENDPOINT, overrides);
   const checks: CursorDiagnosticCheck[] = [];
+  const network = {
+    timeoutMs: settings.timeoutMs,
+    proxy: settings.proxyDisplay,
+    proxySource: settings.proxySource,
+    noProxyMatched: settings.noProxyMatched,
+    caFile: settings.caFile,
+    tlsVerification: options.insecureSkipTlsVerify ? 'disabled' as const : 'enabled' as const,
+  };
+
+  if (settings.caFileError) {
+    return {
+      network,
+      checks: [{
+        name: 'ca-file',
+        ok: false,
+        message: `Could not read TOKENLEAK_CURSOR_CA_FILE (${settings.caFile}): ${settings.caFileError}`,
+        kind: 'tls',
+        hint: 'Check that TOKENLEAK_CURSOR_CA_FILE points to a readable PEM file, or unset it and rerun `tokenleak cursor doctor`.',
+      }],
+    };
+  }
 
   checks.push(await runDiagnosticFetch(
     'usage-summary-baseline',
@@ -1090,14 +1125,7 @@ export async function diagnoseCursorConnection(options: {
   }
 
   return {
-    network: {
-      timeoutMs: settings.timeoutMs,
-      proxy: settings.proxyDisplay,
-      proxySource: settings.proxySource,
-      noProxyMatched: settings.noProxyMatched,
-      caFile: settings.caFile,
-      tlsVerification: options.insecureSkipTlsVerify ? 'disabled' : 'enabled',
-    },
+    network,
     checks,
   };
 }

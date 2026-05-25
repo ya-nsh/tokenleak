@@ -267,4 +267,27 @@ describe('cursor auth and sync helpers', () => {
       error: expect.stringContaining('TOKENLEAK_CURSOR_CA_FILE'),
     });
   });
+
+  test('cursor doctor reports a missing CA file without crashing', async () => {
+    const missingCaPath = join(tempRoot, 'missing-company-root-ca.pem');
+    process.env['TOKENLEAK_CURSOR_CA_FILE'] = missingCaPath;
+    let output = '';
+    const originalWrite = process.stdout.write;
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      await runCursorCommand(['doctor']);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    expect(output).toContain('Cursor network doctor');
+    expect(output).toContain('CA file:');
+    expect(output).toContain(missingCaPath);
+    expect(output).toContain('[fail] ca-file');
+    expect(output).toContain('TOKENLEAK_CURSOR_CA_FILE');
+  });
 });
