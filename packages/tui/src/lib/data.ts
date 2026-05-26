@@ -63,7 +63,6 @@ import {
   ZedProvider,
   KiroProvider,
   TraeProvider,
-  SyntheticProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -257,7 +256,6 @@ function createRegistry(): ProviderRegistry {
   registry.register(new ZedProvider());
   registry.register(new KiroProvider());
   registry.register(new TraeProvider());
-  registry.register(new SyntheticProvider());
   registry.register(new OpenCodeProvider());
   registry.register(new PiProvider());
   return registry;

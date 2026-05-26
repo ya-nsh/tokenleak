@@ -780,6 +780,25 @@ describe('run', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test('resolveTabbedDashboardProviders excludes synthetic from default provider scans', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-default-cli-'));
+    const dbPath = join(root, 'sqlite.db');
+    const db = new Database(dbPath);
+    db.run('CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)');
+    db.run("INSERT INTO messages VALUES ('m1', 'hf:org/model', 1, 1, 1770724800000, 's1')");
+    db.close();
+    const previousEnv = process.env;
+
+    try {
+      process.env = { ...process.env, TOKENLEAK_SYNTHETIC_DIR: dbPath };
+      const providers = await resolveTabbedDashboardProviders({ providerNames: [] });
+      expect(providers.map((provider) => provider.name)).not.toContain('synthetic');
+    } finally {
+      process.env = previousEnv;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('runFocus', () => {

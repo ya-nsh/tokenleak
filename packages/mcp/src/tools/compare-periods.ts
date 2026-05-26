@@ -9,7 +9,7 @@ import {
 } from '@tokenleak/core';
 import type { DateRange } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 async function loadAndAggregate(
   providers: Awaited<ReturnType<ProviderRegistry['getAvailable']>>,
@@ -51,7 +51,7 @@ export async function handleComparePeriods(
       previousRange = computePreviousPeriod(currentRange);
     }
 
-    const available = await registry.getAvailable();
+    const available = await getAvailableProvidersForRequest(registry);
 
     const [currentResult, previousResult] = await Promise.all([
       loadAndAggregate(available, currentRange),

@@ -145,7 +145,11 @@ function rowToRecord(row: HermesRow, range: DateRange): LocalUsageRecord | null 
     nonNegativeNumber(row.reasoning_tokens);
   const cacheReadTokens = nonNegativeNumber(row.cache_read_tokens);
   const cacheWriteTokens = nonNegativeNumber(row.cache_write_tokens);
-  if (inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens === 0) {
+  const explicitCost = safeNumber(row.actual_cost_usd) ?? safeNumber(row.estimated_cost_usd) ?? undefined;
+  if (
+    inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens === 0 &&
+    !(explicitCost !== undefined && explicitCost > 0)
+  ) {
     return null;
   }
 
@@ -157,7 +161,7 @@ function rowToRecord(row: HermesRow, range: DateRange): LocalUsageRecord | null 
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
-    explicitCost: safeNumber(row.actual_cost_usd) ?? safeNumber(row.estimated_cost_usd) ?? undefined,
+    explicitCost,
     sessionId: row.id,
     projectId: stringValue(row.billing_provider) ?? undefined,
   };

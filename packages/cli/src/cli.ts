@@ -194,6 +194,7 @@ const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   zed: ['zed-agent'],
   synthetic: ['octofriend'],
 };
+const EXPLICIT_ONLY_PROVIDERS = new Set(['synthetic']);
 
 interface ProviderFilterConfig {
   provider?: string;
@@ -254,6 +255,10 @@ function providerMatchesFilter(provider: IProvider, requested: Set<string>): boo
   ];
 
   return candidates.some((candidate) => requested.has(candidate));
+}
+
+function isExplicitOnlyProvider(provider: IProvider): boolean {
+  return EXPLICIT_ONLY_PROVIDERS.has(provider.name);
 }
 
 function buildHelpText(): string {
@@ -711,6 +716,10 @@ async function selectAvailableProviders(
 
   const registry = createRegistry();
   let available = await registry.getAvailable();
+
+  if (!requestedProviders.has('synthetic')) {
+    available = available.filter((provider) => !isExplicitOnlyProvider(provider));
+  }
 
   if (!config.allProviders && requestedProviders.size > 0) {
     if (

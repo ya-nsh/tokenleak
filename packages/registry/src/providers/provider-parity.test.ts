@@ -397,6 +397,36 @@ describe('provider parity providers', () => {
     expect(data.events?.[0]?.sessionId).toBe('hermes-minimal-session');
   });
 
+  it('preserves Hermes provider-reported cost when token columns are absent', async () => {
+    const root = tempDir('hermes-cost-only');
+    const dbPath = join(root, 'state.db');
+    const db = new Database(dbPath);
+    db.run(`
+      CREATE TABLE sessions (
+        id TEXT,
+        model TEXT,
+        started_at REAL,
+        actual_cost_usd REAL
+      )
+    `);
+    db.run(`
+      INSERT INTO sessions VALUES (
+        'hermes-cost-only-session',
+        'claude-sonnet-4',
+        1770724800,
+        1.25
+      )
+    `);
+    db.close();
+
+    const data = await new HermesProvider(dbPath).load(RANGE);
+
+    expect(data.provider).toBe('hermes');
+    expect(data.totalTokens).toBe(0);
+    expect(data.totalCost).toBe(1.25);
+    expect(data.events?.[0]?.sessionId).toBe('hermes-cost-only-session');
+  });
+
   it('loads Codebuff chat message usage from project chat files', async () => {
     const root = tempDir('codebuff');
     const chatDir = join(root, 'projects', 'repo-a', 'chats', '2026-02-10T12-00-00.000Z');
@@ -696,6 +726,50 @@ describe('provider parity providers', () => {
     expect(data.provider).toBe('zed');
     expect(data.totalTokens).toBe(18);
     expect(data.events?.[0]?.projectId).toBe('zed');
+  });
+
+  it('loads Zed threads when TOKENLEAK_ZED_DIR points at the data directory', async () => {
+    const previousEnv = process.env;
+    const root = tempDir('zed-env-dir');
+    const threadsDir = join(root, 'threads');
+    mkdirSync(threadsDir, { recursive: true });
+    const dbPath = join(threadsDir, 'threads.db');
+    const db = new Database(dbPath);
+    db.run(`
+      CREATE TABLE threads (
+        id TEXT,
+        updated_at TEXT,
+        folder_paths TEXT,
+        folder_paths_order TEXT,
+        data_type TEXT,
+        data BLOB
+      )
+    `);
+    db.run('INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?)', [
+      'zed-env-hosted',
+      '2026-02-10T12:00:00.000Z',
+      JSON.stringify(['/repo/zed-env']),
+      JSON.stringify([0]),
+      'json',
+      Buffer.from(JSON.stringify({
+        model: { provider: 'zed.dev', model: 'claude-sonnet-4' },
+        usage: { input_tokens: 5, output_tokens: 4 },
+      })),
+    ]);
+    db.close();
+
+    try {
+      process.env = { ...process.env, TOKENLEAK_ZED_DIR: root };
+      const provider = new ZedProvider();
+      const data = await provider.load(RANGE);
+
+      expect(await provider.isAvailable()).toBe(true);
+      expect(data.provider).toBe('zed');
+      expect(data.totalTokens).toBe(9);
+      expect(data.events?.[0]?.sessionId).toBe('zed-env-hosted');
+    } finally {
+      process.env = previousEnv;
+    }
   });
 
   it('loads Kiro CLI file sessions with explicit turn token counts', async () => {

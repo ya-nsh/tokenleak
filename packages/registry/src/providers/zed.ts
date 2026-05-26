@@ -36,7 +36,12 @@ interface ZedRow {
 }
 
 function defaultDbPaths(): string[] {
-  if (process.env['TOKENLEAK_ZED_DIR']) return [process.env['TOKENLEAK_ZED_DIR']];
+  const override = process.env['TOKENLEAK_ZED_DIR'];
+  if (override) {
+    return override.endsWith('.db')
+      ? [override]
+      : [join(override, 'threads', 'threads.db'), join(override, 'threads.db')];
+  }
   const paths = [
     join(process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local', 'share'), 'zed', 'threads', 'threads.db'),
     join(homedir(), 'Library', 'Application Support', 'Zed', 'threads', 'threads.db'),

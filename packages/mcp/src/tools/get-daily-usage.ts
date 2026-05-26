@@ -1,7 +1,7 @@
 import { buildDailyCostCompleteness, mergeProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 const DEFAULT_DAILY_DAYS = 14;
 
@@ -11,10 +11,7 @@ export async function handleGetDailyUsage(
 ) {
   try {
     const range = resolveRange(args, DEFAULT_DAILY_DAYS);
-    const available = await registry.getAvailable();
-    const filtered = args.provider
-      ? available.filter((p) => p.name === args.provider)
-      : available;
+    const filtered = await getAvailableProvidersForRequest(registry, args.provider);
 
     const { data, warnings } = await loadProviderData(filtered, range);
 
