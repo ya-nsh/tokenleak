@@ -2,7 +2,7 @@ import { buildReceipt, SCHEMA_VERSION } from '@tokenleak/core';
 import type { UsageEvent } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 export async function handleGetReceiptLines(
   args: { days?: number; since?: string; until?: string; provider?: string; topLines?: number },
@@ -10,10 +10,7 @@ export async function handleGetReceiptLines(
 ) {
   try {
     const range = resolveRange(args);
-    const available = await registry.getAvailable();
-    const filtered = args.provider
-      ? available.filter((p) => p.name === args.provider)
-      : available;
+    const filtered = await getAvailableProvidersForRequest(registry, args.provider);
 
     const { data, warnings } = await loadProviderData(filtered, range);
 

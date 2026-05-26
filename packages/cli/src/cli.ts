@@ -46,11 +46,23 @@ import {
   GeminiProvider,
   CopilotProvider,
   AmpProvider,
+  CodebuffProvider,
+  DroidProvider,
   QwenProvider,
   RooCodeProvider,
   KiloCodeProvider,
+  KimiProvider,
+  KiloProvider,
+  MuxProvider,
+  CrushProvider,
   OpenClawProvider,
   HermesProvider,
+  GooseProvider,
+  AntigravityProvider,
+  ZedProvider,
+  KiroProvider,
+  TraeProvider,
+  SyntheticProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -140,16 +152,34 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'copilot-otel': 'copilot',
   amp: 'amp',
   'sourcegraph-amp': 'amp',
+  codebuff: 'codebuff',
+  manicode: 'codebuff',
+  droid: 'droid',
+  factory: 'droid',
   qwen: 'qwen',
   'roo-code': 'roo-code',
   roo: 'roo-code',
   roocode: 'roo-code',
   'kilo-code': 'kilo-code',
-  kilo: 'kilo-code',
   kilocode: 'kilo-code',
+  kimi: 'kimi',
+  'kimi-cli': 'kimi',
+  kilo: 'kilo',
+  'kilo-cli': 'kilo',
+  mux: 'mux',
+  crush: 'crush',
   openclaw: 'openclaw',
   'open-claw': 'openclaw',
   hermes: 'hermes',
+  'hermes-agent': 'hermes',
+  goose: 'goose',
+  antigravity: 'antigravity',
+  zed: 'zed',
+  'zed-agent': 'zed',
+  kiro: 'kiro',
+  trae: 'trae',
+  synthetic: 'synthetic',
+  octofriend: 'synthetic',
 };
 const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'claude-code': ['anthropic', 'claude', 'claudecode'],
@@ -160,10 +190,18 @@ const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   gemini: ['google'],
   copilot: ['github-copilot', 'copilot-otel'],
   amp: ['sourcegraph-amp'],
+  codebuff: ['manicode'],
+  droid: ['factory'],
   'roo-code': ['roo', 'roocode'],
-  'kilo-code': ['kilo', 'kilocode'],
+  'kilo-code': ['kilocode'],
+  kimi: ['kimi-cli'],
+  kilo: ['kilo-cli'],
   openclaw: ['open-claw'],
+  hermes: ['hermes-agent'],
+  zed: ['zed-agent'],
+  synthetic: ['octofriend'],
 };
+const EXPLICIT_ONLY_PROVIDERS = new Set(['synthetic']);
 
 interface ProviderFilterConfig {
   provider?: string;
@@ -224,6 +262,10 @@ function providerMatchesFilter(provider: IProvider, requested: Set<string>): boo
   ];
 
   return candidates.some((candidate) => requested.has(candidate));
+}
+
+function isExplicitOnlyProvider(provider: IProvider): boolean {
+  return EXPLICIT_ONLY_PROVIDERS.has(provider.name);
 }
 
 function buildHelpText(): string {
@@ -672,11 +714,23 @@ function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new GeminiProvider());
   registry.register(new CopilotProvider());
   registry.register(new AmpProvider());
+  registry.register(new CodebuffProvider());
+  registry.register(new DroidProvider());
   registry.register(new QwenProvider());
   registry.register(new RooCodeProvider());
   registry.register(new KiloCodeProvider());
+  registry.register(new KimiProvider());
+  registry.register(new KiloProvider());
+  registry.register(new MuxProvider());
+  registry.register(new CrushProvider());
   registry.register(new OpenClawProvider());
   registry.register(new HermesProvider());
+  registry.register(new GooseProvider());
+  registry.register(new AntigravityProvider());
+  registry.register(new ZedProvider());
+  registry.register(new KiroProvider());
+  registry.register(new TraeProvider());
+  registry.register(new SyntheticProvider());
   registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
 }
@@ -744,6 +798,10 @@ async function selectAvailableProviders(
 
   const registry = createRegistry();
   let available = await registry.getAvailable();
+
+  if (!requestedProviders.has('synthetic')) {
+    available = available.filter((provider) => !isExplicitOnlyProvider(provider));
+  }
 
   if (!config.allProviders && requestedProviders.size > 0) {
     if (
@@ -1247,6 +1305,19 @@ const PROVIDER_COLORS: Record<string, number> = {
   'claude-code': 179, // amber
   codex: 71, // green
   cursor: 78, // spring green
+  codebuff: 33,
+  droid: 208,
+  kimi: 244,
+  kilo: 214,
+  mux: 205,
+  crush: 196,
+  goose: 37,
+  antigravity: 99,
+  zed: 38,
+  kiro: 63,
+  trae: 44,
+  synthetic: 42,
+  hermes: 35,
   pi: 73, // cyan/teal
   'open-code': 68, // indigo/steel blue
 };

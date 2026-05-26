@@ -1,9 +1,22 @@
 import type { DateRange, ProviderData, ProviderWarning } from '@tokenleak/core';
-import type { IProvider } from '@tokenleak/registry';
+import type { IProvider, ProviderRegistry } from '@tokenleak/registry';
+
+const EXPLICIT_ONLY_PROVIDERS = new Set(['synthetic']);
 
 export interface LoadedProviderData {
   data: ProviderData[];
   warnings: ProviderWarning[];
+}
+
+export async function getAvailableProvidersForRequest(
+  registry: ProviderRegistry,
+  providerName?: string,
+): Promise<IProvider[]> {
+  const available = await registry.getAvailable();
+  if (providerName) {
+    return available.filter((provider) => provider.name === providerName);
+  }
+  return available.filter((provider) => !EXPLICIT_ONLY_PROVIDERS.has(provider.name));
 }
 
 export async function loadProviderData(

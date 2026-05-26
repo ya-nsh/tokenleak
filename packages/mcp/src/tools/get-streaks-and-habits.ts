@@ -1,7 +1,7 @@
 import { aggregate, mergeProviderData, buildMoreStats } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 const DEFAULT_HABITS_DAYS = 90;
 
@@ -11,7 +11,7 @@ export async function handleGetStreaksAndHabits(
 ) {
   try {
     const range = resolveRange(args, DEFAULT_HABITS_DAYS);
-    const available = await registry.getAvailable();
+    const available = await getAvailableProvidersForRequest(registry);
 
     const { data, warnings } = await loadProviderData(available, range);
 

@@ -48,6 +48,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { Database } from 'bun:sqlite';
 
 const REGISTRY_FIXTURES_DIR = join(import.meta.dir, '..', '..', 'registry', 'src', '__fixtures__');
 
@@ -760,6 +761,44 @@ describe('run', () => {
       cleanup();
     }
   });
+
+  test('resolveTabbedDashboardProviders keeps synthetic selection scoped', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-cli-'));
+    const dbPath = join(root, 'sqlite.db');
+    const db = new Database(dbPath);
+    db.run('CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)');
+    db.run("INSERT INTO messages VALUES ('m1', 'hf:org/model', 1, 1, 1770724800000, 's1')");
+    db.close();
+    const previousEnv = process.env;
+
+    try {
+      process.env = { ...process.env, TOKENLEAK_SYNTHETIC_DIR: dbPath };
+      const providers = await resolveTabbedDashboardProviders({ providerNames: ['synthetic'] });
+      expect(providers.map((provider) => provider.name)).toEqual(['synthetic']);
+    } finally {
+      process.env = previousEnv;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('resolveTabbedDashboardProviders excludes synthetic from default provider scans', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-default-cli-'));
+    const dbPath = join(root, 'sqlite.db');
+    const db = new Database(dbPath);
+    db.run('CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)');
+    db.run("INSERT INTO messages VALUES ('m1', 'hf:org/model', 1, 1, 1770724800000, 's1')");
+    db.close();
+    const previousEnv = process.env;
+
+    try {
+      process.env = { ...process.env, TOKENLEAK_SYNTHETIC_DIR: dbPath };
+      const providers = await resolveTabbedDashboardProviders({ providerNames: [] });
+      expect(providers.map((provider) => provider.name)).not.toContain('synthetic');
+    } finally {
+      process.env = previousEnv;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('runFocus', () => {
@@ -985,15 +1024,30 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('gemini');
     expect(stdout).toContain('copilot');
     expect(stdout).toContain('amp');
+    expect(stdout).toContain('codebuff');
+    expect(stdout).toContain('droid');
     expect(stdout).toContain('qwen');
     expect(stdout).toContain('roo-code');
     expect(stdout).toContain('kilo-code');
+    expect(stdout).toContain('kimi');
+    expect(stdout).toContain('kilo');
+    expect(stdout).toContain('mux');
+    expect(stdout).toContain('crush');
     expect(stdout).toContain('openclaw');
     expect(stdout).toContain('hermes');
+    expect(stdout).toContain('goose');
+    expect(stdout).toContain('antigravity');
+    expect(stdout).toContain('zed');
+    expect(stdout).toContain('kiro');
+    expect(stdout).toContain('trae');
+    expect(stdout).toContain('synthetic');
     expect(stdout).toContain('pi');
     expect(stdout).toContain('open-code');
     expect(stdout).toContain('github-copilot');
     expect(stdout).toContain('sourcegraph-amp');
+    expect(stdout).toContain('manicode');
+    expect(stdout).toContain('kilo-cli');
+    expect(stdout).toContain('octofriend');
   });
 
   test('--all-providers with provider filter exits with code 1', async () => {

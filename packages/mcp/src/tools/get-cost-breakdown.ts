@@ -1,7 +1,7 @@
 import { aggregate, mergeProviderData } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 export async function handleGetCostBreakdown(
   args: { days?: number; since?: string; until?: string },
@@ -9,7 +9,7 @@ export async function handleGetCostBreakdown(
 ) {
   try {
     const range = resolveRange(args);
-    const available = await registry.getAvailable();
+    const available = await getAvailableProvidersForRequest(registry);
 
     const { data, warnings } = await loadProviderData(available, range);
 

@@ -80,6 +80,18 @@ const PROVIDER_COLORS: Record<string, { dark: string; light: string }> = {
   codex:         { dark: '#3a5070', light: '#4a6a90' },
   google:        { dark: '#6a2535', light: '#8a3548' },
   cursor:        { dark: '#7c5cbf', light: '#6a4aaa' },
+  codebuff:      { dark: '#2563eb', light: '#1d4ed8' },
+  droid:         { dark: '#f97316', light: '#c2410c' },
+  kimi:          { dark: '#9ca3af', light: '#374151' },
+  kilo:          { dark: '#f59e0b', light: '#b45309' },
+  mux:           { dark: '#ec4899', light: '#be185d' },
+  crush:         { dark: '#ef4444', light: '#b91c1c' },
+  goose:         { dark: '#0f766e', light: '#0f766e' },
+  antigravity:   { dark: '#7c3aed', light: '#6d28d9' },
+  zed:           { dark: '#0891b2', light: '#0e7490' },
+  kiro:          { dark: '#6366f1', light: '#4f46e5' },
+  trae:          { dark: '#06b6d4', light: '#0891b2' },
+  synthetic:     { dark: '#10b981', light: '#047857' },
   pi:            { dark: '#5a4a70', light: '#706088' },
 };
 

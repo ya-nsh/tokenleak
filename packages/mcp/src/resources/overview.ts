@@ -6,11 +6,11 @@ import {
 } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
-import { loadProviderData } from '../shared/provider-load.js';
+import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 export async function handleOverview(registry: ProviderRegistry): Promise<string> {
   const range = resolveRange({});
-  const available = await registry.getAvailable();
+  const available = await getAvailableProvidersForRequest(registry);
 
   const { data, warnings } = await loadProviderData(available, range);
 
