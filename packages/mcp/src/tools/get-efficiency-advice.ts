@@ -42,7 +42,7 @@ export async function handleGetEfficiencyAdvice(
     }
 
     const merged = mergeProviderData(data);
-    const stats = aggregate(merged, range.until);
+    const stats = aggregate(merged, range.until, range);
     const more = buildMoreStats(data, range);
 
     const output = {

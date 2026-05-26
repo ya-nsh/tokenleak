@@ -26,6 +26,9 @@ export {
   renderModelView,
   renderTokenView,
   renderCwdView,
+  renderRoutingSimulatorView,
+  renderAgentWasteView,
+  renderAgentBehaviorDiffView,
   TIME_RANGES,
   METRIC_TABS,
 } from './tab-views';

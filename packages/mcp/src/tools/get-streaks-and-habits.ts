@@ -31,7 +31,7 @@ export async function handleGetStreaksAndHabits(
     }
 
     const merged = mergeProviderData(data);
-    const stats = aggregate(merged, range.until);
+    const stats = aggregate(merged, range.until, range);
     const more = buildMoreStats(data, range);
 
     return {

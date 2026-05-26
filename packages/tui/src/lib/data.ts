@@ -1,5 +1,8 @@
 import type {
   AggregatedStats,
+  AgentBehaviorDiffReport,
+  AgentWasteReport,
+  BehaviorCohortSelector,
   AdvisorReport,
   CompareOutput,
   DailyUsage,
@@ -13,6 +16,7 @@ import type {
   Receipt,
   ReceiptLine,
   ReplayReport,
+  RoutingSimulationReport,
   TokenleakOutput,
   UsageEvent,
   WasteReport,
@@ -23,11 +27,14 @@ import { dirname, join } from 'node:path';
 import {
   aggregate,
   analyzeEfficiency,
+  buildAgentBehaviorDiffReport,
+  buildAgentWasteReport,
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
   buildNutritionReport,
   buildReceipt,
+  buildRoutingSimulationReport,
   buildDailyCostCompleteness,
   buildReplayReport,
   buildWasteReport,
@@ -308,7 +315,7 @@ export async function loadAllData(options: LoadAllDataOptions = {}): Promise<Tui
     const since = daysAgoStr(days - 1); // trailing N days including today
     const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
-    const stats = aggregate(filtered, today);
+    const stats = aggregate(filtered, today, dateRange);
     windows.push({ label, days, stats, dateRange, daily: filtered, nutritionOutcomeSignals: [] });
   }
 
@@ -483,6 +490,79 @@ export function ensureWasteReport(state: AppState): WasteReport | null {
 
   const report = buildWasteReport(output);
   state.cachedWasteReport = report;
+  return report;
+}
+
+export function ensureAgentWasteReport(state: AppState): AgentWasteReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedAgentWasteReport) return state.cachedAgentWasteReport;
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const report = buildAgentWasteReport(scoped.scopedProviders, scoped.events, scoped.windowRange);
+  state.cachedAgentWasteReport = report;
+  return report;
+}
+
+export function ensureRoutingSimulationReport(state: AppState): RoutingSimulationReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedRoutingSimulationReport) return state.cachedRoutingSimulationReport;
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const report = buildRoutingSimulationReport(scoped.events, scoped.windowRange, MODEL_PRICING, {
+    strategy: 'conservative',
+  });
+  state.cachedRoutingSimulationReport = report;
+  return report;
+}
+
+function defaultBehaviorSelectors(scoped: ScopedWindowData): [BehaviorCohortSelector, BehaviorCohortSelector] {
+  const providerTotals = scoped.scopedProviders
+    .map((provider) => ({
+      provider: provider.provider,
+      label: provider.displayName,
+      tokens: provider.totalTokens,
+    }))
+    .sort((a, b) => b.tokens - a.tokens || a.label.localeCompare(b.label));
+
+  if (providerTotals.length >= 2) {
+    return [
+      { label: providerTotals[0]!.label, dimension: 'provider', provider: providerTotals[0]!.provider },
+      { label: providerTotals[1]!.label, dimension: 'provider', provider: providerTotals[1]!.provider },
+    ];
+  }
+
+  const models = new Map<string, number>();
+  for (const event of scoped.events) {
+    models.set(event.model, (models.get(event.model) ?? 0) + event.totalTokens);
+  }
+  const modelTotals = [...models.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (modelTotals.length >= 2) {
+    return [
+      { label: modelTotals[0]![0], dimension: 'model', model: modelTotals[0]![0] },
+      { label: modelTotals[1]![0], dimension: 'model', model: modelTotals[1]![0] },
+    ];
+  }
+
+  return [
+    { label: 'Current window', dimension: 'date-range', dateRange: scoped.windowRange },
+    { label: 'Current window', dimension: 'date-range', dateRange: scoped.windowRange },
+  ];
+}
+
+export function ensureAgentBehaviorDiffReport(state: AppState): AgentBehaviorDiffReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedBehaviorDiffReport) return state.cachedBehaviorDiffReport;
+
+  const scoped = getScopedWindowData(state);
+  if (!scoped) return null;
+
+  const [baseline, comparison] = defaultBehaviorSelectors(scoped);
+  const report = buildAgentBehaviorDiffReport(scoped.events, scoped.windowRange, baseline, comparison);
+  state.cachedBehaviorDiffReport = report;
   return report;
 }
 

@@ -1,5 +1,30 @@
 import type { DateRange } from '@tokenleak/core';
-import { DEFAULT_DAYS, formatDateStringUtc, ONE_DAY_MS } from '@tokenleak/core';
+import { DEFAULT_DAYS, getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
+
+const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDate(date: string): boolean {
+  if (!DATE_FORMAT.test(date)) {
+    return false;
+  }
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
+
+export function assertValidDate(label: 'since' | 'until', date: string): void {
+  if (!isValidDate(date)) {
+    throw new Error(`Invalid ${label} date: "${date}". Use YYYY-MM-DD format.`);
+  }
+}
+
+export function validateRange(range: DateRange): DateRange {
+  assertValidDate('since', range.since);
+  assertValidDate('until', range.until);
+  if (range.since > range.until) {
+    throw new Error('since must not be after until');
+  }
+  return range;
+}
 
 /**
  * Resolve a date range from optional `days`, `since`, and `until` parameters.
@@ -12,16 +37,20 @@ export function resolveRange(
   args: { days?: number; since?: string; until?: string },
   defaultDays: number = DEFAULT_DAYS,
 ): DateRange {
-  const now = new Date();
-  const untilDate = args.until ?? formatDateStringUtc(now);
+  const untilDate = args.until ?? getTodayLocal();
   const days = args.days ?? defaultDays;
 
-  if (args.since) {
-    return { since: args.since, until: untilDate };
+  if (!Number.isFinite(days) || days <= 0) {
+    throw new Error('days must be a positive number');
   }
 
-  const sinceMs = Date.parse(`${untilDate}T00:00:00Z`) - (days - 1) * ONE_DAY_MS;
-  const sinceDate = formatDateStringUtc(new Date(sinceMs));
+  assertValidDate('until', untilDate);
+
+  if (args.since) {
+    return validateRange({ since: args.since, until: untilDate });
+  }
+
+  const sinceDate = shiftDateStringLocal(untilDate, -(days - 1));
 
   return { since: sinceDate, until: untilDate };
 }

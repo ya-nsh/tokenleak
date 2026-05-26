@@ -79,6 +79,9 @@ export function createHelpPanel() {
           ['9', 'Replay'],
           ['0', 'AI ROI'],
           ['R', 'Receipts'],
+          ['X', 'Routing Simulator'],
+          ['Y', 'Waste Signals'],
+          ['Z', 'Behavior Diff'],
           ['?', 'Help'],
         ]),
         ...helpSection('EXPLAIN VIEW', [

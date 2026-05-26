@@ -9,6 +9,7 @@ import {
 } from '@tokenleak/core';
 import type { DateRange } from '@tokenleak/core';
 import type { ProviderRegistry } from '@tokenleak/registry';
+import { assertValidDate, validateRange } from '../shared/date-range.js';
 import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
 
 async function loadAndAggregate(
@@ -17,7 +18,7 @@ async function loadAndAggregate(
 ) {
   const { data, warnings } = await loadProviderData(providers, range);
   const merged = mergeProviderData(data);
-  const stats = aggregate(merged, range.until);
+  const stats = aggregate(merged, range.until, range);
   return { stats, warnings };
 }
 
@@ -31,22 +32,23 @@ export async function handleComparePeriods(
   registry: ProviderRegistry,
 ) {
   try {
-    const currentRange: DateRange = {
+    const currentRange = validateRange({
       since: args.current_since,
       until: args.current_until ?? getTodayLocal(),
-    };
+    });
 
     let previousRange: DateRange;
     if (args.previous_since && args.previous_until) {
-      previousRange = { since: args.previous_since, until: args.previous_until };
+      previousRange = validateRange({ since: args.previous_since, until: args.previous_until });
     } else if (args.previous_since) {
-      previousRange = { since: args.previous_since, until: currentRange.since };
+      previousRange = validateRange({ since: args.previous_since, until: currentRange.since });
     } else if (args.previous_until) {
+      assertValidDate('until', args.previous_until);
       const currentDays = inclusiveDaySpan(currentRange.since, currentRange.until);
-      previousRange = {
+      previousRange = validateRange({
         since: shiftDateStringLocal(args.previous_until, -(currentDays - 1)),
         until: args.previous_until,
-      };
+      });
     } else {
       previousRange = computePreviousPeriod(currentRange);
     }

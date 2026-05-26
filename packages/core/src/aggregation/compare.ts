@@ -101,8 +101,8 @@ export function compareRanges(
   const dailyA = filterByRange(daily, rangeA);
   const dailyB = filterByRange(daily, rangeB);
 
-  const statsA = aggregate(dailyA, rangeA.until);
-  const statsB = aggregate(dailyB, rangeB.until);
+  const statsA = aggregate(dailyA, rangeA.until, rangeA);
+  const statsB = aggregate(dailyB, rangeB.until, rangeB);
 
   const deltas = computeDeltas(statsA, statsB);
 
