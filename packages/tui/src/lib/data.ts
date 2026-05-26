@@ -47,11 +47,23 @@ import {
   GeminiProvider,
   CopilotProvider,
   AmpProvider,
+  CodebuffProvider,
+  DroidProvider,
   QwenProvider,
   RooCodeProvider,
   KiloCodeProvider,
+  KimiProvider,
+  KiloProvider,
+  MuxProvider,
+  CrushProvider,
   OpenClawProvider,
   HermesProvider,
+  GooseProvider,
+  AntigravityProvider,
+  ZedProvider,
+  KiroProvider,
+  TraeProvider,
+  SyntheticProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -229,11 +241,23 @@ function createRegistry(): ProviderRegistry {
   registry.register(new GeminiProvider());
   registry.register(new CopilotProvider());
   registry.register(new AmpProvider());
+  registry.register(new CodebuffProvider());
+  registry.register(new DroidProvider());
   registry.register(new QwenProvider());
   registry.register(new RooCodeProvider());
   registry.register(new KiloCodeProvider());
+  registry.register(new KimiProvider());
+  registry.register(new KiloProvider());
+  registry.register(new MuxProvider());
+  registry.register(new CrushProvider());
   registry.register(new OpenClawProvider());
   registry.register(new HermesProvider());
+  registry.register(new GooseProvider());
+  registry.register(new AntigravityProvider());
+  registry.register(new ZedProvider());
+  registry.register(new KiroProvider());
+  registry.register(new TraeProvider());
+  registry.register(new SyntheticProvider());
   registry.register(new OpenCodeProvider());
   registry.register(new PiProvider());
   return registry;

@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Gemini**, **GitHub Copilot**, **Amp**, **Qwen**, **Roo Code**, **Kilo Code**, **OpenClaw**, **Hermes**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
+See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Gemini**, **GitHub Copilot**, **Amp**, **Codebuff**, **Droid**, **Qwen**, **Roo Code**, **Kilo Code**, **Kimi**, **Kilo CLI**, **Mux**, **Crush**, **OpenClaw**, **Hermes**, **Goose**, **Antigravity**, **Zed Agent**, **Kiro**, **Trae**, **Synthetic**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
 ![Tokenleak OpenTUI overview](./docs/tui-overview.png)
 
@@ -16,18 +16,30 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" alt="Gemini icon" /> | Gemini | `~/.gemini/tmp/**/*.{json,jsonl}` | `gemini`, `google` | Yes |
 | <img width="36" height="36" src="https://cdn.simpleicons.org/githubcopilot/000000" alt="GitHub Copilot icon" /> | GitHub Copilot | `~/.copilot/otel/**/*.jsonl` | `copilot`, `github-copilot`, `copilot-otel` | Yes |
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=ampcode.com&sz=64" alt="Amp icon" /> | Amp | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json` | `amp`, `sourcegraph-amp` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=codebuff.com&sz=64" alt="Codebuff icon" /> | Codebuff | `~/.config/manicode/projects/**/chats/**/chat-messages.json` | `codebuff`, `manicode` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=factory.ai&sz=64" alt="Droid icon" /> | Droid | `~/.factory/sessions/*.settings.json` | `droid`, `factory` | Yes |
 | <img width="36" height="36" src="https://avatars.githubusercontent.com/QwenLM?s=64" alt="Qwen icon" /> | Qwen | `~/.qwen/projects/**/*.jsonl` | `qwen` | Yes |
 | <img width="36" height="36" src="https://avatars.githubusercontent.com/RooCodeInc?s=64" alt="Roo Code icon" /> | Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json` | `roo-code`, `roo`, `roocode` | Yes |
-| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo Code icon" /> | Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilo`, `kilocode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo Code icon" /> | Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilocode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/MoonshotAI?s=64" alt="Kimi icon" /> | Kimi CLI | `~/.kimi/sessions/**/wire.jsonl` | `kimi`, `kimi-cli` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo CLI icon" /> | Kilo CLI | `~/.local/share/kilo/kilo.db` | `kilo`, `kilo-cli` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=coder.com&sz=64" alt="Mux icon" /> | Mux | `~/.mux/sessions/**/session-usage.json` | `mux` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=crush.ai&sz=64" alt="Crush icon" /> | Crush | `${XDG_DATA_HOME:-~/.local/share}/crush/projects.json` project databases | `crush` | Yes |
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=openclaw.ai&sz=64" alt="OpenClaw icon" /> | OpenClaw | `~/.openclaw/agents/**/*.jsonl*` | `openclaw`, `open-claw` | Yes |
-| <img width="36" height="36" src="https://avatars.githubusercontent.com/NousResearch?s=64" alt="Hermes icon" /> | Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/NousResearch?s=64" alt="Hermes icon" /> | Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes`, `hermes-agent` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=block.github.io&sz=64" alt="Goose icon" /> | Goose | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db` | `goose` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=antigravity.google&sz=64" alt="Antigravity icon" /> | Antigravity | `~/.config/tokenleak/antigravity-cache/sessions/*.jsonl` cache | `antigravity` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=zed.dev&sz=64" alt="Zed icon" /> | Zed Agent | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db` | `zed`, `zed-agent` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=kiro.dev&sz=64" alt="Kiro icon" /> | Kiro | `~/.kiro/sessions/cli/*.json` | `kiro` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=trae.ai&sz=64" alt="Trae icon" /> | Trae | `~/.config/tokenleak/trae-cache/sessions/*.json` cache | `trae` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=synthetic.new&sz=64" alt="Synthetic icon" /> | Synthetic | `~/.local/share/octofriend/sqlite.db` | `synthetic`, `octofriend` | Yes |
 | <img width="36" height="36" src="https://opencode.ai/favicon.ico" alt="OpenCode icon" /> | OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
 | <img width="36" height="36" src="https://pi.dev/logo.svg" alt="Pi icon" /> | Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
 
 - Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
 - Use `CODEX_HOME` to override the Codex base directory.
 - Use `TOKENLEAK_CURSOR_DIR` to override the Cursor credentials/cache directory.
-- Use `TOKENLEAK_GEMINI_DIR`, `TOKENLEAK_COPILOT_OTEL_DIR`, `TOKENLEAK_AMP_DIR`, `TOKENLEAK_QWEN_DIR`, `TOKENLEAK_ROO_CODE_DIR`, `TOKENLEAK_KILO_CODE_DIR`, `TOKENLEAK_OPENCLAW_DIR`, and `TOKENLEAK_HERMES_DIR` to override the new provider data locations.
+- Use `TOKENLEAK_GEMINI_DIR`, `TOKENLEAK_COPILOT_OTEL_DIR`, `TOKENLEAK_AMP_DIR`, `TOKENLEAK_CODEBUFF_DIR`, `TOKENLEAK_DROID_DIR`, `TOKENLEAK_QWEN_DIR`, `TOKENLEAK_ROO_CODE_DIR`, `TOKENLEAK_KILO_CODE_DIR`, `TOKENLEAK_KIMI_DIR`, `TOKENLEAK_KILO_DIR`, `TOKENLEAK_MUX_DIR`, `TOKENLEAK_CRUSH_DIR`, `TOKENLEAK_OPENCLAW_DIR`, `TOKENLEAK_HERMES_DIR`, `TOKENLEAK_GOOSE_DIR`, `TOKENLEAK_ANTIGRAVITY_DIR`, `TOKENLEAK_ZED_DIR`, `TOKENLEAK_KIRO_DIR`, `TOKENLEAK_TRAE_DIR`, and `TOKENLEAK_SYNTHETIC_DIR` to override provider data locations.
 - Hermes also honors `HERMES_HOME`.
 - Use `PI_CODING_AGENT_DIR` to override the Pi base directory.
 - See [Provider details](#provider-details) for the parser behavior and per-provider notes.
@@ -592,6 +604,28 @@ Reads Sourcegraph Amp thread JSON files and combines usage ledger rows with mess
 | **Provider name** | `amp`                                                            |
 | **Aliases**       | `sourcegraph-amp`                                                |
 
+### Codebuff
+
+Reads Codebuff/Manicode chat history files and parses assistant usage from direct metadata or provider-options run-state fallbacks.
+
+|                   |                                                                      |
+| ----------------- | -------------------------------------------------------------------- |
+| **Data location** | `~/.config/manicode/projects/**/chats/**/chat-messages.json`         |
+| **Override**      | Set `TOKENLEAK_CODEBUFF_DIR` environment variable                    |
+| **Provider name** | `codebuff`                                                           |
+| **Aliases**       | `manicode`                                                           |
+
+### Droid
+
+Reads Factory Droid session settings files and uses sibling JSONL session text to recover a model name when Droid only records a provider lock.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.factory/sessions/*.settings.json`             |
+| **Override**      | Set `TOKENLEAK_DROID_DIR` environment variable    |
+| **Provider name** | `droid`                                           |
+| **Aliases**       | `factory`                                         |
+
 ### Qwen
 
 Reads Qwen CLI project JSONL logs. Assistant records with `usageMetadata` are parsed for prompt, candidate, thought, and cached-content tokens.
@@ -613,7 +647,51 @@ Reads VS Code extension task logs from `ui_messages.json` and uses sibling `api_
 | **Kilo data**     | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json`                 |
 | **Override**      | Set `TOKENLEAK_ROO_CODE_DIR` or `TOKENLEAK_KILO_CODE_DIR` environment variable                   |
 | **Provider names** | `roo-code`, `kilo-code`                                                                          |
-| **Aliases**       | `roo`, `roocode`, `kilo`, `kilocode`                                                             |
+| **Aliases**       | `roo`, `roocode`, `kilocode`                                                                      |
+
+### Kimi CLI
+
+Reads Kimi CLI wire-protocol JSONL files. `StatusUpdate` messages provide input, output, and cache token counts.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.kimi/sessions/**/wire.jsonl`                  |
+| **Override**      | Set `TOKENLEAK_KIMI_DIR` environment variable     |
+| **Provider name** | `kimi`                                            |
+| **Aliases**       | `kimi-cli`                                        |
+
+### Kilo CLI
+
+Reads Kilo CLI SQLite usage rows from the local Kilo data directory. This is separate from the VS Code Kilo Code extension provider (`kilo-code`).
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.local/share/kilo/kilo.db`                     |
+| **Override**      | Set `TOKENLEAK_KILO_DIR` environment variable     |
+| **Provider name** | `kilo`                                            |
+| **Aliases**       | `kilo-cli`                                        |
+
+### Mux
+
+Reads Mux session usage JSON files and preserves provider-reported per-model cost totals when present.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.mux/sessions/**/session-usage.json`           |
+| **Override**      | Set `TOKENLEAK_MUX_DIR` environment variable      |
+| **Provider name** | `mux`                                             |
+| **Aliases**       | None                                              |
+
+### Crush
+
+Reads project-level Crush SQLite databases discovered from the Crush project registry. Crush exposes reliable session-level cost even when token breakdown is unavailable, so Tokenleak preserves cost without fabricating tokens.
+
+|                   |                                                                          |
+| ----------------- | ------------------------------------------------------------------------ |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/crush/projects.json` project registry  |
+| **Override**      | Set `TOKENLEAK_CRUSH_DIR` environment variable                           |
+| **Provider name** | `crush`                                                                  |
+| **Aliases**       | None                                                                     |
 
 ### OpenClaw
 
@@ -628,14 +706,80 @@ Reads OpenClaw agent transcripts and optional `sessions.json` indexes. Model-cha
 
 ### Hermes
 
-Reads aggregated Hermes Agent session rows from the local SQLite state database.
+Reads aggregated Hermes Agent session rows from the local SQLite state database. The parser accepts schema variants where optional cost or cache columns are absent, as long as `id`, `model`, `started_at`, and at least one token or cost signal are present.
 
 |                   |                                                   |
 | ----------------- | ------------------------------------------------- |
 | **Data location** | `${HERMES_HOME:-~/.hermes}/state.db`              |
 | **Override**      | Set `HERMES_HOME` or `TOKENLEAK_HERMES_DIR`       |
 | **Provider name** | `hermes`                                          |
+| **Aliases**       | `hermes-agent`                                    |
+
+### Goose
+
+Reads Goose session totals from the local `sessions.db` SQLite database. Tokenleak scans the XDG path by default; use the override for macOS Application Support or legacy Block/goose locations.
+
+|                   |                                                                 |
+| ----------------- | --------------------------------------------------------------- |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db`   |
+| **Override**      | Set `TOKENLEAK_GOOSE_DIR` or `GOOSE_PATH_ROOT`                  |
+| **Provider name** | `goose`                                                         |
+| **Aliases**       | None                                                            |
+
+### Antigravity
+
+Reads normalized Antigravity JSONL cache files. Tokenleak does not currently connect to the local Antigravity language-server RPC or create this cache; place compatible JSONL artifacts in the cache directory first.
+
+|                   |                                                                    |
+| ----------------- | ------------------------------------------------------------------ |
+| **Data location** | `~/.config/tokenleak/antigravity-cache/sessions/*.jsonl`           |
+| **Override**      | Set `TOKENLEAK_ANTIGRAVITY_DIR` environment variable               |
+| **Provider name** | `antigravity`                                                      |
+| **Aliases**       | None                                                               |
+
+### Zed Agent
+
+Reads hosted Zed Agent rows from Zed's `threads.db`. External ACP agent rows are ignored to avoid double-counting usage that belongs to another provider.
+
+|                   |                                                                             |
+| ----------------- | --------------------------------------------------------------------------- |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db`                   |
+| **Override**      | Set `TOKENLEAK_ZED_DIR` environment variable                                |
+| **Provider name** | `zed`                                                                       |
+| **Aliases**       | `zed-agent`                                                                 |
+
+### Kiro
+
+Reads Kiro CLI session JSON files with explicit turn token metadata. SQLite import can be enabled by pointing the override at a compatible local data source.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.kiro/sessions/cli/*.json`                     |
+| **Override**      | Set `TOKENLEAK_KIRO_DIR` environment variable     |
+| **Provider name** | `kiro`                                            |
 | **Aliases**       | None                                              |
+
+### Trae
+
+Reads cached Trae usage API JSON files. Tokenleak does not currently authenticate with Trae or fetch this cache; export or sync compatible JSON first, then point Tokenleak at the cache.
+
+|                   |                                                            |
+| ----------------- | ---------------------------------------------------------- |
+| **Data location** | `~/.config/tokenleak/trae-cache/sessions/*.json`           |
+| **Override**      | Set `TOKENLEAK_TRAE_DIR` environment variable              |
+| **Provider name** | `trae`                                                     |
+| **Aliases**       | None                                                       |
+
+### Synthetic
+
+Reads Octofriend/Synthetic SQLite token rows when available. Synthetic is also kept as an explicit provider filter so it does not duplicate unrelated provider usage during normal all-provider scans.
+
+|                   |                                                       |
+| ----------------- | ----------------------------------------------------- |
+| **Data location** | `~/.local/share/octofriend/sqlite.db`                 |
+| **Override**      | Set `TOKENLEAK_SYNTHETIC_DIR` environment variable    |
+| **Provider name** | `synthetic`                                           |
+| **Aliases**       | `octofriend`                                          |
 
 ### OpenCode
 
@@ -813,12 +957,25 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_GEMINI_DIR` | `~/.gemini/tmp` | Gemini CLI temp/session directory |
 | `TOKENLEAK_COPILOT_OTEL_DIR` | `~/.copilot/otel` | GitHub Copilot OTEL JSONL directory |
 | `TOKENLEAK_AMP_DIR` | `${XDG_DATA_HOME:-~/.local/share}/amp/threads` | Amp thread directory |
+| `TOKENLEAK_CODEBUFF_DIR` | `~/.config/manicode` | Codebuff/Manicode project chat root |
+| `TOKENLEAK_DROID_DIR` | `~/.factory/sessions` | Droid session settings directory |
 | `TOKENLEAK_QWEN_DIR` | `~/.qwen/projects` | Qwen project log directory |
 | `TOKENLEAK_ROO_CODE_DIR` | VS Code Roo Code task storage | Roo Code task-log directory |
 | `TOKENLEAK_KILO_CODE_DIR` | VS Code Kilo Code task storage | Kilo Code task-log directory |
+| `TOKENLEAK_KIMI_DIR` | `~/.kimi` | Kimi CLI root directory |
+| `TOKENLEAK_KILO_DIR` | `~/.local/share/kilo/kilo.db` | Kilo CLI SQLite database path |
+| `TOKENLEAK_MUX_DIR` | `~/.mux/sessions` | Mux session usage directory |
+| `TOKENLEAK_CRUSH_DIR` | Crush project registry discovery | Crush data directory or `crush.db` path |
 | `TOKENLEAK_OPENCLAW_DIR` | `~/.openclaw/agents` | OpenClaw agent transcript directory |
 | `TOKENLEAK_HERMES_DIR` | `~/.hermes` | Hermes directory containing `state.db` |
 | `HERMES_HOME` | `~/.hermes` | Hermes home directory |
+| `TOKENLEAK_GOOSE_DIR` | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db` | Goose SQLite database path |
+| `GOOSE_PATH_ROOT` | unset | Goose root directory override |
+| `TOKENLEAK_ANTIGRAVITY_DIR` | `~/.config/tokenleak/antigravity-cache/sessions` | Antigravity normalized JSONL cache directory |
+| `TOKENLEAK_ZED_DIR` | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db` | Zed Agent SQLite database path |
+| `TOKENLEAK_KIRO_DIR` | `~/.kiro/sessions/cli` | Kiro CLI session JSON directory |
+| `TOKENLEAK_TRAE_DIR` | `~/.config/tokenleak/trae-cache/sessions` | Trae cached usage JSON directory |
+| `TOKENLEAK_SYNTHETIC_DIR` | `~/.local/share/octofriend/sqlite.db` | Synthetic/Octofriend SQLite database path |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | Pi coding agent directory (sessions live under `sessions/`) |
 
 ## What Tokenleak tracks
