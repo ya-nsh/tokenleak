@@ -61,6 +61,38 @@ bun run format
 
 5. Never commit directly to `main`.
 
+## Release Publishing
+
+Tokenleak publishes to npm from GitHub Actions with npm Trusted Publishing. The publish workflow does not store an npm token and does not run for pull requests.
+
+Configure the package once from an npm account with publish access:
+
+```bash
+npm trust github tokenleak --repo ya-nsh/tokenleak --file publish-npm.yml --env npm-publish
+```
+
+Use these trusted publisher fields if configuring in npmjs.com instead:
+
+- Provider: GitHub Actions
+- Organization or user: `ya-nsh`
+- Repository: `tokenleak`
+- Workflow file: `publish-npm.yml`
+- Environment: `npm-publish`
+- Allowed action: `npm publish`
+
+After a release PR is merged and the version is ready, publish with one of:
+
+```bash
+# Manual release from the default branch
+gh workflow run publish-npm.yml --ref main
+
+# Tag-triggered release
+git tag v<version>
+git push origin v<version>
+```
+
+Only users with write access to the repository can manually trigger the workflow or push release tags. Forks and pull requests cannot publish because the workflow has no `pull_request` trigger, and the publish job is restricted to `ya-nsh/tokenleak` on `main` or `v*` tags.
+
 ## Code Style
 
 - **Strict TypeScript**: No `any` types. Use `unknown` and narrow properly.
