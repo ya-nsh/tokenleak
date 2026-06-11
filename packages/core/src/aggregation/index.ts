@@ -18,6 +18,8 @@ export { buildAgentWasteReport } from './agent-waste';
 export { buildRoutingSimulationReport } from './routing-simulator';
 export type { BuildRoutingSimulationOptions, RoutingModelPricing } from './routing-simulator';
 export { buildAgentBehaviorDiffReport } from './agent-behavior-diff';
+export { buildBlackBoxTrace, redactPromptSnippet } from './blackbox';
+export type { BuildBlackBoxTraceOptions } from './blackbox';
 export { buildNutritionReport } from './nutrition';
 export { collectGitOutcomeSignals } from './nutrition-git';
 export { clusterPrompts, tokenBigrams } from './prompt-clusters';

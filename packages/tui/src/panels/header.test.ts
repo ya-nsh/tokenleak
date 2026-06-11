@@ -32,6 +32,7 @@ describe('buildHeader', () => {
     expect(text).toContain(' Overview ');
     expect(text).toContain(' Matrix ');
     expect(text).toContain(' Receipts ');
+    expect(text).toContain(' Black Box ');
 
     for (const prefixedLabel of [
       '1Overview',
@@ -45,6 +46,7 @@ describe('buildHeader', () => {
       '9Replay',
       '0AI ROI',
       'RReceipts',
+      'BBlack Box',
     ]) {
       expect(text).not.toContain(prefixedLabel);
     }

@@ -8,6 +8,7 @@ import {
   computeDateRange,
   inferFormatFromPath,
   normalizeCliArgv,
+  parseBlackBoxArgs,
   run,
   runFocus,
   renderFocusReport,
@@ -115,6 +116,39 @@ describe('normalizeCliArgv', () => {
   test('normalizes kebab-case flags while preserving provider values', () => {
     const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--live-server']);
     expect(argv).toEqual(['--provider', 'claude, codex', '--liveServer']);
+  });
+});
+
+describe('parseBlackBoxArgs', () => {
+  test('parses graph server and export flags', () => {
+    expect(
+      parseBlackBoxArgs([
+        '--provider',
+        'codex,cursor',
+        '--days',
+        '30',
+        '--target',
+        '2',
+        '--port',
+        '3777',
+        '--output',
+        'blackbox.html',
+        '--open',
+      ]),
+    ).toEqual({
+      provider: 'codex,cursor',
+      days: 30,
+      targetIndex: 2,
+      port: 3777,
+      output: 'blackbox.html',
+      open: true,
+    });
+  });
+
+  test('rejects invalid target indexes', () => {
+    expect(() => parseBlackBoxArgs(['--target', '-1'])).toThrow(
+      '--target must be a non-negative integer',
+    );
   });
 });
 
@@ -1153,11 +1187,26 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--format', 'json', '--provider', 'pi'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        [
+          'bun',
+          cliPath,
+          'focus',
+          '--format',
+          'json',
+          '--provider',
+          'pi',
+          '--since',
+          '2026-03-01',
+          '--until',
+          '2026-03-31',
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
       const parsed = JSON.parse(stdout);
@@ -1177,11 +1226,24 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--provider', 'pi'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        [
+          'bun',
+          cliPath,
+          'focus',
+          '--provider',
+          'pi',
+          '--since',
+          '2026-03-01',
+          '--until',
+          '2026-03-31',
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 

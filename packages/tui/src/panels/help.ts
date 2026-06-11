@@ -82,6 +82,7 @@ export function createHelpPanel() {
           ['X', 'Routing Simulator'],
           ['Y', 'Waste Signals'],
           ['Z', 'Behavior Diff'],
+          ['B', 'Black Box'],
           ['?', 'Help'],
         ]),
         ...helpSection('EXPLAIN VIEW', [
@@ -100,6 +101,12 @@ export function createHelpPanel() {
           ['Click', 'Select and toggle a line item'],
           ['S', 'Cycle sort (cost / qty / alpha)'],
           ['f', 'Cycle category filter'],
+        ]),
+        ...helpSection('BLACK BOX VIEW', [
+          ['j / k', 'Select graph node'],
+          ['h / l', 'Previous / next trace'],
+          ['Enter / Space', 'Expand inspector detail'],
+          ['f', 'Cycle graph focus lane'],
         ]),
       ),
     ),

@@ -121,6 +121,8 @@ export function buildStatusBar(state: AppState) {
     keys = `${nav}  h/l:date  j/k:select  enter/space:toggle  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (state.selectedView === 'receipts') {
     keys = `${nav}  j/k:select  enter/space:toggle  S:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
+  } else if (state.selectedView === 'blackbox') {
+    keys = `${nav}  h/l:trace  j/k:node  enter/space:details  f:focus  r:refresh${cursorHint}  ${helpHint}  q:quit`;
   } else if (
     state.selectedView === 'advisor' ||
     state.selectedView === 'focus' ||
