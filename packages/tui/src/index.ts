@@ -33,6 +33,7 @@ import {
   ensureAgentWasteReport,
   ensureRoutingSimulationReport,
   ensureAgentBehaviorDiffReport,
+  ensureBlackBoxTrace,
   ensureNutritionReport,
   ensureReceipt,
   deriveReceiptLines,
@@ -86,6 +87,12 @@ import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS 
 import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, SIMULATOR_VISIBLE_ROWS } from './panels/simulator.js';
 import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, WASTE_VISIBLE_ROWS } from './panels/waste.js';
 import { createBehaviorPanel } from './panels/behavior.js';
+import {
+  BLACKBOX_MAX_CONTENT_WIDTH,
+  createBlackBoxPanel,
+  getBlackBoxFocusableNodeIds,
+  nextBlackBoxFocusMode,
+} from './panels/blackbox.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -166,6 +173,8 @@ function getSelectedViewTaskKey(state: AppState, view: ViewMode = state.selected
       return `waste:${base}`;
     case 'behavior':
       return `behavior:${base}`;
+    case 'blackbox':
+      return `blackbox:${base}:target-${state.blackBoxTargetIndex}`;
     default:
       return `${view}:${base}`;
   }
@@ -484,6 +493,42 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         });
       }
       return createBehaviorPanel(state.cachedBehaviorDiffReport);
+    case 'blackbox':
+      if (!hasWindowData) {
+        return createBlackBoxPanel(
+          state,
+          null,
+          getPanelContentWidth(renderer, BLACKBOX_MAX_CONTENT_WIDTH),
+        );
+      }
+      if (!state.cachedBlackBoxTrace) {
+        const key = getSelectedViewTaskKey(state, 'blackbox');
+        return deferredPanelForTask(state, renderer, key, 'Black Box', async () => {
+          state.nutritionSignalsLoading = true;
+          try {
+            const signalKey = nutritionWindowKey(state);
+            if (signalKey && !state.nutritionSignalsLoadedKeys.has(signalKey)) {
+              const signals = await loadNutritionOutcomeSignalsForWindow(state);
+              if (getSelectedViewTaskKey(state, 'blackbox') !== key) {
+                return;
+              }
+              const window = state.data?.windows[state.selectedWindowIndex];
+              if (window) {
+                window.nutritionOutcomeSignals = signals;
+              }
+              state.nutritionSignalsLoadedKeys.add(signalKey);
+            }
+            ensureBlackBoxTrace(state);
+          } finally {
+            state.nutritionSignalsLoading = false;
+          }
+        });
+      }
+      return createBlackBoxPanel(
+        state,
+        state.cachedBlackBoxTrace,
+        getPanelContentWidth(renderer, BLACKBOX_MAX_CONTENT_WIDTH),
+      );
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
@@ -582,6 +627,7 @@ function applyLoadedData(
   state.simulatorScrollOffset = 0;
   state.wasteScrollOffset = 0;
   state.behaviorScrollOffset = 0;
+  resetBlackBoxInteraction(state);
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
   clearViewTaskState(state);
@@ -979,6 +1025,13 @@ function resetReceiptsInteraction(state: AppState): void {
   state.receiptsExpandedLineIndex = null;
 }
 
+function resetBlackBoxInteraction(state: AppState): void {
+  state.blackBoxTargetIndex = 0;
+  state.blackBoxSelectedNodeIndex = 0;
+  state.blackBoxExpanded = false;
+  state.blackBoxFocusMode = 'all';
+}
+
 function getReceiptLineCount(state: AppState): number {
   const receipt = state.cachedReceipt;
   if (!receipt) return 0;
@@ -1028,6 +1081,28 @@ function moveReceiptSelection(state: AppState, direction: number): void {
   );
 }
 
+function moveBlackBoxSelection(state: AppState, direction: number): void {
+  const ids = getBlackBoxFocusableNodeIds(state.cachedBlackBoxTrace, state.blackBoxFocusMode);
+  const itemCount = ids.length;
+  if (itemCount <= 0) return;
+  state.blackBoxSelectedNodeIndex = clampItemIndex(state.blackBoxSelectedNodeIndex + direction, itemCount);
+}
+
+function shiftBlackBoxTarget(state: AppState, direction: number): void {
+  const targetCount = state.cachedBlackBoxTrace?.targets.length ?? 0;
+  if (targetCount <= 0) return;
+  state.blackBoxTargetIndex = (state.blackBoxTargetIndex + direction + targetCount) % targetCount;
+  state.blackBoxSelectedNodeIndex = 0;
+  state.blackBoxExpanded = false;
+  state.cachedBlackBoxTrace = null;
+}
+
+function cycleBlackBoxFocus(state: AppState): void {
+  state.blackBoxFocusMode = nextBlackBoxFocusMode(state.blackBoxFocusMode);
+  state.blackBoxSelectedNodeIndex = 0;
+  state.blackBoxExpanded = false;
+}
+
 function handleViewSwitch(mode: ViewMode): void {
   if (currentState.selectedView !== mode) {
     currentState.selectedView = mode;
@@ -1040,6 +1115,8 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.simulatorScrollOffset = 0;
     currentState.wasteScrollOffset = 0;
     currentState.behaviorScrollOffset = 0;
+    currentState.blackBoxSelectedNodeIndex = 0;
+    currentState.blackBoxExpanded = false;
     resetReplayPanelState(currentState);
     resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
@@ -1103,11 +1180,13 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedRoutingSimulationReport = null;
   state.cachedAgentWasteReport = null;
   state.cachedBehaviorDiffReport = null;
+  state.cachedBlackBoxTrace = null;
   resetReceiptsInteraction(state);
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
   state.explainDate = null; // re-derive from new window's peak day
   state.replayDate = null;
+  resetBlackBoxInteraction(state);
   resetReplayDataState(state);
   clearViewTaskState(state);
 }
@@ -1126,8 +1205,10 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedRoutingSimulationReport = null;
   state.cachedAgentWasteReport = null;
   state.cachedBehaviorDiffReport = null;
+  state.cachedBlackBoxTrace = null;
   resetReplayDataState(state);
   resetReceiptsInteraction(state);
+  resetBlackBoxInteraction(state);
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
   clearViewTaskState(state);
@@ -1167,6 +1248,7 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   X: 'simulator',
   Y: 'waste',
   Z: 'behavior',
+  B: 'blackbox',
 };
 
 const VIEW_ORDER: ViewMode[] = [
@@ -1184,6 +1266,7 @@ const VIEW_ORDER: ViewMode[] = [
   'simulator',
   'waste',
   'behavior',
+  'blackbox',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
@@ -1198,6 +1281,7 @@ const SCROLLABLE_VIEWS = new Set<ViewMode>([
   'simulator',
   'waste',
   'behavior',
+  'blackbox',
 ]);
 
 function getScrollableItemCount(state: AppState): number {
@@ -1226,6 +1310,8 @@ function getScrollableItemCount(state: AppState): number {
       return state.cachedAgentWasteReport?.signals.length ?? 0;
     case 'behavior':
       return 12;
+    case 'blackbox':
+      return getBlackBoxFocusableNodeIds(state.cachedBlackBoxTrace, state.blackBoxFocusMode).length;
     default:
       return 0;
   }
@@ -1252,6 +1338,8 @@ function getVisibleCount(view: ViewMode): number {
       return view === 'simulator' ? SIMULATOR_VISIBLE_ROWS : WASTE_VISIBLE_ROWS;
     case 'behavior':
       return 8;
+    case 'blackbox':
+      return 9;
     default:
       return 10;
   }
@@ -1279,6 +1367,8 @@ function getScrollOffset(state: AppState): number {
       return state.wasteScrollOffset;
     case 'behavior':
       return state.behaviorScrollOffset;
+    case 'blackbox':
+      return state.blackBoxSelectedNodeIndex;
     default:
       return 0;
   }
@@ -1315,6 +1405,9 @@ function setScrollOffset(state: AppState, value: number): void {
       break;
     case 'behavior':
       state.behaviorScrollOffset = value;
+      break;
+    case 'blackbox':
+      state.blackBoxSelectedNodeIndex = value;
       break;
   }
 }
@@ -1593,6 +1686,11 @@ export async function main(): Promise<void> {
         render(state, renderer);
         return true;
       }
+      if (state.selectedView === 'blackbox') {
+        moveBlackBoxSelection(state, 1);
+        render(state, renderer);
+        return true;
+      }
       if (SCROLLABLE_VIEWS.has(state.selectedView)) {
         const itemCount = getScrollableItemCount(state);
         const visibleCount = getVisibleCount(state.selectedView);
@@ -1626,6 +1724,11 @@ export async function main(): Promise<void> {
         render(state, renderer);
         return true;
       }
+      if (state.selectedView === 'blackbox') {
+        moveBlackBoxSelection(state, -1);
+        render(state, renderer);
+        return true;
+      }
       if (SCROLLABLE_VIEWS.has(state.selectedView)) {
         const current = getScrollOffset(state);
         if (current > 0) {
@@ -1648,6 +1751,11 @@ export async function main(): Promise<void> {
       render(state, renderer);
       return true;
     }
+    if (sequence === 'h' && state.selectedView === 'blackbox') {
+      shiftBlackBoxTarget(state, -1);
+      render(state, renderer);
+      return true;
+    }
 
     // l: next day (explain/replay view)
     if (sequence === 'l' && state.selectedView === 'explain') {
@@ -1657,6 +1765,11 @@ export async function main(): Promise<void> {
     }
     if (sequence === 'l' && state.selectedView === 'replay') {
       shiftReplayDate(state, 1);
+      render(state, renderer);
+      return true;
+    }
+    if (sequence === 'l' && state.selectedView === 'blackbox') {
+      shiftBlackBoxTarget(state, 1);
       render(state, renderer);
       return true;
     }
@@ -1671,6 +1784,13 @@ export async function main(): Promise<void> {
     // Enter/Space: expand/collapse sample prompts for the selected receipt line
     if ((sequence === '\r' || sequence === ' ') && state.selectedView === 'receipts') {
       toggleReceiptLine(state);
+      render(state, renderer);
+      return true;
+    }
+
+    // Enter/Space: expand/collapse Black Box inspector detail
+    if ((sequence === '\r' || sequence === ' ') && state.selectedView === 'blackbox') {
+      state.blackBoxExpanded = !state.blackBoxExpanded;
       render(state, renderer);
       return true;
     }
@@ -1698,6 +1818,13 @@ export async function main(): Promise<void> {
       const nextIndex = currentIndex + 1;
       state.receiptsCategoryFilter = nextIndex >= categories.length ? null : categories[nextIndex]!;
       resetReceiptsInteraction(state);
+      render(state, renderer);
+      return true;
+    }
+
+    // f: cycle Black Box focus lane
+    if (sequence === 'f' && state.selectedView === 'blackbox') {
+      cycleBlackBoxFocus(state);
       render(state, renderer);
       return true;
     }

@@ -62,6 +62,12 @@ describe('buildStatusBar', () => {
     // Receipts sort moved off [o] — make sure the new key shows up.
     expect(receiptsText).toContain('S:sort');
     expect(receiptsText).not.toContain('o:sort');
+
+    state.selectedView = 'blackbox';
+    const blackBoxText = collectTextContent(buildStatusBar(state)).join('');
+    expect(blackBoxText).toContain('[o] interactive replay');
+    expect(blackBoxText).toContain('f:focus');
+    expect(blackBoxText).toContain('j/k:node');
   });
 
   test('CTA chip swaps to the open-status form once the live server is running', () => {
@@ -85,5 +91,7 @@ describe('createHelpPanel', () => {
     expect(text).toContain('AI ROI');
     expect(text).toContain('R');
     expect(text).toContain('Receipts');
+    expect(text).toContain('B');
+    expect(text).toContain('Black Box');
   });
 });

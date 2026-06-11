@@ -14,6 +14,7 @@ import {
   buildCommonsPromptExport,
   buildRoutingSimulationReport,
   buildNutritionReport,
+  buildBlackBoxTrace,
   collectGitOutcomeSignals,
   buildExplainReport,
   buildFocusReport,
@@ -27,6 +28,7 @@ import {
 import type {
   AgentBehaviorDiffReport,
   AgentWasteReport,
+  BlackBoxTrace,
   BehaviorCohortSelector,
   DateRange,
   FocusReport,
@@ -81,8 +83,11 @@ import {
   startLiveServer,
   startWrappedLiveServer,
   startReplayLiveServer,
+  startBlackBoxLiveServer,
+  generateBlackBoxLiveHtml,
   type ReplayHeatmapEntry,
   type ReplayLiveDataProvider,
+  type BlackBoxLiveDataProvider,
   colorize256,
   bold256,
   dim,
@@ -279,6 +284,7 @@ function buildHelpText(): string {
     '  tokenleak explain <date> [flags]',
     '  tokenleak focus [flags]',
     '  tokenleak commons <export|inspect|prompt> [flags]',
+    '  tokenleak blackbox [flags]',
     '  tokenleak nutrition [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
@@ -291,6 +297,7 @@ function buildHelpText(): string {
     '  explain <date>         Explain what drove usage on one day',
     '  focus                  Rank sessions by deep-work score',
     '  commons                Export or inspect anonymized aggregate usage data',
+    '  blackbox               Open an interactive cost-causality graph',
     '  nutrition              Estimate token cost per local Git outcome signal',
     "  replay [date]          Replay a day's session timeline (defaults to today)",
     '  receipts               Itemized receipt of spend by prompt behavior',
@@ -349,6 +356,8 @@ function buildHelpText(): string {
     '  tokenleak commons export --days 90 --output commons.json',
     '  tokenleak commons prompt --days 90 --clipboard',
     '  tokenleak commons inspect commons.json',
+    '  tokenleak blackbox --open',
+    '  tokenleak blackbox --output blackbox.html',
     '  tokenleak nutrition --days 30',
     '  tokenleak nutrition --format json --output nutrition.json',
     '  tokenleak replay',
@@ -396,6 +405,41 @@ function buildFocusHelpText(): string {
     '  tokenleak focus',
     '  tokenleak focus --provider claude,codex --days 30',
     '  tokenleak focus --format json --output focus.json',
+    '',
+  ].join('\n');
+}
+
+function buildBlackBoxHelpText(): string {
+  return [
+    `tokenleak blackbox ${VERSION}`,
+    'Open an interactive Obsidian-style cost-causality graph for the latest meaningful session.',
+    '',
+    'Usage:',
+    '  tokenleak blackbox [flags]',
+    '',
+    'Flags:',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write a standalone interactive HTML graph',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --target <index>    Open a specific trace target from the window',
+    '      --port <number>     Local server port (default: 3666)',
+    '      --open              Open the graph in the default browser',
+    '      --claude            Only include Claude Code',
+    '      --codex             Only include Codex',
+    '      --cursor            Only include Cursor',
+    '      --pi                Only include Pi',
+    '      --open-code         Only include OpenCode',
+    '      --all-providers     Ignore provider filters and use every available provider',
+    '      --list-providers    Show registered providers and aliases',
+    '      --help              Show this help',
+    '      --version           Show version information',
+    '',
+    'Examples:',
+    '  tokenleak blackbox --open',
+    '  tokenleak blackbox --provider codex --days 30 --open',
+    '  tokenleak blackbox --output blackbox.html',
     '',
   ].join('\n');
 }
@@ -2628,6 +2672,122 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
   return { date, cliArgs };
 }
 
+export function parseBlackBoxArgs(argv: string[]): Record<string, unknown> {
+  const cliArgs: Record<string, unknown> = {};
+  let index = 0;
+
+  while (index < argv.length) {
+    const arg = argv[index]!;
+    switch (arg) {
+      case '--help':
+      case '-h':
+        cliArgs['help'] = true;
+        index += 1;
+        break;
+      case '--version':
+      case '-v':
+        cliArgs['version'] = true;
+        index += 1;
+        break;
+      case '--since':
+      case '-s':
+      case '--until':
+      case '-u':
+      case '--days':
+      case '-d':
+      case '--output':
+      case '-o':
+      case '--provider':
+      case '-p': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        const key =
+          arg === '--since' || arg === '-s'
+            ? 'since'
+            : arg === '--until' || arg === '-u'
+              ? 'until'
+              : arg === '--days' || arg === '-d'
+                ? 'days'
+                : arg === '--output' || arg === '-o'
+                  ? 'output'
+                  : 'provider';
+        cliArgs[key] = key === 'days' ? Number(raw) : raw;
+        index += 2;
+        break;
+      }
+      case '--target': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        const targetIndex = Number(raw);
+        if (!Number.isInteger(targetIndex) || targetIndex < 0) {
+          throw new TokenleakError(`--target must be a non-negative integer (got "${raw}")`);
+        }
+        cliArgs['targetIndex'] = targetIndex;
+        index += 2;
+        break;
+      }
+      case '--port': {
+        const raw = argv[index + 1];
+        if (raw === undefined) {
+          throw new TokenleakError(`${arg} requires a value`);
+        }
+        const port = Number(raw);
+        if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+          throw new TokenleakError(
+            `--port must be an integer between 0 and 65535 (got "${raw}")`,
+          );
+        }
+        cliArgs['port'] = port;
+        index += 2;
+        break;
+      }
+      case '--open':
+        cliArgs['open'] = true;
+        index += 1;
+        break;
+      case '--claude':
+        cliArgs['claude'] = true;
+        index += 1;
+        break;
+      case '--codex':
+        cliArgs['codex'] = true;
+        index += 1;
+        break;
+      case '--cursor':
+        cliArgs['cursor'] = true;
+        index += 1;
+        break;
+      case '--pi':
+        cliArgs['pi'] = true;
+        index += 1;
+        break;
+      case '--openCode':
+      case '--open-code':
+        cliArgs['openCode'] = true;
+        index += 1;
+        break;
+      case '--allProviders':
+      case '--all-providers':
+        cliArgs['allProviders'] = true;
+        index += 1;
+        break;
+      case '--listProviders':
+      case '--list-providers':
+        cliArgs['listProviders'] = true;
+        index += 1;
+        break;
+      default:
+        throw new TokenleakError(`Unknown blackbox flag "${arg}"`);
+    }
+  }
+
+  return cliArgs;
+}
+
 function parseCommonsExportArgs(
   argv: string[],
   options: { allowClipboard?: boolean; commandName?: string } = {},
@@ -2909,6 +3069,109 @@ function resolveReplayFormat(cliArgs: Record<string, unknown>): 'json' | 'termin
   }
 
   return 'terminal';
+}
+
+async function runBlackBox(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig({ ...cliArgs, format: 'json', more: true });
+  const targetIndex = typeof cliArgs['targetIndex'] === 'number' ? cliArgs['targetIndex'] : 0;
+
+  if (
+    config.allProviders &&
+    (config.provider ||
+      config.claude ||
+      config.codex ||
+      config.cursor ||
+      config.pi ||
+      config.openCode)
+  ) {
+    throw new TokenleakError('--all-providers cannot be combined with provider filters');
+  }
+
+  if (config.listProviders) {
+    const registry = createRegistry();
+    const providers = registry.getAll();
+    const availabilityResults = await Promise.all(
+      providers.map(async (provider) => [provider.name, await provider.isAvailable()] as const),
+    );
+    process.stdout.write(buildProviderList(providers, new Map(availabilityResults)));
+    return;
+  }
+
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+  const available = await selectAvailableProviders(config);
+
+  if (available.length === 0) {
+    throw new TokenleakError('No provider data found');
+  }
+
+  const output = await loadTokenleakData(available, dateRange);
+  emitProviderWarnings(output.providers, 'Warning');
+  const events = output.providers.flatMap((provider) => provider.events ?? []);
+  let outcomeSignals: Awaited<ReturnType<typeof collectGitOutcomeSignals>> = [];
+  try {
+    outcomeSignals = await collectGitOutcomeSignals(events, dateRange);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Warning: could not load Git outcome signals: ${detail}\n`);
+  }
+
+  const buildTrace = (index: number): BlackBoxTrace =>
+    buildBlackBoxTrace(output.providers, dateRange, {
+      targetIndex: index,
+      outcomeSignals,
+    });
+  const initialTrace = buildTrace(targetIndex);
+
+  if (config.output) {
+    const html = generateBlackBoxLiveHtml(initialTrace, { targetIndex });
+    writeFileSync(config.output, html);
+    process.stderr.write(`Black Box graph written to ${config.output}\n`);
+    if (config.open) {
+      await openFile(config.output);
+      process.stderr.write(`Opened ${config.output} in default application.\n`);
+    }
+    return;
+  }
+
+  const serverArg: BlackBoxLiveDataProvider = {
+    initialTargetIndex: targetIndex,
+    initialTrace,
+    getTrace: (index: number) => {
+      if (index < 0 || index >= initialTrace.targets.length) return null;
+      return buildTrace(index);
+    },
+  };
+  const rawPort = cliArgs['port'];
+  const port = typeof rawPort === 'number' && Number.isFinite(rawPort) ? rawPort : undefined;
+  const { port: actualPort, stop } = await startBlackBoxLiveServer(
+    serverArg,
+    port !== undefined ? { port } : {},
+  );
+
+  if (config.open) {
+    try {
+      await openFile(`http://localhost:${String(actualPort)}/`);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`Warning: could not auto-open browser: ${detail}\n`);
+    }
+  }
+
+  process.stderr.write('Press Ctrl+C to stop the Black Box graph server.\n');
+  await new Promise<void>((resolve) => {
+    const onExit = () => {
+      process.stderr.write('\nShutting down Black Box graph server...\n');
+      stop();
+      resolve();
+    };
+    process.on('SIGINT', onExit);
+    process.on('SIGTERM', onExit);
+  });
+  process.exit(0);
 }
 
 async function runReplay(date: string, cliArgs: Record<string, unknown>): Promise<void> {
@@ -3798,6 +4061,27 @@ if (isDirectExecution) {
 
       await initPricing();
       await runExplain(date, cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+  if (argv[0] === 'blackbox') {
+    try {
+      const cliArgs = parseBlackBoxArgs(argv.slice(1));
+
+      if (cliArgs['help']) {
+        process.stdout.write(buildBlackBoxHelpText());
+        process.exit(0);
+      }
+
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+
+      await initPricing();
+      await runBlackBox(cliArgs);
       process.exit(0);
     } catch (error: unknown) {
       handleError(error);

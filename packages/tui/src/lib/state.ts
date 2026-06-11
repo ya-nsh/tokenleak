@@ -2,6 +2,8 @@ import type {
   AdvisorReport,
   AgentBehaviorDiffReport,
   AgentWasteReport,
+  BlackBoxFocusMode,
+  BlackBoxTrace,
   FocusReport,
   ExplainReport,
   CompareOutput,
@@ -30,7 +32,8 @@ export type ViewMode =
   | 'receipts'
   | 'simulator'
   | 'waste'
-  | 'behavior';
+  | 'behavior'
+  | 'blackbox';
 export type SortMode = 'cost' | 'tokens';
 export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
@@ -103,6 +106,10 @@ export interface AppState {
   simulatorScrollOffset: number;
   wasteScrollOffset: number;
   behaviorScrollOffset: number;
+  blackBoxTargetIndex: number;
+  blackBoxSelectedNodeIndex: number;
+  blackBoxExpanded: boolean;
+  blackBoxFocusMode: BlackBoxFocusMode;
 
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
@@ -117,6 +124,7 @@ export interface AppState {
   cachedRoutingSimulationReport: RoutingSimulationReport | null;
   cachedAgentWasteReport: AgentWasteReport | null;
   cachedBehaviorDiffReport: AgentBehaviorDiffReport | null;
+  cachedBlackBoxTrace: BlackBoxTrace | null;
 }
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
@@ -171,6 +179,10 @@ export function createInitialState(): AppState {
     simulatorScrollOffset: 0,
     wasteScrollOffset: 0,
     behaviorScrollOffset: 0,
+    blackBoxTargetIndex: 0,
+    blackBoxSelectedNodeIndex: 0,
+    blackBoxExpanded: false,
+    blackBoxFocusMode: 'all',
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
@@ -183,5 +195,6 @@ export function createInitialState(): AppState {
     cachedRoutingSimulationReport: null,
     cachedAgentWasteReport: null,
     cachedBehaviorDiffReport: null,
+    cachedBlackBoxTrace: null,
   };
 }

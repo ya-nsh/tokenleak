@@ -520,6 +520,83 @@ export interface NutritionReport {
   missingOutcomeRepos: string[];
 }
 
+export type BlackBoxNodeKind =
+  | 'session'
+  | 'flow-block'
+  | 'event'
+  | 'model-switch'
+  | 'cache'
+  | 'waste'
+  | 'outcome';
+
+export type BlackBoxEdgeKind =
+  | 'chronology'
+  | 'contains'
+  | 'cost'
+  | 'signal'
+  | 'outcome';
+
+export type BlackBoxFocusMode = 'all' | 'costly-path' | 'waste' | 'churn';
+
+export interface BlackBoxTarget {
+  key: string;
+  date: string;
+  sessionId: string;
+  label: string;
+  provider: string;
+  projectLabel: string | null;
+  eventCount: number;
+  tokens: number;
+  cost: number;
+  start: string;
+  end: string;
+}
+
+export interface BlackBoxNode {
+  id: string;
+  kind: BlackBoxNodeKind;
+  label: string;
+  timestamp?: string;
+  provider?: string;
+  model?: string;
+  tokens: number;
+  cost: number;
+  severity: 'high' | 'medium' | 'low' | 'info';
+  snippet?: string;
+  reason: string;
+  details: string[];
+  eventCount?: number;
+}
+
+export interface BlackBoxEdge {
+  from: string;
+  to: string;
+  kind: BlackBoxEdgeKind;
+  label?: string;
+}
+
+export interface BlackBoxTrace {
+  method: string;
+  dateRange: DateRange;
+  target: BlackBoxTarget | null;
+  targets: BlackBoxTarget[];
+  nodes: BlackBoxNode[];
+  edges: BlackBoxEdge[];
+  hotPathNodeIds: string[];
+  wasteNodeIds: string[];
+  churnNodeIds: string[];
+  summary: {
+    totalEvents: number;
+    totalTokens: number;
+    totalCost: number;
+    cacheHitRate: number;
+    modelSwitches: number;
+    wasteSignals: number;
+    gitOutcomeSignals: number;
+  };
+  warnings: string[];
+}
+
 export type OptimizationConfidence = 'high' | 'medium' | 'low';
 export type OptimizationImpact = 'cost' | 'tokens' | 'cache' | 'time' | 'quality-risk';
 

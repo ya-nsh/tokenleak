@@ -15,6 +15,12 @@ export type {
   ReplayHeatmapEntry,
 } from './live/replay-live-server';
 export { generateReplayLiveHtml } from './live/replay-live-template';
+export { startBlackBoxLiveServer } from './live/blackbox-live-server';
+export type {
+  BlackBoxLiveServerOptions,
+  BlackBoxLiveDataProvider,
+} from './live/blackbox-live-server';
+export { generateBlackBoxLiveHtml } from './live/blackbox-live-template';
 export {
   renderTabBar,
   renderOverviewView,

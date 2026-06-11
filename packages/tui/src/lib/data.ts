@@ -3,6 +3,7 @@ import type {
   AgentBehaviorDiffReport,
   AgentWasteReport,
   BehaviorCohortSelector,
+  BlackBoxTrace,
   AdvisorReport,
   CompareOutput,
   DailyUsage,
@@ -29,6 +30,7 @@ import {
   analyzeEfficiency,
   buildAgentBehaviorDiffReport,
   buildAgentWasteReport,
+  buildBlackBoxTrace,
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
@@ -517,6 +519,24 @@ export function ensureRoutingSimulationReport(state: AppState): RoutingSimulatio
   });
   state.cachedRoutingSimulationReport = report;
   return report;
+}
+
+export function ensureBlackBoxTrace(state: AppState): BlackBoxTrace | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedBlackBoxTrace) return state.cachedBlackBoxTrace;
+
+  const scoped = getScopedWindowData(state);
+  const window = state.data.windows[state.selectedWindowIndex];
+  if (!scoped || !window) return null;
+
+  const trace = buildBlackBoxTrace(scoped.scopedProviders, scoped.windowRange, {
+    targetIndex: state.blackBoxTargetIndex,
+    outcomeSignals: window.nutritionOutcomeSignals,
+  });
+  state.blackBoxTargetIndex = Math.max(0, Math.min(state.blackBoxTargetIndex, Math.max(0, trace.targets.length - 1)));
+  state.blackBoxSelectedNodeIndex = Math.max(0, Math.min(state.blackBoxSelectedNodeIndex, Math.max(0, trace.nodes.length - 1)));
+  state.cachedBlackBoxTrace = trace;
+  return trace;
 }
 
 function defaultBehaviorSelectors(scoped: ScopedWindowData): [BehaviorCohortSelector, BehaviorCohortSelector] {

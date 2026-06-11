@@ -31,6 +31,7 @@ const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
   { key: 'X', label: 'Sim', mode: 'simulator' },
   { key: 'Y', label: 'Waste', mode: 'waste' },
   { key: 'Z', label: 'Diff', mode: 'behavior' },
+  { key: 'B', label: 'Black Box', mode: 'blackbox' },
 ];
 
 export function buildHeader(
