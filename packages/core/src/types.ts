@@ -92,8 +92,12 @@ export interface AggregatedStats {
   activeDays: number;
   dayOfWeek: DayOfWeekEntry[];
   topModels: TopModelEntry[];
+  /** Complete inventory for model browsers; topModels remains the top-ten summary. */
+  allModels?: TopModelEntry[];
   rolling30dTopModel: string | null;
   costCompleteness?: CostCompleteness;
+  rolling30dCostCompleteness?: CostCompleteness;
+  rolling7dCostCompleteness?: CostCompleteness;
 }
 
 export interface UsageEvent {

@@ -1,3 +1,4 @@
+import { formatCostWithCompleteness, formatModelWithTier } from '@tokenleak/core';
 import type { ModelEfficiencyEntry, TokenleakOutput } from '@tokenleak/core';
 import { colorize256, bold, dim, MODEL_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
@@ -10,10 +11,6 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
 }
 
 function formatCompactCost(cost: number): string {
@@ -113,7 +110,7 @@ export function renderModelEfficiencySection(
 }
 
 export function renderModelView(output: TokenleakOutput, width: number, noColor: boolean): string {
-  const models = output.aggregated.topModels;
+  const models = output.aggregated.allModels ?? output.aggregated.topModels;
   if (models.length === 0) {
     return `  ${dim('No model data available.', noColor)}`;
   }
@@ -136,10 +133,11 @@ export function renderModelView(output: TokenleakOutput, width: number, noColor:
       dim(TRACK_CHAR.repeat(Math.max(0, barWidth - fillLen)), noColor);
     const shareStr = `${model.percentage.toFixed(0)}%`.padStart(shareWidth);
     const tokStr = formatTokens(model.tokens).padStart(valueWidth);
-    const costStr = formatCost(model.cost).padStart(costWidth);
-    const name = model.model.length > nameWidth
-      ? model.model.slice(0, nameWidth - 1) + '…'
-      : model.model.padEnd(nameWidth);
+    const costStr = formatCostWithCompleteness(model.cost, model.costCompleteness).padStart(costWidth);
+    const label = formatModelWithTier(model.model, model.serviceTiers);
+    const name = label.length > nameWidth
+      ? label.slice(0, nameWidth - 1) + '…'
+      : label.padEnd(nameWidth);
 
     lines.push(truncateVisible(
       `  ${colorize256(name, colorCode, noColor)} ${bar} ${shareStr} ${tokStr} ${costStr}`,
