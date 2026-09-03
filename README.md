@@ -48,6 +48,8 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 
 Install Tokenleak with the package manager you already use:
 
+Tokenleak requires Bun on your `PATH`, including when installed with npm. Run `bun --version` first; release validation uses Bun 1.3.10.
+
 ```bash
 # Bun
 bun install -g tokenleak
@@ -86,8 +88,12 @@ bun run build
 bun run bundle
 
 # Run directly
-bun dist/tokenleak.js
+bun dist/tokenleak
 ```
+
+If an existing global launcher points to a missing file, reinstall using the same package manager (`bun install -g tokenleak --force` or `npm install -g tokenleak --force`), then check `tokenleak --version`. If the launcher reports that Bun cannot be found, add Bun's bin directory to your shell's `PATH`.
+
+Maintainers can run `bun run prepublish && bun run verify:package` to build, pack, install, and exercise the actual npm package in an isolated temporary directory without publishing it.
 
 ## Usage
 
@@ -1045,6 +1051,18 @@ It then computes:
 - **Attribution clusters** — repo/directory-oriented groupings of sessions into investigations or feature work
 - **Explain and focus reports** — narrative daily diagnostics and deep-work session rankings
 
+
+### Model identity, Fast mode, and cost accuracy
+
+Codex history includes both `sessions` and `archived_sessions` under `CODEX_HOME` (normally `~/.codex`). Explicit turn model metadata takes precedence over session metadata; agent instruction prose is never used to guess the model. Repeated cumulative notifications and mirrored response usage records are reconciled before date filtering.
+
+Fast mode is recorded separately from the base model. Reports retain service-tier breakdowns and show Fast where the log or a recognized model alias supplies that information. A response's actual tier takes precedence over the requested tier. Older logs often omit it; these remain labeled **tier unknown**, rather than inheriting your current Fast setting. The model browser includes the full inventory; top-model summaries retain their ten-model limit.
+
+Costs are **API-equivalent estimates**, not ChatGPT subscription charges or a reconstruction of past invoices. Known Fast tiers use verified API Fast rates, not subscription credit multipliers. Missing historical tier metadata uses the standard API rate as an estimate. GPT-5.6 estimates include cache writes and the published long-context threshold. Rates are current catalog estimates, not a date-versioned price history. Sources: [OpenAI pricing](https://developers.openai.com/api/docs/pricing), [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode), and [Codex speed and credits](https://learn.chatgpt.com/docs/agent-configuration/speed).
+
+Unknown model/tier prices display **Unknown**; partially priced totals carry `+`. Provider-reported zero costs remain `$0.00`. The verified catalog deliberately does not invent prices for research-preview models such as Codex-Spark. Cursor `auto` or legacy Composer records without a reported cost also remain unpriced when no applicable rate can be verified. Refreshing the remote pricing cache updates known models; adding a newly verified model requires a catalog update.
+
+Cursor aliases such as `claude-4.5-opus-high-thinking` map to their canonical model for estimation, while reported costs take precedence. If the export endpoint redirects to sign-in, Tokenleak preserves the cached CSV and requests `tokenleak cursor login`. Only successful, schema-validated CSV responses replace the cache.
 
 ## MCP Server
 
