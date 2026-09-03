@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { CompareOutput } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft } from '../lib/format.js';
+import { formatCostWithCompleteness, formatTokens, formatPercent, formatShortDate, padRight, padLeft } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
@@ -42,10 +42,11 @@ function buildMetricRows(output: CompareOutput): MetricRow[] {
     },
     {
       label: 'Cost',
-      current: formatCost(a.totalCost),
-      previous: formatCost(b.totalCost),
+      current: formatCostWithCompleteness(a.totalCost, a.costCompleteness),
+      previous: formatCostWithCompleteness(b.totalCost, b.costCompleteness),
       delta: d.cost,
-      deltaLabel: `${deltaArrow(d.cost)} ${deltaStr(d.cost, true)}`,
+      deltaLabel: [a, b].some((stats) => stats.costCompleteness && stats.costCompleteness.status !== 'complete')
+        ? 'Unknown' : `${deltaArrow(d.cost)} ${deltaStr(d.cost, true)}`,
       invertColor: true,
     },
     {

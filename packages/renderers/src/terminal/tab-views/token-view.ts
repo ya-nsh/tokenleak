@@ -1,3 +1,4 @@
+import { formatCostWithCompleteness } from '@tokenleak/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, bold256, dim, colorize256, SEMANTIC } from '../colors';
 import { renderTerminalHeatmap } from '../heatmap';
@@ -23,7 +24,7 @@ export function renderTokenView(output: TokenleakOutput, width: number, noColor:
   // Summary
   const parts = [
     bold256(formatTokens(stats.totalTokens), SEMANTIC.INPUT, noColor) + ' total',
-    bold256(formatCost(stats.totalCost), SEMANTIC.OUTPUT, noColor) + ' cost',
+    bold256(formatCostWithCompleteness(stats.totalCost, stats.costCompleteness), SEMANTIC.OUTPUT, noColor) + ' cost',
     bold256(`${stats.activeDays}`, SEMANTIC.ACCENT, noColor) + ' active days',
   ];
   lines.push(truncateVisible(`  ${parts.join(dim('  ·  ', noColor))}`, width));

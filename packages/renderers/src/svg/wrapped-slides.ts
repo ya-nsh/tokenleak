@@ -255,7 +255,7 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
     }
   }
   if (stats.totalCost > 100) {
-    all.push({ icon: 'diamond', title: 'Big Spender', subtitle: `${formatCost(stats.totalCost)} total`, color: '#34d399' });
+    all.push({ icon: 'diamond', title: 'Big Spender', subtitle: `${formatCost(stats.totalCost, stats.costCompleteness)} total`, color: '#34d399' });
   }
   if (stats.cacheHitRate > 0.5) {
     all.push({ icon: 'target', title: 'Cache Master', subtitle: `${(stats.cacheHitRate * 100).toFixed(0)}% hit rate`, color: '#f472b6' });
@@ -495,7 +495,7 @@ function renderBigNumbersSlide(
   const statsY = 200;
   const colW = (WIDTH - PAD * 2) / 3;
   const supportStats = [
-    { value: formatCost(stats.totalCost), label: 'TOTAL COST', accent: true },
+    { value: formatCost(stats.totalCost, stats.costCompleteness), label: 'TOTAL COST', accent: true },
     { value: `${stats.activeDays}`, label: 'ACTIVE DAYS', accent: false },
     { value: `${stats.totalDays}`, label: 'TOTAL DAYS', accent: false },
   ];
@@ -1065,7 +1065,7 @@ function renderMonthlyBurnSlide(
     p.push(svgText(PAD, 90, 'At this rate, you will spend about', {
       fill: theme.narrativeColor, size: 18, weight: 500, family: DISPLAY_FONT,
     }));
-    p.push(svgText(PAD, 160, formatCost(projected), {
+    p.push(svgText(PAD, 160, formatCost(projected, output.aggregated.costCompleteness), {
       fill: theme.coolAccent, size: 64, weight: 800, family: MONO_FONT, spacing: -3,
     }));
     p.push(svgText(PAD, 190, 'per month', {
@@ -1077,7 +1077,7 @@ function renderMonthlyBurnSlide(
   p.push(svgText(PAD, 90, 'At this rate, you will spend', {
     fill: theme.narrativeColor, size: 18, weight: 500, family: DISPLAY_FONT,
   }));
-  p.push(svgText(PAD, 155, formatCost(burn.projectedCost), {
+  p.push(svgText(PAD, 155, formatCost(burn.projectedCost, output.aggregated.costCompleteness), {
     fill: theme.coolAccent, size: 64, weight: 800, family: MONO_FONT, spacing: -3,
   }));
   p.push(svgText(PAD, 185, 'this month', {

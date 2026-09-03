@@ -31,7 +31,7 @@ function buildWrappedStats(output: TokenleakOutput): WrappedStat[] {
   return [
     { label: 'Current Streak', value: `${stats.currentStreak} days` },
     { label: 'Total Tokens', value: formatNumber(stats.totalTokens) },
-    { label: 'Total Cost', value: formatCost(stats.totalCost) },
+    { label: 'Total Cost', value: formatCost(stats.totalCost, stats.costCompleteness) },
     { label: 'Top Provider', value: topProvider },
     {
       label: 'Peak Day',

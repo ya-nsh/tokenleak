@@ -1,3 +1,4 @@
+import { formatCostWithCompleteness } from '@tokenleak/core';
 import { aggregate } from '@tokenleak/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, PROJECT_COLORS } from '../colors';
@@ -11,10 +12,6 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
 }
 
 function getLastActiveDate(output: TokenleakOutput, providerName: string): string | null {
@@ -60,7 +57,7 @@ export function renderProviderView(output: TokenleakOutput, width: number, noCol
       dim(TRACK_CHAR.repeat(Math.max(0, barWidth - fillLen)), noColor);
     const shareStr = `${(share * 100).toFixed(0)}%`.padStart(shareWidth);
     const tokenStr = formatTokens(entry.stats.totalTokens).padStart(valueWidth);
-    const costStr = formatCost(entry.stats.totalCost).padStart(costWidth);
+    const costStr = formatCostWithCompleteness(entry.stats.totalCost, entry.stats.costCompleteness).padStart(costWidth);
     const dateStr = (entry.lastActiveDate ?? '-').padStart(dateWidth);
     const name = entry.provider.displayName.length > nameWidth
       ? `${entry.provider.displayName.slice(0, nameWidth - 1)}…`

@@ -474,8 +474,10 @@ describe('TerminalRenderer', () => {
     daily[0]!.models[0]!.cost = 0;
     daily[0]!.models[0]!.costSource = 'unpriced';
     const output = createTerminalOutput([createProvider('codex', 'Codex', daily)]);
-    const result = await renderer.render(output, createTerminalOptions({ width: 96, noColor: true }));
-    expect(result).toContain('Unknown');
-    expect(result).not.toContain('$0.00');
+    for (const width of [24, 60, 96]) {
+      const result = await renderer.render(output, createTerminalOptions({ width, noColor: true }));
+      expect(result).toContain('Unknown');
+      expect(result).not.toContain('$0.00');
+    }
   });
 });

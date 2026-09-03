@@ -415,6 +415,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           displayName: p.displayName,
           totalTokens: p.totalTokens,
           totalCost: p.totalCost,
+          costCompleteness: p.costCompleteness,
         })) ?? [];
       return createWrappedPanel(
         windowStats,

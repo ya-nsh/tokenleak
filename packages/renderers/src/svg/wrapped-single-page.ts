@@ -268,7 +268,7 @@ export function renderWrappedSinglePageSvg(
 
   const bigStats = [
     { label: 'TOTAL TOKENS', value: formatNumber(stats.totalTokens), unit: 'TOKENS', gold: false },
-    { label: 'TOTAL COST', value: formatCost(stats.totalCost), unit: 'USD', gold: true },
+    { label: 'TOTAL COST', value: formatCost(stats.totalCost, stats.costCompleteness), unit: 'USD', gold: true },
     { label: 'ACTIVE DAYS', value: `${stats.activeDays}`, unit: `OF ${stats.totalDays}`, gold: false },
     { label: 'AVG / DAY', value: formatNumber(stats.averageDailyTokens), unit: 'TOKENS', gold: false },
   ];
@@ -654,12 +654,10 @@ export function renderWrappedSinglePageSvg(
   parts.push(txt(c3x, c3y, 'PROJECTED / MONTH', {
     fill: C.muted, size: 9, weight: 400, family: MONO, spacing: 2,
   }));
-  parts.push(txt(c3x, c3y + 28, formatCost(projectedCost), {
+  parts.push(txt(c3x, c3y + 28, formatCost(projectedCost, stats.costCompleteness), {
     fill: C.ivory, size: 30, weight: 800, family: DISPLAY, spacing: -1,
   }));
-  const avgDailyCostStr = stats.averageDailyCost >= 1
-    ? `$${stats.averageDailyCost.toFixed(2)}`
-    : `$${stats.averageDailyCost.toFixed(4)}`;
+  const avgDailyCostStr = formatCost(stats.averageDailyCost, stats.costCompleteness);
   parts.push(txt(c3x, c3y + 44, `${avgDailyCostStr} avg/day`, {
     fill: C.muted, size: 11, weight: 400, family: MONO, spacing: 0.5,
   }));
