@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { homedir } from 'node:os';
 import type {
   DateRange,
@@ -41,11 +41,6 @@ const CODEX_COLORS: ProviderColors = {
   gradient: ['#10a37f', '#4ade80'],
 };
 
-const DEFAULT_SESSIONS_DIR = join(
-  process.env['CODEX_HOME'] ?? join(homedir(), '.codex'),
-  'sessions',
-);
-
 interface CodexUsageRecord {
   date: string;
   timestamp: string;
@@ -61,11 +56,13 @@ interface CodexUsageRecord {
 
 interface SessionContext {
   model: string;
+  sessionId?: string;
   projectId?: string;
   previousTotals: {
     inputTokens: number;
     outputTokens: number;
     cachedInputTokens: number;
+    cacheWriteTokens: number;
   } | null;
   lastUserPrompt?: string;
 }
@@ -196,17 +193,8 @@ function inferModelFromContext(record: unknown): string | null {
     }
   }
 
-  const instructions = meta['base_instructions'];
-  if (typeof instructions === 'object' && instructions !== null) {
-    const text = (instructions as Record<string, unknown>)['text'];
-    if (typeof text === 'string') {
-      const match = /based on ([A-Za-z0-9.-]+)/i.exec(text);
-      if (match?.[1]) {
-        return match[1].toLowerCase();
-      }
-    }
-  }
-
+  // Instructions describe the agent, not the model serving a particular turn.
+  // In particular, "based on GPT-5." must never replace explicit turn metadata.
   return null;
 }
 
@@ -325,9 +313,7 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     return null;
   }
 
-  const parseUsage = (
-    usage: unknown,
-  ): { inputTokens: number; outputTokens: number; cachedInputTokens: number } | null => {
+  const parseUsage = (usage: unknown): SessionContext['previousTotals'] => {
     if (typeof usage !== 'object' || usage === null) {
       return null;
     }
@@ -337,42 +323,64 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     const outputTokens = usageObj['output_tokens'];
     const cachedInputTokens = usageObj['cached_input_tokens'];
 
-    if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') {
+    if (
+      typeof inputTokens !== 'number' || !Number.isFinite(inputTokens) || inputTokens < 0 ||
+      typeof outputTokens !== 'number' || !Number.isFinite(outputTokens) || outputTokens < 0
+    ) {
       return null;
     }
 
     return {
       inputTokens,
       outputTokens,
-      cachedInputTokens: typeof cachedInputTokens === 'number' ? cachedInputTokens : 0,
+      cachedInputTokens: typeof cachedInputTokens === 'number' && Number.isFinite(cachedInputTokens)
+        ? Math.max(0, cachedInputTokens) : 0,
+      cacheWriteTokens: typeof usageObj['cache_write_input_tokens'] === 'number' &&
+        Number.isFinite(usageObj['cache_write_input_tokens'])
+        ? Math.max(0, usageObj['cache_write_input_tokens']) : 0,
     };
   };
 
   let usage = parseUsage(lastUsage);
+  const cumulative = parseUsage(totalUsage);
+  const previous = context.previousTotals;
+  if (cumulative) {
+    context.previousTotals = cumulative;
+    // token_count is also emitted for status/rate-limit updates. A repeated
+    // cumulative counter is not a new model response, even if last usage is set.
+    if (previous && cumulative.inputTokens === previous.inputTokens &&
+      cumulative.outputTokens === previous.outputTokens &&
+      cumulative.cachedInputTokens === previous.cachedInputTokens &&
+      cumulative.cacheWriteTokens === previous.cacheWriteTokens) {
+      return null;
+    }
+  }
 
   if (!usage) {
-    const cumulative = parseUsage(totalUsage);
     if (!cumulative) {
       return null;
     }
 
-    const previous = context.previousTotals ?? {
+    // Resumed sessions/compaction may restart the counter. Model switches do not.
+    const baseline = previous && cumulative.inputTokens >= previous.inputTokens &&
+      cumulative.outputTokens >= previous.outputTokens ? previous : {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheWriteTokens: 0,
     };
     usage = {
-      inputTokens: Math.max(0, cumulative.inputTokens - previous.inputTokens),
-      outputTokens: Math.max(0, cumulative.outputTokens - previous.outputTokens),
-      cachedInputTokens: Math.max(0, cumulative.cachedInputTokens - previous.cachedInputTokens),
+      inputTokens: Math.max(0, cumulative.inputTokens - baseline.inputTokens),
+      outputTokens: Math.max(0, cumulative.outputTokens - baseline.outputTokens),
+      cachedInputTokens: Math.max(0, cumulative.cachedInputTokens - baseline.cachedInputTokens),
+      cacheWriteTokens: Math.max(0, cumulative.cacheWriteTokens - baseline.cacheWriteTokens),
     };
-    context.previousTotals = cumulative;
-  } else if (parseUsage(totalUsage)) {
-    context.previousTotals = parseUsage(totalUsage);
   }
 
   const cacheReadTokens = Math.min(usage.cachedInputTokens, usage.inputTokens);
-  const inputTokens = Math.max(0, usage.inputTokens - cacheReadTokens);
+  const cacheWriteTokens = Math.min(usage.cacheWriteTokens, usage.inputTokens - cacheReadTokens);
+  const inputTokens = Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
+  if (usage.inputTokens + usage.outputTokens === 0) return null;
 
   return {
     date,
@@ -381,12 +389,18 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     inputTokens,
     outputTokens: usage.outputTokens,
     cacheReadTokens,
-    cacheWriteTokens: 0,
+    cacheWriteTokens,
     prompt: context.lastUserPrompt,
   };
 }
 
 function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageRecord | null {
+  if (typeof record === 'object' && record !== null && 'type' in record && record.type === 'session_meta') {
+    const payload = (record as Record<string, unknown>)['payload'];
+    if (typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'string') {
+      context.sessionId = payload.id;
+    }
+  }
   const inferredProjectId = inferProjectIdFromContext(record);
   if (inferredProjectId) {
     context.projectId = inferredProjectId;
@@ -396,7 +410,6 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   if (inferredModel) {
     if (context.model !== inferredModel) {
       context.model = inferredModel;
-      context.previousTotals = null;
     }
     return null;
   }
@@ -449,14 +462,18 @@ export class CodexProvider implements IProvider {
   readonly colors: ProviderColors = CODEX_COLORS;
 
   private readonly sessionsDir: string;
+  private readonly archivedSessionsDir: string | undefined;
 
-  constructor(baseDir?: string) {
-    this.sessionsDir = baseDir ?? DEFAULT_SESSIONS_DIR;
+  constructor(baseDir?: string, archivedDir?: string) {
+    const codexHome = process.env['CODEX_HOME'] ?? join(homedir(), '.codex');
+    this.sessionsDir = baseDir ?? join(codexHome, 'sessions');
+    // A custom directory stays isolated unless its archive is explicitly supplied.
+    this.archivedSessionsDir = archivedDir ?? (baseDir ? undefined : join(codexHome, 'archived_sessions'));
   }
 
   async isAvailable(): Promise<boolean> {
     try {
-      return existsSync(this.sessionsDir);
+      return existsSync(this.sessionsDir) || Boolean(this.archivedSessionsDir && existsSync(this.archivedSessionsDir));
     } catch {
       return false;
     }
@@ -464,12 +481,13 @@ export class CodexProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
-    const files = collectJsonlFiles(this.sessionsDir);
+    const files = [...collectJsonlFiles(this.sessionsDir),
+      ...(this.archivedSessionsDir ? collectJsonlFiles(this.archivedSessionsDir) : [])];
     const warnings = new Map<string, ProviderWarning>();
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const fileEvents: UsageEvent[] = [];
       const context: SessionContext = {
-        model: 'gpt-5',
+        model: 'unknown',
         projectId: undefined,
         previousTotals: null,
         lastUserPrompt: undefined,
@@ -490,7 +508,7 @@ export class CodexProvider implements IProvider {
             continue;
           }
 
-          usage.sessionId = relativeFile;
+          usage.sessionId = context.sessionId ?? basename(relativeFile);
           usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
 
           const normalizedModel = normalizeModelName(compactModelDateSuffix(usage.model));
@@ -532,7 +550,17 @@ export class CodexProvider implements IProvider {
       }
       return fileEvents;
     });
-    const events = eventsByFile.flat();
+    // Moving a session into the archive must not count overlapping copies twice.
+    // Include timestamp and session identity: equal token counts alone are not duplicates.
+    const seen = new Map<string, number>();
+    const events = eventsByFile.flatMap((fileEvents, fileIndex) => fileEvents.filter((event) => {
+      const key = JSON.stringify([event.sessionId, event.timestamp, event.model,
+        event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
+      const previousFile = seen.get(key);
+      if (previousFile !== undefined && previousFile !== fileIndex) return false;
+      seen.set(key, fileIndex);
+      return true;
+    }));
     addUnknownPricingWarnings(warnings, events);
 
     for (const event of events) {
