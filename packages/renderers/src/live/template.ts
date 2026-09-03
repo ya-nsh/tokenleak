@@ -4,7 +4,7 @@ import type {
   ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
-import { inclusiveDaySpan } from '@tokenleak/core';
+import { inclusiveDaySpan, buildDailyCostCompleteness } from '@tokenleak/core';
 import { formatNumber, formatCost } from '../svg/utils';
 import { buildHeatmapModel } from '../shared/heatmap-model';
 import {
@@ -148,7 +148,7 @@ function renderProviderHeatmapHtml(
     return `<span class="day-label" style="top:${y - 10}px">${d.label}</span>`;
   }).join('\n');
 
-  const summaryText = `${esc(formatNumber(provider.totalTokens))} tokens &middot; ${esc(formatCost(provider.totalCost))}`;
+  const summaryText = `${esc(formatNumber(provider.totalTokens))} tokens &middot; ${esc(formatCost(provider.totalCost, provider.costCompleteness ?? buildDailyCostCompleteness(provider.daily)))}`;
 
   return `<div class="provider-section" data-provider="${esc(provider.provider)}">
     <div class="provider-header">
@@ -196,7 +196,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       { label: 'TOTAL TOKENS', value: esc(formatNumber(stats.totalTokens)), accent: true },
     ],
     [
-      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost)), accent: false },
+      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost, stats.costCompleteness)), accent: false },
       { label: '30-DAY TOKENS', value: esc(formatNumber(stats.rolling30dTokens)), accent: false },
       { label: 'CACHE HIT RATE', value: esc(formatPercentage(stats.cacheHitRate)), accent: false },
     ],

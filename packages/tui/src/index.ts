@@ -415,6 +415,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           displayName: p.displayName,
           totalTokens: p.totalTokens,
           totalCost: p.totalCost,
+          costCompleteness: p.costCompleteness,
         })) ?? [];
       return createWrappedPanel(
         windowStats,
@@ -1574,7 +1575,7 @@ export async function main(): Promise<void> {
     if (sequence === 'j' || sequence === '\x1b[B') {
       if (state.selectedView === 'overview') {
         const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
-        const modelCount = windowStats?.topModels.length ?? 0;
+        const modelCount = (windowStats?.allModels ?? windowStats?.topModels)?.length ?? 0;
         const visibleCount = 10;
         const maxOffset = Math.max(0, modelCount - visibleCount);
         if (state.modelScrollOffset < maxOffset) {

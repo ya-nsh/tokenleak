@@ -1,3 +1,4 @@
+import { formatCostWithCompleteness } from '@tokenleak/core';
 import type { CompareDeltas, TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
@@ -89,7 +90,10 @@ export function renderCompareView(output: TokenleakOutput, width: number, noColo
   lines.push('');
   lines.push(truncateVisible(`  ${dim('Metric'.padEnd(18), noColor)} ${dim('Current'.padStart(11), noColor)} ${dim('Previous'.padStart(11), noColor)} ${dim('Delta'.padStart(11), noColor)}`, width));
   lines.push(renderDeltaRow('Total Tokens', formatTokens(output.aggregated.totalTokens), formatTokens(previousStats.totalTokens), formatSignedNumber(deltas.tokens, formatTokens), deltas.tokens, width, noColor));
-  lines.push(renderDeltaRow('Total Cost', formatCost(output.aggregated.totalCost), formatCost(previousStats.totalCost), formatSignedNumber(deltas.cost, formatCost), deltas.cost, width, noColor));
+  const costDelta = [output.aggregated, previousStats].some((stats) =>
+    stats.costCompleteness && stats.costCompleteness.status !== 'complete')
+    ? 'Unknown' : formatSignedNumber(deltas.cost, formatCost);
+  lines.push(renderDeltaRow('Total Cost', formatCostWithCompleteness(output.aggregated.totalCost, output.aggregated.costCompleteness), formatCostWithCompleteness(previousStats.totalCost, previousStats.costCompleteness), costDelta, deltas.cost, width, noColor));
   lines.push(renderDeltaRow('Active Days', String(output.aggregated.activeDays), String(previousStats.activeDays), formatSignedNumber(deltas.activeDays, (value) => String(Math.round(value))), deltas.activeDays, width, noColor));
   lines.push(renderDeltaRow('Current Streak', `${output.aggregated.currentStreak}d`, `${previousStats.currentStreak}d`, formatSignedNumber(deltas.streak, (value) => `${Math.round(value)}d`), deltas.streak, width, noColor));
   lines.push(renderDeltaRow('Avg Daily Tok', formatTokens(output.aggregated.averageDailyTokens), formatTokens(previousStats.averageDailyTokens), formatSignedNumber(deltas.averageDailyTokens, formatTokens), deltas.averageDailyTokens, width, noColor));

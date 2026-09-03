@@ -1,8 +1,11 @@
 export const VERSION = '2.1.1';
+export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
+export { formatCostWithCompleteness } from './cost-completeness';
 
 export type {
   DailyUsage,
   ModelBreakdown,
+  ServiceTierUsage,
   CachePricingDetails,
   ProviderData,
   ProviderColors,

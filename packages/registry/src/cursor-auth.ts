@@ -1,4 +1,5 @@
 import { VERSION } from '@tokenleak/core';
+import { parseCursorHeader } from './parsers/cursor-csv';
 import {
   chmodSync,
   existsSync,
@@ -882,6 +883,17 @@ export async function validateCursorSession(sessionToken: string): Promise<Valid
   }
 }
 
+function isCursorAuthResponse(response: Response): boolean {
+  if (response.status === 401 || response.status === 403) return true;
+  try {
+    const url = new URL(response.url);
+    return url.hostname === 'authenticator.cursor.sh' ||
+      ((url.hostname === 'cursor.com' || url.hostname === 'www.cursor.com') && /^\/(?:login|signin|sign-in)(?:\/|$)/.test(url.pathname));
+  } catch {
+    return false;
+  }
+}
+
 async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
   let response: Response;
   try {
@@ -895,7 +907,7 @@ async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
     throw new CursorAuthError(formatNetworkError(error), 'network');
   }
 
-  if (response.status === 401 || response.status === 403) {
+  if (isCursorAuthResponse(response)) {
     throw new CursorAuthError(
       "Cursor session expired. Please run 'tokenleak cursor login' to re-authenticate.",
       'auth',
@@ -906,8 +918,8 @@ async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
     throw new CursorAuthError(`Cursor API returned status ${response.status}`, 'api');
   }
 
-  const text = await response.text();
-  if (!text.startsWith('Date,')) {
+  const text = (await response.text()).replace(/^\uFEFF/, '').trimStart();
+  if (!parseCursorHeader(text.split(/\r?\n/, 1)[0] ?? '')) {
     throw new CursorAuthError('Invalid response from Cursor API - expected CSV format', 'parse');
   }
 
@@ -1032,7 +1044,7 @@ export async function diagnoseCursorConnection(options: {
           headers: buildCursorHeaders(credentials.sessionToken),
         },
         async (response) => {
-          if (response.status === 401 || response.status === 403) {
+          if (isCursorAuthResponse(response)) {
             return {
               name: 'usage-summary-token',
               ok: false,
@@ -1086,7 +1098,7 @@ export async function diagnoseCursorConnection(options: {
           headers: buildCursorHeaders(credentials.sessionToken),
         },
         async (response) => {
-          if (response.status === 401 || response.status === 403) {
+          if (isCursorAuthResponse(response)) {
             return {
               name: 'usage-csv-token',
               ok: false,
@@ -1107,7 +1119,7 @@ export async function diagnoseCursorConnection(options: {
           }
 
           const text = await response.text();
-          const ok = text.startsWith('Date,');
+          const ok = Boolean(parseCursorHeader(text.trimStart().split(/\r?\n/, 1)[0] ?? ''));
           return {
             name: 'usage-csv-token',
             ok,

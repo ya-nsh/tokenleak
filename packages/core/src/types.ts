@@ -21,6 +21,14 @@ export interface ModelBreakdown {
   costSource?: CostSource;
   pricedTokens?: number;
   unpricedTokens?: number;
+  serviceTiers?: ServiceTierUsage[];
+}
+
+export interface ServiceTierUsage {
+  tier: string;
+  tokens: number;
+  cost: number;
+  unpricedTokens: number;
 }
 
 export interface CachePricingDetails {
@@ -84,8 +92,12 @@ export interface AggregatedStats {
   activeDays: number;
   dayOfWeek: DayOfWeekEntry[];
   topModels: TopModelEntry[];
+  /** Complete inventory for model browsers; topModels remains the top-ten summary. */
+  allModels?: TopModelEntry[];
   rolling30dTopModel: string | null;
   costCompleteness?: CostCompleteness;
+  rolling30dCostCompleteness?: CostCompleteness;
+  rolling7dCostCompleteness?: CostCompleteness;
 }
 
 export interface UsageEvent {
@@ -104,6 +116,11 @@ export interface UsageEvent {
   pricedTokens?: number;
   unpricedTokens?: number;
   sessionId?: string;
+  turnId?: string;
+  responseId?: string;
+  /** Canonical recorded tier; missing historical metadata is explicitly unknown for Codex. */
+  serviceTier?: string;
+  serviceTierSource?: 'response' | 'request' | 'model-name';
   projectId?: string;
   repoRoot?: string;
   directory?: string;
@@ -125,6 +142,8 @@ export interface TopModelEntry {
   tokens: number;
   cost: number;
   percentage: number;
+  costCompleteness?: CostCompleteness;
+  serviceTiers?: ServiceTierUsage[];
 }
 
 export interface InputOutputMetrics {

@@ -66,13 +66,14 @@ export function formatNumber(n: number): string {
 }
 
 /** Format a dollar amount */
-export function formatCost(cost: number): string {
+export function formatCost(cost: number, completeness?: import('@tokenleak/core').CostCompleteness): string {
+  if (completeness?.status === 'unknown') return 'Unknown';
+  const suffix = completeness?.status === 'partial' ? '+' : '';
   if (cost >= 100) {
-    return `$${cost.toFixed(0)}`;
+    return `$${cost.toFixed(0)}${suffix}`;
   }
   if (cost >= 1) {
-    return `$${cost.toFixed(2)}`;
+    return `$${cost.toFixed(2)}${suffix}`;
   }
-  return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(4)}${suffix}`;
 }
-

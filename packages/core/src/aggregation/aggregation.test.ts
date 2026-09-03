@@ -322,6 +322,27 @@ describe('calculateAverages', () => {
 // --- Top Models ---
 
 describe('topModels', () => {
+  test('aggregate retains every model separately from its top-ten summary', () => {
+    const models = Array.from({ length: 11 }, (_, i) => ({ model: `model-${i}`, inputTokens: 11 - i,
+      outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 11 - i,
+      cost: i === 10 ? 100 : 1 }));
+    const result = aggregate([makeDay('2025-01-01', 66, 110, { models })], '2025-01-01');
+    expect(result.topModels).toHaveLength(10);
+    expect(result.allModels).toHaveLength(11);
+    expect([...result.allModels!].sort((a, b) => b.cost - a.cost)[0]?.model).toBe('model-10');
+  });
+
+  test('retains per-model pricing completeness and service-tier totals', () => {
+    const model = { model: 'gpt-5.5', inputTokens: 100, outputTokens: 0, cacheReadTokens: 0,
+      cacheWriteTokens: 0, totalTokens: 100, cost: 0, costSource: 'unpriced' as const,
+      serviceTiers: [{ tier: 'fast', tokens: 100, cost: 0, unpricedTokens: 100 }] };
+    const result = topModels([makeDay('2025-01-01', 100, 0, { models: [model] }),
+      makeDay('2025-01-02', 100, 0, { models: [model] })]);
+    expect(result[0]?.costCompleteness).toMatchObject({ status: 'unknown', unpricedTokens: 200 });
+    expect(result[0]?.serviceTiers).toEqual([{ tier: 'fast', tokens: 200, cost: 0, unpricedTokens: 200 }]);
+    expect(model.serviceTiers[0]?.tokens).toBe(100);
+  });
+
   test('single model', () => {
     const days = [makeDay('2025-01-01', 100)];
     const result = topModels(days);

@@ -27,7 +27,11 @@ export function aggregate(
   const peak = findPeakDay(daily);
   const dow = dayOfWeekBreakdown(daily);
   const cache = cacheHitRate(daily);
-  const models = topModels(daily);
+  const models = topModels(daily, Infinity);
+  const windowCompleteness = (days: number) => buildDailyCostCompleteness(daily.filter((day) => {
+    const age = dateToUtcMs(referenceDate) - dateToUtcMs(day.date);
+    return age >= 0 && age < days * ONE_DAY_MS;
+  }));
 
   let totalTokens = 0;
   let totalInputTokens = 0;
@@ -64,9 +68,12 @@ export function aggregate(
     totalDays,
     activeDays,
     dayOfWeek: dow,
-    topModels: models,
+    topModels: models.slice(0, 10),
+    allModels: models,
     rolling30dTopModel,
     costCompleteness,
+    rolling30dCostCompleteness: windowCompleteness(30),
+    rolling7dCostCompleteness: windowCompleteness(7),
   };
 }
 

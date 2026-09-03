@@ -1,5 +1,11 @@
 import type { CostCompleteness, DailyUsage, ProviderData, UsageEvent } from './types';
 
+/** Distinguish absent estimates from a provider-reported zero cost. */
+export function formatCostWithCompleteness(cost: number, completeness?: CostCompleteness): string {
+  if (completeness?.status === 'unknown') return 'Unknown';
+  return `$${cost.toFixed(2)}${completeness?.status === 'partial' ? '+' : ''}`;
+}
+
 function mergeUnknownModels(target: Set<string>, models: Iterable<string>): void {
   for (const model of models) {
     if (model.trim()) {

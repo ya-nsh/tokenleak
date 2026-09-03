@@ -11,7 +11,9 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
-import { normalizeModelName } from '../models/normalizer';
+import { resolveModelIdentity } from '../models/normalizer';
+import { mergeServiceTiers } from '@tokenleak/core';
+import { parseCsvLine, parseCursorHeader } from '../parsers/cursor-csv';
 import { isInRange } from '../utils';
 import {
   addUnknownPricingWarnings,
@@ -39,6 +41,7 @@ interface UsageRecord {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   explicitCost?: number;
+  serviceTier?: string;
   sessionId: string;
 }
 
@@ -80,35 +83,6 @@ function collectUsageFiles(dir: string): string[] {
   return files.sort((left, right) => left.localeCompare(right));
 }
 
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index]!;
-    if (char === '"') {
-      if (inQuotes && line[index + 1] === '"') {
-        current += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      fields.push(current);
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  fields.push(current);
-  return fields;
-}
 
 function extractDate(timestamp: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
@@ -166,14 +140,20 @@ function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>
     return [];
   }
 
-  const header = parseCsvLine(lines[0]!);
-  const hasKindColumn = header.includes('Kind');
-  const modelIndex = hasKindColumn ? 2 : 1;
-  const inputWithCacheWriteIndex = hasKindColumn ? 4 : 2;
-  const inputWithoutCacheWriteIndex = hasKindColumn ? 5 : 3;
-  const cacheReadIndex = hasKindColumn ? 6 : 4;
-  const outputIndex = hasKindColumn ? 7 : 5;
-  const costIndex = hasKindColumn ? 9 : 7;
+  const header = parseCursorHeader(lines[0]!);
+  if (!header) {
+    incrementProviderWarning(warnings, 'parse', filePath);
+    return [];
+  }
+  const dateIndex = header.get('Date')!;
+  const modelIndex = header.get('Model')!;
+  const inputWithCacheWriteIndex = header.get('Input (w/ Cache Write)')!;
+  const inputWithoutCacheWriteIndex = header.get('Input (w/o Cache Write)')!;
+  const cacheReadIndex = header.get('Cache Read')!;
+  const outputIndex = header.get('Output Tokens')!;
+  const costIndex = header.get('Cost')!;
+  const maxRequiredIndex = Math.max(dateIndex, modelIndex, inputWithCacheWriteIndex,
+    inputWithoutCacheWriteIndex, cacheReadIndex, outputIndex, costIndex);
   const accountId = filePath.endsWith('/usage.csv') || filePath.endsWith('\\usage.csv')
     ? 'active'
     : filePath
@@ -186,12 +166,12 @@ function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>
   const records: UsageRecord[] = [];
   for (const line of lines.slice(1)) {
     const fields = parseCsvLine(line);
-    if (fields.length <= costIndex) {
+    if (fields.length <= maxRequiredIndex) {
       incrementProviderWarning(warnings, 'parse', filePath);
       continue;
     }
 
-    const timestamp = toIsoTimestamp(fields[0] ?? '');
+    const timestamp = toIsoTimestamp(fields[dateIndex] ?? '');
     if (!timestamp) {
       incrementProviderWarning(warnings, 'parse', filePath);
       continue;
@@ -236,11 +216,15 @@ function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>
     }
 
     const model = compactModelDateSuffix(rawModel);
+    // Cursor's historical UI aliases for the same Opus 4.5 model.
+    const canonical = /^claude-4\.5-opus(?:-high)?(?:-thinking)?$/.test(model) ? 'claude-opus-4-5' : model;
+    const identity = resolveModelIdentity(canonical);
     records.push({
       date,
       timestamp,
       model,
-      normalizedModel: normalizeModelName(model),
+      normalizedModel: identity.model,
+      serviceTier: identity.serviceTier ?? (identity.model.startsWith('gpt-5') ? 'unknown' : undefined),
       inputTokens,
       outputTokens: Math.max(0, outputTokens),
       cacheReadTokens: Math.max(0, cacheReadTokens),
@@ -261,6 +245,7 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
     cacheReadTokens: record.cacheReadTokens,
     cacheWriteTokens: record.cacheWriteTokens,
     explicitCost: record.explicitCost,
+    serviceTier: record.serviceTier,
   });
 
   return {
@@ -283,6 +268,8 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
     pricedTokens: cost.pricedTokens,
     unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
+    serviceTier: record.serviceTier,
+    serviceTierSource: record.serviceTier === 'fast' ? 'model-name' : undefined,
   };
 }
 
@@ -306,6 +293,8 @@ function buildProviderData(records: UsageRecord[], warnings: ProviderWarning[]):
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
       existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      if (event.serviceTier) existing.serviceTiers = mergeServiceTiers(existing.serviceTiers, [{
+        tier: event.serviceTier, tokens: event.totalTokens, cost: event.cost, unpricedTokens: event.unpricedTokens ?? 0 }]);
       existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
       existing.costSource =
         (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
@@ -327,6 +316,8 @@ function buildProviderData(records: UsageRecord[], warnings: ProviderWarning[]):
       costSource: event.costSource,
       pricedTokens: event.pricedTokens,
       unpricedTokens: event.unpricedTokens,
+      serviceTiers: event.serviceTier ? [{ tier: event.serviceTier, tokens: event.totalTokens,
+        cost: event.cost, unpricedTokens: event.unpricedTokens ?? 0 }] : undefined,
     });
   }
 

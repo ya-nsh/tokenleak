@@ -220,7 +220,7 @@ function createTopModelsPanel(state: AppState) {
             attributes: isTop ? BOLD : undefined,
           }),
           Text({ content: padLeft(formatTokens(m.tokens), 10), fg: COLORS.green }),
-          Text({ content: padLeft(formatCost(m.cost), 10), fg: COLORS.amber }),
+          Text({ content: padLeft(formatCostWithCompleteness(m.cost, m.costCompleteness), 10), fg: COLORS.amber }),
           Text({
             content: padLeft(`${m.percentage.toFixed(1)}%`, 8),
             fg: COLORS.white,

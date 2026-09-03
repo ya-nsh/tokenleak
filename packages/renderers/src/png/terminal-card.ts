@@ -5,7 +5,7 @@ import type {
   ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
-import { inclusiveDaySpan } from '@tokenleak/core';
+import { inclusiveDaySpan, buildDailyCostCompleteness } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
 import {
   CARD_PADDING,
@@ -662,7 +662,7 @@ export function renderTerminalCardSvg(
     );
 
     // Inline summary on the right: total tokens · cost
-    const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost)}`;
+    const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost, provider.costCompleteness ?? buildDailyCostCompleteness(provider.daily))}`;
     sections.push(
       `<text x="${cardWidth - pad}" y="${y + 15}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(summaryText)}</text>`,
     );
@@ -717,7 +717,7 @@ export function renderTerminalCardSvg(
     { label: 'TOTAL TOKENS', value: formatNumber(stats.totalTokens), accent: true },
   ];
   const statsRow2 = [
-    { label: 'TOTAL COST', value: formatCost(stats.totalCost), accent: false },
+    { label: 'TOTAL COST', value: formatCost(stats.totalCost, stats.costCompleteness), accent: false },
     { label: '30-DAY TOKENS', value: formatNumber(stats.rolling30dTokens), accent: false },
     { label: 'CACHE HIT RATE', value: formatPercentage(stats.cacheHitRate), accent: false },
   ];
@@ -841,7 +841,7 @@ export function renderTerminalCardSvg(
     const burnLines = [
       {
         label: 'Projected Cost',
-        value: formatCost(more.monthlyBurn.projectedCost),
+        value: formatCost(more.monthlyBurn.projectedCost, stats.costCompleteness),
         accent: true,
       },
       {

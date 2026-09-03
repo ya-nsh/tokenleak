@@ -9,6 +9,48 @@ const FIXTURES_DIR = join(import.meta.dir, '..', '__fixtures__', 'cursor-cache')
 const FULL_RANGE: DateRange = { since: '2026-03-10', until: '2026-03-12' };
 
 describe('CursorProvider', () => {
+  it('keeps unknown GPT tiers alongside Fast usage in the same model breakdown', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cursor-mixed-tiers-'));
+    try {
+      writeFileSync(join(root, 'usage.csv'), [
+        'Model,Cost,Date,Output Tokens,Cache Read,Input (w/o Cache Write),Input (w/ Cache Write)',
+        'gpt-5.4-fast,,2026-03-10,100,0,1000,1000',
+        'gpt-5.4,,2026-03-10,100,0,1000,1000',
+      ].join('\n'));
+      const data = await new CursorProvider(root).load(FULL_RANGE);
+      expect(data.daily[0]?.models[0]?.serviceTiers).toEqual([
+        { tier: 'fast', tokens: 1100, cost: 0.008, unpricedTokens: 0 },
+        { tier: 'unknown', tokens: 1100, cost: 0.004, unpricedTokens: 0 },
+      ]);
+      expect(data.events?.[1]?.serviceTierSource).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reads reordered headers and estimates known aliases while preserving reported zero costs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cursor-aliases-'));
+    try {
+      writeFileSync(join(root, 'usage.csv'), [
+        '\uFEFF"Model",Cost,Date,Output Tokens,Cache Read,Input (w/o Cache Write),Input (w/ Cache Write)',
+        'claude-4.5-opus-high,,2026-03-10,100,0,1000,1000',
+        'claude-4.5-opus-high-thinking,,2026-03-10,100,0,1000,1000',
+        'gpt-5.4-fast,,2026-03-10,100,0,1000,1000',
+        'auto,$0.00,2026-03-10,100,0,1000,1000',
+        'composer-1,$0.12,2026-03-10,100,0,1000,1000',
+      ].join('\n'));
+      const data = await new CursorProvider(root).load(FULL_RANGE);
+      expect(data.events?.map((e) => e.model)).toEqual(['claude-opus-4-5', 'claude-opus-4-5', 'gpt-5.4', 'auto', 'composer-1']);
+      expect(data.events?.[0]?.cost).toBeCloseTo(0.0075);
+      expect(data.events?.[2]).toMatchObject({ serviceTier: 'fast', cost: 0.008 });
+      expect(data.events?.[3]).toMatchObject({ costSource: 'provider-reported', cost: 0 });
+      expect(data.events?.[4]).toMatchObject({ costSource: 'provider-reported', cost: 0.12 });
+      expect(data.costCompleteness?.status).toBe('complete');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('has correct name, displayName, and colors', () => {
     const provider = new CursorProvider(FIXTURES_DIR);
     expect(provider.name).toBe('cursor');
