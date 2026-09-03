@@ -52,11 +52,15 @@ interface CodexUsageRecord {
   prompt?: string;
   sessionId?: string;
   projectId?: string;
+  turnId?: string;
+  responseId?: string;
+  source?: 'record' | 'notification';
 }
 
 interface SessionContext {
   model: string;
   sessionId?: string;
+  turnId?: string;
   projectId?: string;
   previousTotals: {
     inputTokens: number;
@@ -395,6 +399,23 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
 }
 
 function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageRecord | null {
+  const obj = typeof record === 'object' && record !== null ? record as Record<string, unknown> : null;
+  const payload = obj?.['payload'];
+  const meta = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+  if (obj?.['type'] === 'turn_context') {
+    context.turnId = typeof meta?.['turn_id'] === 'string' ? meta['turn_id'] : undefined;
+  }
+  if (obj?.['type'] === 'token_usage_record' && meta) {
+    // New response-scoped records coexist with token_count status notifications.
+    // Reuse token validation/cache accounting without changing the legacy counter.
+    const usage = parseTokenCountUsage({ type: 'event_msg', timestamp: obj['timestamp'],
+      payload: { type: 'token_count', info: { last_token_usage: meta['usage'] } } }, context);
+    if (!usage) return null;
+    return { ...usage, source: 'record',
+      model: typeof meta['model'] === 'string' && meta['model'].trim() ? meta['model'].trim() : context.model,
+      turnId: typeof meta['turn_id'] === 'string' ? meta['turn_id'] : context.turnId,
+      responseId: typeof meta['response_id'] === 'string' ? meta['response_id'] : undefined };
+  }
   if (typeof record === 'object' && record !== null && 'type' in record && record.type === 'session_meta') {
     const payload = (record as Record<string, unknown>)['payload'];
     if (typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'string') {
@@ -422,7 +443,7 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
 
   const tokenCountUsage = parseTokenCountUsage(record, context);
   if (tokenCountUsage) {
-    return tokenCountUsage;
+    return { ...tokenCountUsage, source: 'notification', turnId: context.turnId };
   }
 
   const legacyEvent = parseResponseEvent(record);
@@ -445,6 +466,50 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     cacheWriteTokens: 0,
     prompt: context.lastUserPrompt,
   };
+}
+
+interface UsageCandidate {
+  event: UsageEvent;
+  source?: CodexUsageRecord['source'];
+}
+
+function reconcileUsageRecords(candidates: UsageCandidate[]): UsageEvent[] {
+  const responses = new Set<string>();
+  const unique = candidates.filter(({ event, source }) => {
+    if (source !== 'record' || !event.responseId) return true;
+    if (responses.has(event.responseId)) return false;
+    responses.add(event.responseId);
+    return true;
+  });
+  const mirrors = new Map<string, { timestamps: number[]; cursor: number }>();
+  const keyFor = (event: UsageEvent) => JSON.stringify([event.turnId, event.inputTokens,
+    event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
+  for (const { event, source } of unique) {
+    if (source !== 'record' || !event.turnId) continue;
+    const key = keyFor(event);
+    const matches = mirrors.get(key) ?? { timestamps: [], cursor: 0 };
+    matches.timestamps.push(Date.parse(event.timestamp));
+    mirrors.set(key, matches);
+  }
+  for (const matches of mirrors.values()) matches.timestamps.sort((a, b) => a - b);
+  return unique.filter(({ event, source }) => {
+    if (source !== 'notification' || !event.turnId) return true;
+    const matches = mirrors.get(keyFor(event));
+    if (!matches) return true;
+    const timestamp = Date.parse(event.timestamp);
+    // A mirrored notification can be delayed by tool processing. Pair at most
+    // once, within the same turn and one minute; never deduplicate equal-size
+    // responses within a single source or unrelated turns.
+    while (matches.cursor < matches.timestamps.length && matches.timestamps[matches.cursor]! < timestamp - 60_000) {
+      matches.cursor++;
+    }
+    const match = matches.timestamps[matches.cursor];
+    if (match !== undefined && Math.abs(match - timestamp) <= 60_000) {
+      matches.cursor++;
+      return false;
+    }
+    return true;
+  }).map(({ event }) => event);
 }
 
 /**
@@ -485,7 +550,7 @@ export class CodexProvider implements IProvider {
       ...(this.archivedSessionsDir ? collectJsonlFiles(this.archivedSessionsDir) : [])];
     const warnings = new Map<string, ProviderWarning>();
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
-      const fileEvents: UsageEvent[] = [];
+      const candidates: UsageCandidate[] = [];
       const context: SessionContext = {
         model: 'unknown',
         projectId: undefined,
@@ -504,10 +569,6 @@ export class CodexProvider implements IProvider {
             continue;
           }
 
-          if (!isInRange(usage.date, range)) {
-            continue;
-          }
-
           usage.sessionId = context.sessionId ?? basename(relativeFile);
           usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
 
@@ -523,7 +584,7 @@ export class CodexProvider implements IProvider {
             cacheReadTokens,
             cacheWriteTokens,
           });
-          fileEvents.push({
+          candidates.push({ source: usage.source, event: {
             provider: this.name,
             timestamp: usage.timestamp,
             date: usage.date,
@@ -539,22 +600,24 @@ export class CodexProvider implements IProvider {
             pricedTokens: cost.pricedTokens,
             unpricedTokens: cost.unpricedTokens,
             sessionId: usage.sessionId,
+            turnId: usage.turnId,
+            responseId: usage.responseId,
             projectId: usage.projectId,
             prompt: usage.prompt,
-          });
+          } });
         }
       } catch {
         // Skip files that fail to parse
         incrementWarningCount(warnings, 'read', file);
         return [];
       }
-      return fileEvents;
+      return reconcileUsageRecords(candidates).filter((event) => isInRange(event.date, range));
     });
     // Moving a session into the archive must not count overlapping copies twice.
     // Include timestamp and session identity: equal token counts alone are not duplicates.
     const seen = new Map<string, number>();
     const events = eventsByFile.flatMap((fileEvents, fileIndex) => fileEvents.filter((event) => {
-      const key = JSON.stringify([event.sessionId, event.timestamp, event.model,
+      const key = event.responseId ? JSON.stringify([event.sessionId, event.responseId]) : JSON.stringify([event.sessionId, event.timestamp, event.model,
         event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
       const previousFile = seen.get(key);
       if (previousFile !== undefined && previousFile !== fileIndex) return false;

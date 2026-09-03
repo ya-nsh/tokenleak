@@ -104,6 +104,8 @@ export interface UsageEvent {
   pricedTokens?: number;
   unpricedTokens?: number;
   sessionId?: string;
+  turnId?: string;
+  responseId?: string;
   projectId?: string;
   repoRoot?: string;
   directory?: string;

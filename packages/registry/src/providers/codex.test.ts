@@ -36,6 +36,48 @@ async function loadRecords(records: unknown[]) {
 }
 
 describe('Codex accounting regressions', () => {
+  const modern = (id: string, input = 1000, timestamp = '2026-03-12T10:01:00Z') => ({
+    type: 'token_usage_record', timestamp, payload: { turn_id: 'turn-1', response_id: id,
+      usage: { input_tokens: input, output_tokens: 100, cached_input_tokens: 200, cache_write_input_tokens: 100 } },
+  });
+  const modernTurn = { ...turn('gpt-5.4'), payload: { model: 'gpt-5.4', turn_id: 'turn-1' } };
+
+  it('reads response-scoped usage and partitions cache reads/writes without inflating totals', async () => {
+    const data = await loadRecords([modernTurn, modern('r1')]);
+    expect(data.events?.[0]).toMatchObject({ totalTokens: 1100, inputTokens: 700,
+      cacheReadTokens: 200, cacheWriteTokens: 100, outputTokens: 100, responseId: 'r1', turnId: 'turn-1' });
+  });
+
+  it.each([false, true])('counts mirrored legacy and modern records once (modern first: %s)', async (modernFirst) => {
+    const record = modern('r1');
+    const notification = tokens(1000, 100, { cached: 200 });
+    Object.assign(notification.payload.info.last_token_usage!, { cache_write_input_tokens: 100 });
+    const pair = modernFirst ? [record, notification] : [notification, record];
+    const data = await loadRecords([modernTurn, ...pair]);
+    expect(data.totalTokens).toBe(1100);
+    expect(data.events).toHaveLength(1);
+    expect(data.events?.[0]?.responseId).toBe('r1');
+  });
+
+  it('deduplicates response IDs but keeps distinct responses with identical token counts', async () => {
+    const data = await loadRecords([modernTurn, modern('r1'), modern('r1'), modern('r2')]);
+    expect(data.totalTokens).toBe(2200);
+    expect(data.events).toHaveLength(2);
+  });
+
+  it('does not discard legacy-only usage when a turn has partial modern coverage', async () => {
+    const data = await loadRecords([modernTurn, modern('r1'), tokens(500, 50)]);
+    expect(data.totalTokens).toBe(1650);
+  });
+
+  it('reconciles across the range boundary before assigning dates', async () => {
+    const record = modern('r1', 1000, '2026-03-11T23:59:59Z');
+    const notification = tokens(1000, 100, { cached: 200, timestamp: '2026-03-12T00:00:01Z' });
+    Object.assign(notification.payload.info.last_token_usage!, { cache_write_input_tokens: 100 });
+    const data = await loadRecords([modernTurn, record, notification]);
+    expect(data.totalTokens).toBe(0);
+  });
+
   it('does not replace an explicit model with agent instruction prose on resume', async () => {
     const data = await loadRecords([turn('gpt-5.5'), tokens(1000, 100),
       { type: 'session_meta', payload: { base_instructions: { text: 'You are Codex, based on GPT-5.' } } },
