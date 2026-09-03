@@ -1153,7 +1153,8 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--format', 'json', '--provider', 'pi'], {
+      const proc = Bun.spawn(['bun', cliPath, 'focus', '--format', 'json', '--provider', 'pi',
+        '--since', '2026-03-10', '--until', '2026-03-11'], {
         stdout: 'pipe',
         stderr: 'pipe',
         env,
@@ -1177,7 +1178,8 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--provider', 'pi'], {
+      const proc = Bun.spawn(['bun', cliPath, 'focus', '--provider', 'pi',
+        '--since', '2026-03-10', '--until', '2026-03-11'], {
         stdout: 'pipe',
         stderr: 'pipe',
         env,
