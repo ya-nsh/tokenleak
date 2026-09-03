@@ -1,4 +1,17 @@
-import type { ServiceTierUsage } from './types';
+import type { ModelBreakdown, ServiceTierUsage } from './types';
+
+/** Fill the portion of a model's usage for which its provider recorded no tier. */
+export function completeServiceTiers(model: Pick<ModelBreakdown,
+  'serviceTiers' | 'totalTokens' | 'cost' | 'unpricedTokens' | 'costSource'>): ServiceTierUsage[] {
+  const tiers = mergeServiceTiers(model.serviceTiers);
+  const missingTokens = model.totalTokens - tiers.reduce((sum, tier) => sum + tier.tokens, 0);
+  if (missingTokens <= 0) return tiers;
+  const unpriced = model.unpricedTokens ?? (model.costSource === 'unpriced' ? model.totalTokens : 0);
+  return mergeServiceTiers(tiers, [{ tier: 'unknown', tokens: missingTokens,
+    cost: Math.max(0, model.cost - tiers.reduce((sum, tier) => sum + tier.cost, 0)),
+    unpricedTokens: Math.min(missingTokens, Math.max(0,
+      unpriced - tiers.reduce((sum, tier) => sum + tier.unpricedTokens, 0))) }]);
+}
 
 export function mergeServiceTiers(...groups: (ServiceTierUsage[] | undefined)[]): ServiceTierUsage[] {
   const tiers = new Map<string, ServiceTierUsage>();

@@ -58,11 +58,14 @@ interface CodexUsageRecord {
   source?: 'record' | 'notification';
   serviceTier?: string;
   serviceTierSource?: UsageEvent['serviceTierSource'];
+  counterAdvanced?: boolean;
+  cumulativeOnly?: boolean;
 }
 
 interface SessionContext {
   model: string;
   hasTurnModel?: boolean;
+  hasTurnTier?: boolean;
   sessionId?: string;
   turnId?: string;
   serviceTier?: string;
@@ -352,6 +355,7 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
   };
 
   let usage = parseUsage(lastUsage);
+  const hasLastUsage = usage !== null;
   const cumulative = parseUsage(totalUsage);
   const previous = context.previousTotals;
   if (cumulative) {
@@ -401,6 +405,8 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     cacheReadTokens,
     cacheWriteTokens,
     prompt: context.lastUserPrompt,
+    counterAdvanced: cumulative !== null,
+    cumulativeOnly: cumulative !== null && !hasLastUsage,
   };
 }
 
@@ -410,10 +416,11 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   const meta = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
   if (obj?.['type'] === 'session_meta' && meta && 'service_tier' in meta) {
     context.sessionServiceTier = normalizeServiceTier(meta['service_tier']);
-    if (!context.turnId) context.serviceTier = context.sessionServiceTier;
+    if (!context.hasTurnTier) context.serviceTier = context.sessionServiceTier;
   }
   if (obj?.['type'] === 'turn_context') {
     context.turnId = typeof meta?.['turn_id'] === 'string' ? meta['turn_id'] : undefined;
+    context.hasTurnTier = normalizeServiceTier(meta?.['service_tier']) !== undefined;
     // Missing metadata on the next turn must not inherit a previous Fast setting.
     context.serviceTier = normalizeServiceTier(meta?.['service_tier']) ?? context.sessionServiceTier;
   }
@@ -492,45 +499,91 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
 interface UsageCandidate {
   event: UsageEvent;
   source?: CodexUsageRecord['source'];
+  coveredRecords?: UsageCandidate[];
+  keys?: string[];
+  adjusted?: boolean;
 }
 
-function reconcileUsageRecords(candidates: UsageCandidate[]): UsageEvent[] {
+function usageKey(event: UsageEvent): string {
+  return event.responseId ? JSON.stringify([event.sessionId, event.responseId]) :
+    JSON.stringify([event.sessionId, event.timestamp, event.model,
+      event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
+}
+
+function reconcileUsageRecords(candidates: UsageCandidate[]): UsageCandidate[] {
   const responses = new Set<string>();
   const unique = candidates.filter(({ event, source }) => {
     if (source !== 'record' || !event.responseId) return true;
-    if (responses.has(event.responseId)) return false;
-    responses.add(event.responseId);
+    const key = usageKey(event);
+    if (responses.has(key)) return false;
+    responses.add(key);
     return true;
   });
-  const mirrors = new Map<string, { timestamps: number[]; cursor: number }>();
-  const keyFor = (event: UsageEvent) => JSON.stringify([event.turnId, event.inputTokens,
+  const mirrors = new Map<string, { records: UsageCandidate[]; cursor: number }>();
+  const keyFor = (event: UsageEvent) => JSON.stringify([event.sessionId, event.turnId, event.inputTokens,
     event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
-  for (const { event, source } of unique) {
+  for (const candidate of unique) {
+    const { event, source } = candidate;
+    candidate.keys = [usageKey(event)];
     if (source !== 'record' || !event.turnId) continue;
     const key = keyFor(event);
-    const matches = mirrors.get(key) ?? { timestamps: [], cursor: 0 };
-    matches.timestamps.push(Date.parse(event.timestamp));
+    const matches = mirrors.get(key) ?? { records: [], cursor: 0 };
+    matches.records.push(candidate);
     mirrors.set(key, matches);
   }
-  for (const matches of mirrors.values()) matches.timestamps.sort((a, b) => a - b);
-  return unique.filter(({ event, source }) => {
-    if (source !== 'notification' || !event.turnId) return true;
+  for (const matches of mirrors.values()) {
+    matches.records.sort((a, b) => Date.parse(a.event.timestamp) - Date.parse(b.event.timestamp));
+  }
+  const removed = new Set<UsageCandidate>();
+  const matchedRecords = new Set<UsageCandidate>();
+  for (const candidate of unique) {
+    const { event, source } = candidate;
+    if (source !== 'notification' || !event.turnId) continue;
     const matches = mirrors.get(keyFor(event));
-    if (!matches) return true;
+    if (!matches) continue;
     const timestamp = Date.parse(event.timestamp);
     // A mirrored notification can be delayed by tool processing. Pair at most
     // once, within the same turn and one minute; never deduplicate equal-size
     // responses within a single source or unrelated turns.
-    while (matches.cursor < matches.timestamps.length && matches.timestamps[matches.cursor]! < timestamp - 60_000) {
+    while (matches.cursor < matches.records.length &&
+      Date.parse(matches.records[matches.cursor]!.event.timestamp) < timestamp - 60_000) {
       matches.cursor++;
     }
-    const match = matches.timestamps[matches.cursor];
-    if (match !== undefined && Math.abs(match - timestamp) <= 60_000) {
+    const match = matches.records[matches.cursor];
+    if (match && Math.abs(Date.parse(match.event.timestamp) - timestamp) <= 60_000) {
       matches.cursor++;
-      return false;
+      removed.add(candidate);
+      matchedRecords.add(match);
+      // Retain the notification identity for older active/archive copies.
+      match.keys!.push(...candidate.keys!);
     }
-    return true;
-  }).map(({ event }) => event);
+  }
+
+  const uniqueRecords = new Set(unique.filter((candidate) => candidate.source === 'record'));
+  for (const candidate of unique) {
+    if (removed.has(candidate) || !candidate.coveredRecords?.length) continue;
+    // A cumulative-only delta covers responses since the preceding counter.
+    // Records mirrored by another notification have already been accounted for.
+    const covered = candidate.coveredRecords.filter((record) =>
+      uniqueRecords.has(record) && !matchedRecords.has(record));
+    const fields = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const;
+    const remaining = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    for (const field of fields) {
+      remaining[field] = candidate.event[field] - covered.reduce((sum, record) => sum + record.event[field], 0);
+    }
+    // A counter reset can exclude earlier records; don't subtract incompatible coverage.
+    if (!covered.length || fields.some((field) => remaining[field] < 0)) continue;
+    const totalTokens = fields.reduce((sum, field) => sum + remaining[field], 0);
+    if (totalTokens === 0) {
+      covered[0]!.keys!.push(...candidate.keys!);
+      removed.add(candidate);
+    } else {
+      candidate.event = { ...candidate.event, ...remaining, totalTokens,
+        ...resolveUsageCost({ model: candidate.event.model, serviceTier: candidate.event.serviceTier, ...remaining }) };
+      candidate.adjusted = true;
+    }
+  }
+  return unique.filter((candidate) => !removed.has(candidate));
 }
 
 /**
@@ -572,6 +625,7 @@ export class CodexProvider implements IProvider {
     const warnings = new Map<string, ProviderWarning>();
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const candidates: UsageCandidate[] = [];
+      let pendingRecords: UsageCandidate[] = [];
       const context: SessionContext = {
         model: 'unknown',
         projectId: undefined,
@@ -608,7 +662,7 @@ export class CodexProvider implements IProvider {
             cacheWriteTokens,
             serviceTier,
           });
-          candidates.push({ source: usage.source, event: {
+          const candidate: UsageCandidate = { source: usage.source, event: {
             provider: this.name,
             timestamp: usage.timestamp,
             date: usage.date,
@@ -630,26 +684,36 @@ export class CodexProvider implements IProvider {
             serviceTierSource: usage.serviceTierSource ?? (identity.serviceTier ? 'model-name' : undefined),
             projectId: usage.projectId,
             prompt: usage.prompt,
-          } });
+          } };
+          if (usage.source === 'record') pendingRecords.push(candidate);
+          if (usage.counterAdvanced) {
+            if (usage.cumulativeOnly) candidate.coveredRecords = pendingRecords;
+            pendingRecords = [];
+          }
+          candidates.push(candidate);
         }
       } catch {
         // Skip files that fail to parse
         incrementWarningCount(warnings, 'read', file);
         return [];
       }
-      return reconcileUsageRecords(candidates).filter((event) => isInRange(event.date, range));
+      return reconcileUsageRecords(candidates);
     });
     // Moving a session into the archive must not count overlapping copies twice.
     // Include timestamp and session identity: equal token counts alone are not duplicates.
+    const all = eventsByFile.flatMap((entries, fileIndex) => entries.map((candidate) => ({ candidate, fileIndex })));
+    const rank = ({ candidate }: typeof all[number]) => candidate.source === 'record' ? 0 : candidate.adjusted ? 1 : 2;
     const seen = new Map<string, number>();
-    const events = eventsByFile.flatMap((fileEvents, fileIndex) => fileEvents.filter((event) => {
-      const key = event.responseId ? JSON.stringify([event.sessionId, event.responseId]) : JSON.stringify([event.sessionId, event.timestamp, event.model,
-        event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
-      const previousFile = seen.get(key);
-      if (previousFile !== undefined && previousFile !== fileIndex) return false;
-      seen.set(key, fileIndex);
-      return true;
-    }));
+    const selected = new Set<UsageCandidate>();
+    // Prefer response metadata and reconciled deltas regardless of which copy is active.
+    for (const { candidate, fileIndex } of [...all].sort((a, b) => rank(a) - rank(b))) {
+      const keys = candidate.keys!;
+      const previousFile = keys.map((key) => seen.get(key)).find((owner) => owner !== undefined && owner !== fileIndex);
+      for (const key of keys) seen.set(key, previousFile ?? fileIndex);
+      if (previousFile === undefined) selected.add(candidate);
+    }
+    const events = all.filter(({ candidate }) => selected.has(candidate))
+      .map(({ candidate }) => candidate.event).filter((event) => isInRange(event.date, range));
     addUnknownPricingWarnings(warnings, events);
 
     for (const event of events) {

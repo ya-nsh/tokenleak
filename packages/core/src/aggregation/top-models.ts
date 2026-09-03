@@ -1,5 +1,5 @@
 import type { DailyUsage, TopModelEntry, ServiceTierUsage } from '../types';
-import { mergeServiceTiers } from '../service-tiers';
+import { completeServiceTiers, mergeServiceTiers } from '../service-tiers';
 
 const DEFAULT_LIMIT = 10;
 
@@ -19,13 +19,17 @@ export function topModels(
         m.unpricedTokens ?? (m.costSource === 'unpriced' ? m.totalTokens : 0)));
       const existing = modelMap.get(m.model);
       if (existing) {
+        if (existing.tiers || m.serviceTiers) {
+          existing.tiers = mergeServiceTiers(completeServiceTiers({ serviceTiers: existing.tiers,
+            totalTokens: existing.tokens, cost: existing.cost, unpricedTokens: existing.unpriced }),
+          completeServiceTiers(m));
+        }
         existing.tokens += m.totalTokens;
         existing.cost += m.cost;
         existing.unpriced += unpriced;
-        if (m.serviceTiers) existing.tiers = mergeServiceTiers(existing.tiers, m.serviceTiers);
       } else {
         modelMap.set(m.model, { tokens: m.totalTokens, cost: m.cost, unpriced,
-          tiers: m.serviceTiers ? mergeServiceTiers(m.serviceTiers) : undefined });
+          tiers: m.serviceTiers ? completeServiceTiers(m) : undefined });
       }
     }
   }
