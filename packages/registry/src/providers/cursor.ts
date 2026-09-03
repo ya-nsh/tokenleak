@@ -224,7 +224,7 @@ function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>
       timestamp,
       model,
       normalizedModel: identity.model,
-      serviceTier: identity.serviceTier,
+      serviceTier: identity.serviceTier ?? (identity.model.startsWith('gpt-5') ? 'unknown' : undefined),
       inputTokens,
       outputTokens: Math.max(0, outputTokens),
       cacheReadTokens: Math.max(0, cacheReadTokens),
@@ -269,7 +269,7 @@ function toUsageEvent(record: UsageRecord): UsageEvent {
     unpricedTokens: cost.unpricedTokens,
     sessionId: record.sessionId,
     serviceTier: record.serviceTier,
-    serviceTierSource: record.serviceTier ? 'model-name' : undefined,
+    serviceTierSource: record.serviceTier === 'fast' ? 'model-name' : undefined,
   };
 }
 

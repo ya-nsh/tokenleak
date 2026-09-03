@@ -9,6 +9,25 @@ const FIXTURES_DIR = join(import.meta.dir, '..', '__fixtures__', 'cursor-cache')
 const FULL_RANGE: DateRange = { since: '2026-03-10', until: '2026-03-12' };
 
 describe('CursorProvider', () => {
+  it('keeps unknown GPT tiers alongside Fast usage in the same model breakdown', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cursor-mixed-tiers-'));
+    try {
+      writeFileSync(join(root, 'usage.csv'), [
+        'Model,Cost,Date,Output Tokens,Cache Read,Input (w/o Cache Write),Input (w/ Cache Write)',
+        'gpt-5.4-fast,,2026-03-10,100,0,1000,1000',
+        'gpt-5.4,,2026-03-10,100,0,1000,1000',
+      ].join('\n'));
+      const data = await new CursorProvider(root).load(FULL_RANGE);
+      expect(data.daily[0]?.models[0]?.serviceTiers).toEqual([
+        { tier: 'fast', tokens: 1100, cost: 0.008, unpricedTokens: 0 },
+        { tier: 'unknown', tokens: 1100, cost: 0.004, unpricedTokens: 0 },
+      ]);
+      expect(data.events?.[1]?.serviceTierSource).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('reads reordered headers and estimates known aliases while preserving reported zero costs', async () => {
     const root = mkdtempSync(join(tmpdir(), 'cursor-aliases-'));
     try {
