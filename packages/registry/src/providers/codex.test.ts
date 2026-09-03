@@ -36,6 +36,20 @@ async function loadRecords(records: unknown[]) {
 }
 
 describe('Codex accounting regressions', () => {
+  it('does not let stale session-level model metadata overwrite the current turn', async () => {
+    const data = await loadRecords([turn('gpt-5.5'),
+      { type: 'session_meta', payload: { model: 'gpt-5.4' } }, tokens(1000, 100)]);
+    expect(data.events?.[0]?.model).toBe('gpt-5.5');
+  });
+
+  it('uses a recorded session tier as the default, with turn metadata taking precedence', async () => {
+    const data = await loadRecords([
+      { type: 'session_meta', payload: { service_tier: 'fast' } }, turn('gpt-5.5'), tokens(1000, 100),
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'default' } }, tokens(2000, 200, { last: false }),
+    ]);
+    expect(data.events?.map((e) => e.serviceTier)).toEqual(['fast', 'default']);
+  });
+
   it('keeps Fast mode distinct from the base model and clears missing tier metadata', async () => {
     const data = await loadRecords([
       { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'fast' } }, tokens(1000, 100),

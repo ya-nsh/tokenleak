@@ -62,9 +62,11 @@ interface CodexUsageRecord {
 
 interface SessionContext {
   model: string;
+  hasTurnModel?: boolean;
   sessionId?: string;
   turnId?: string;
   serviceTier?: string;
+  sessionServiceTier?: string;
   projectId?: string;
   previousTotals: {
     inputTokens: number;
@@ -104,9 +106,9 @@ function parseResponseEvent(record: unknown): CodexResponseEvent | null {
   const usage = obj['usage'] as Record<string, unknown>;
 
   if (
-    typeof usage['input_tokens'] !== 'number' ||
-    typeof usage['output_tokens'] !== 'number' ||
-    typeof usage['total_tokens'] !== 'number'
+    typeof usage['input_tokens'] !== 'number' || !Number.isFinite(usage['input_tokens']) || usage['input_tokens'] < 0 ||
+    typeof usage['output_tokens'] !== 'number' || !Number.isFinite(usage['output_tokens']) || usage['output_tokens'] < 0 ||
+    typeof usage['total_tokens'] !== 'number' || !Number.isFinite(usage['total_tokens']) || usage['total_tokens'] < 0
   ) {
     return null;
   }
@@ -406,10 +408,14 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   const obj = typeof record === 'object' && record !== null ? record as Record<string, unknown> : null;
   const payload = obj?.['payload'];
   const meta = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+  if (obj?.['type'] === 'session_meta' && meta && 'service_tier' in meta) {
+    context.sessionServiceTier = normalizeServiceTier(meta['service_tier']);
+    if (!context.turnId) context.serviceTier = context.sessionServiceTier;
+  }
   if (obj?.['type'] === 'turn_context') {
     context.turnId = typeof meta?.['turn_id'] === 'string' ? meta['turn_id'] : undefined;
     // Missing metadata on the next turn must not inherit a previous Fast setting.
-    context.serviceTier = normalizeServiceTier(meta?.['service_tier']);
+    context.serviceTier = normalizeServiceTier(meta?.['service_tier']) ?? context.sessionServiceTier;
   }
   if (obj?.['type'] === 'token_usage_record' && meta) {
     // New response-scoped records coexist with token_count status notifications.
@@ -438,9 +444,10 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
 
   const inferredModel = inferModelFromContext(record);
   if (inferredModel) {
-    if (context.model !== inferredModel) {
+    if (obj?.['type'] === 'turn_context' || !context.hasTurnModel) {
       context.model = inferredModel;
     }
+    if (obj?.['type'] === 'turn_context') context.hasTurnModel = true;
     return null;
   }
 
