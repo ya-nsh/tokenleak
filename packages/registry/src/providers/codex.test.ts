@@ -36,6 +36,31 @@ async function loadRecords(records: unknown[]) {
 }
 
 describe('Codex accounting regressions', () => {
+  it('keeps Fast mode distinct from the base model and clears missing tier metadata', async () => {
+    const data = await loadRecords([
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'fast' } }, tokens(1000, 100),
+      turn('gpt-5.5'), tokens(2000, 200, { last: false }),
+    ]);
+    expect(data.events?.map((e) => e.model)).toEqual(['gpt-5.5', 'gpt-5.5']);
+    expect(data.events?.map((e) => e.serviceTier)).toEqual(['fast', 'unknown']);
+    expect(data.events?.map((e) => e.cost)).toEqual([0.02, 0.008]);
+    expect(data.daily[0]?.models[0]?.serviceTiers?.map((t) => t.tier)).toEqual(['fast', 'unknown']);
+  });
+
+  it('uses the actual response tier ahead of the requested Fast setting', async () => {
+    const data = await loadRecords([
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'fast' } },
+      { timestamp: '2026-03-12T10:01:00Z', type: 'token_usage_record', payload: {
+        response_id: 'downgraded', service_tier: 'default', usage: { input_tokens: 1000, output_tokens: 100 } } },
+    ]);
+    expect(data.events?.[0]).toMatchObject({ serviceTier: 'default', serviceTierSource: 'response', cost: 0.008 });
+  });
+
+  it('recognizes a Fast alias while retaining the canonical model', async () => {
+    const data = await loadRecords([turn('gpt-5.4-fast'), tokens(1000, 100)]);
+    expect(data.events?.[0]).toMatchObject({ model: 'gpt-5.4', serviceTier: 'fast', cost: 0.008 });
+  });
+
   const modern = (id: string, input = 1000, timestamp = '2026-03-12T10:01:00Z') => ({
     type: 'token_usage_record', timestamp, payload: { turn_id: 'turn-1', response_id: id,
       usage: { input_tokens: input, output_tokens: 100, cached_input_tokens: 200, cache_write_input_tokens: 100 } },

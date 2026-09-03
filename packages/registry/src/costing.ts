@@ -22,6 +22,7 @@ interface UsageCostInput {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   explicitCost?: number;
+  serviceTier?: string;
 }
 
 function totalTokens(input: UsageCostInput): number {
@@ -50,6 +51,7 @@ export function resolveUsageCost(input: UsageCostInput): UsageCostResult {
     input.outputTokens,
     input.cacheReadTokens,
     input.cacheWriteTokens,
+    { serviceTier: input.serviceTier },
   );
   const tokenCount = totalTokens(input);
   const pricing = costBreakdown.pricing

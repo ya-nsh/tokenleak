@@ -1,4 +1,5 @@
-import { normalizeModelName } from './normalizer';
+import { resolveModelIdentity } from './normalizer';
+import type { PricingContext } from './pricing';
 import type { ModelPricing } from './pricing';
 import { getModelPricing, TOKENS_PER_MILLION } from './pricing';
 
@@ -47,9 +48,10 @@ export function estimateCostBreakdown(
   outputTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number,
+  context: PricingContext = {},
 ): CostBreakdown {
-  const normalized = normalizeModelName(model);
-  const pricing = getModelPricing(normalized);
+  const normalized = resolveModelIdentity(model).model;
+  const pricing = getModelPricing(model, { inputTokens: inputTokens + cacheReadTokens + cacheWriteTokens, ...context });
 
   if (!pricing) {
     return {

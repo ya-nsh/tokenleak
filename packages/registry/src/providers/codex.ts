@@ -12,7 +12,8 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
-import { normalizeModelName } from '../models/normalizer';
+import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
+import { mergeServiceTiers } from '@tokenleak/core';
 import { isInRange, mapWithConcurrency } from '../utils';
 import {
   addUnknownPricingWarnings,
@@ -55,12 +56,15 @@ interface CodexUsageRecord {
   turnId?: string;
   responseId?: string;
   source?: 'record' | 'notification';
+  serviceTier?: string;
+  serviceTierSource?: UsageEvent['serviceTierSource'];
 }
 
 interface SessionContext {
   model: string;
   sessionId?: string;
   turnId?: string;
+  serviceTier?: string;
   projectId?: string;
   previousTotals: {
     inputTokens: number;
@@ -404,6 +408,8 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   const meta = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
   if (obj?.['type'] === 'turn_context') {
     context.turnId = typeof meta?.['turn_id'] === 'string' ? meta['turn_id'] : undefined;
+    // Missing metadata on the next turn must not inherit a previous Fast setting.
+    context.serviceTier = normalizeServiceTier(meta?.['service_tier']);
   }
   if (obj?.['type'] === 'token_usage_record' && meta) {
     // New response-scoped records coexist with token_count status notifications.
@@ -411,7 +417,10 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     const usage = parseTokenCountUsage({ type: 'event_msg', timestamp: obj['timestamp'],
       payload: { type: 'token_count', info: { last_token_usage: meta['usage'] } } }, context);
     if (!usage) return null;
+    const recordedTier = normalizeServiceTier(meta['service_tier']);
     return { ...usage, source: 'record',
+      serviceTier: recordedTier ?? context.serviceTier,
+      serviceTierSource: recordedTier ? 'response' : context.serviceTier ? 'request' : undefined,
       model: typeof meta['model'] === 'string' && meta['model'].trim() ? meta['model'].trim() : context.model,
       turnId: typeof meta['turn_id'] === 'string' ? meta['turn_id'] : context.turnId,
       responseId: typeof meta['response_id'] === 'string' ? meta['response_id'] : undefined };
@@ -443,7 +452,10 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
 
   const tokenCountUsage = parseTokenCountUsage(record, context);
   if (tokenCountUsage) {
-    return { ...tokenCountUsage, source: 'notification', turnId: context.turnId };
+    const recordedTier = normalizeServiceTier(meta?.['service_tier']);
+    return { ...tokenCountUsage, source: 'notification', turnId: context.turnId,
+      serviceTier: recordedTier ?? context.serviceTier,
+      serviceTierSource: recordedTier ? 'response' : context.serviceTier ? 'request' : undefined };
   }
 
   const legacyEvent = parseResponseEvent(record);
@@ -460,6 +472,8 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     date,
     timestamp: legacyEvent.timestamp,
     model: compactModelDateSuffix(legacyEvent.model),
+    serviceTier: normalizeServiceTier(obj?.['service_tier']) ?? context.serviceTier,
+    serviceTierSource: normalizeServiceTier(obj?.['service_tier']) ? 'response' : context.serviceTier ? 'request' : undefined,
     inputTokens: legacyEvent.usage.input_tokens,
     outputTokens: legacyEvent.usage.output_tokens,
     cacheReadTokens: 0,
@@ -572,7 +586,9 @@ export class CodexProvider implements IProvider {
           usage.sessionId = context.sessionId ?? basename(relativeFile);
           usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
 
-          const normalizedModel = normalizeModelName(compactModelDateSuffix(usage.model));
+          const identity = resolveModelIdentity(compactModelDateSuffix(usage.model));
+          const normalizedModel = identity.model;
+          const serviceTier = usage.serviceTier ?? identity.serviceTier ?? 'unknown';
           const inputTokens = usage.inputTokens;
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
@@ -583,6 +599,7 @@ export class CodexProvider implements IProvider {
             outputTokens,
             cacheReadTokens,
             cacheWriteTokens,
+            serviceTier,
           });
           candidates.push({ source: usage.source, event: {
             provider: this.name,
@@ -602,6 +619,8 @@ export class CodexProvider implements IProvider {
             sessionId: usage.sessionId,
             turnId: usage.turnId,
             responseId: usage.responseId,
+            serviceTier,
+            serviceTierSource: usage.serviceTierSource ?? (identity.serviceTier ? 'model-name' : undefined),
             projectId: usage.projectId,
             prompt: usage.prompt,
           } });
@@ -656,6 +675,8 @@ export class CodexProvider implements IProvider {
       breakdown.cost += event.cost;
       breakdown.pricedTokens = (breakdown.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
       breakdown.unpricedTokens = (breakdown.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      breakdown.serviceTiers = mergeServiceTiers(breakdown.serviceTiers, [{ tier: event.serviceTier ?? 'unknown',
+        tokens: event.totalTokens, cost: event.cost, unpricedTokens: event.unpricedTokens ?? 0 }]);
       breakdown.costSource =
         (breakdown.unpricedTokens ?? 0) >= breakdown.totalTokens ? 'unpriced' : breakdown.costSource;
       if (!breakdown.pricing) {

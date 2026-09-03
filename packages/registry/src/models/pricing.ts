@@ -1,4 +1,5 @@
 import { getRemotePricing } from './pricing-resolver';
+import { normalizeServiceTier, resolveModelIdentity } from './normalizer';
 
 /**
  * Per-million-token pricing for supported models.
@@ -151,6 +152,10 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
   },
 
   // OpenAI GPT-5 family
+  // Verified 2026-09-04: https://developers.openai.com/api/docs/pricing
+  'gpt-5.6-sol': { input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5 },
+  'gpt-5.6-terra': { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 2.5 },
+  'gpt-5.6-luna': { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 },
   'gpt-5.5': {
     input: 5.00,
     output: 30.00,
@@ -296,23 +301,60 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
  * If `initPricing()` has not been called, this behaves identically to a direct
  * `MODEL_PRICING` lookup.
  */
-export function getModelPricing(model: string): ModelPricing | undefined {
+export interface PricingContext {
+  serviceTier?: string;
+  /** Full request input, including cached input. Never a session cumulative total. */
+  inputTokens?: number;
+}
+
+// API Fast prices, not ChatGPT subscription credit multipliers.
+// https://developers.openai.com/api/docs/pricing (Fast mode / All models)
+const FAST_PRICING: Readonly<Record<string, ModelPricing>> = {
+  'gpt-5.6-sol': { input: 8, output: 40, cacheRead: 0.8, cacheWrite: 10 },
+  'gpt-5.6-terra': { input: 4, output: 24, cacheRead: 0.4, cacheWrite: 5 },
+  'gpt-5.6-luna': { input: 0.4, output: 2.4, cacheRead: 0.04, cacheWrite: 0.5 },
+  'gpt-5.5': { input: 12.5, output: 75, cacheRead: 1.25, cacheWrite: 12.5 },
+  'gpt-5.4': { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 5 },
+  'gpt-5.4-mini': { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 1.5 },
+  'gpt-5.3-codex': { input: 3.5, output: 28, cacheRead: 0.35, cacheWrite: 3.5 },
+};
+
+export function getModelPricing(rawModel: string, context: PricingContext = {}): ModelPricing | undefined {
+  const identity = resolveModelIdentity(rawModel);
+  const model = identity.model;
+  const tier = normalizeServiceTier(context.serviceTier) ?? identity.serviceTier;
   const fallback = MODEL_PRICING[model];
   if (!fallback) {
     return undefined;
   }
 
-  const remote = getRemotePricing(model);
-  if (!remote) {
-    return fallback;
+  const longContext = (context.inputTokens ?? 0) > 272_000 &&
+    (model.startsWith('gpt-5.6-') || model === 'gpt-5.5' || model === 'gpt-5.4');
+  let pricing: ModelPricing;
+  if (tier === 'fast') {
+    const fast = FAST_PRICING[model];
+    if (!fast || (longContext && !model.startsWith('gpt-5.6-'))) return undefined;
+    pricing = fast;
+  } else if (tier === 'flex') {
+    // Restrict discount assumptions to models with verified Flex support.
+    if (!model.startsWith('gpt-5.6-') && model !== 'gpt-5.5' && model !== 'gpt-5.4') return undefined;
+    pricing = { input: fallback.input / 2, output: fallback.output / 2,
+      cacheRead: fallback.cacheRead / 2, cacheWrite: fallback.cacheWrite / 2 };
+  } else if (tier === 'ultrafast') {
+    return undefined;
+  } else {
+    const remote = getRemotePricing(model);
+    const valid = (value: number | undefined, backup: number) =>
+      typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : backup;
+    pricing = {
+      input: valid(remote?.input, fallback.input),
+      output: valid(remote?.output, fallback.output),
+      cacheRead: valid(remote?.cacheRead, fallback.cacheRead),
+      cacheWrite: valid(remote?.cacheWrite, fallback.cacheWrite),
+    };
   }
-
-  return {
-    input: remote.input > 0 ? remote.input : fallback.input,
-    output: remote.output > 0 ? remote.output : fallback.output,
-    cacheRead: remote.cacheRead > 0 ? remote.cacheRead : fallback.cacheRead,
-    cacheWrite: remote.cacheWrite > 0 ? remote.cacheWrite : fallback.cacheWrite,
-  };
+  return longContext ? { input: pricing.input * 2, output: pricing.output * 1.5,
+    cacheRead: pricing.cacheRead * 2, cacheWrite: pricing.cacheWrite * 2 } : pricing;
 }
 
 export { TOKENS_PER_MILLION };

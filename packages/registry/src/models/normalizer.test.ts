@@ -8,6 +8,11 @@ import { estimateCost } from './cost';
 // ---------------------------------------------------------------------------
 
 describe('normalizeModelName', () => {
+  test('normalizes OpenAI prefixes, dashed dates, and the Sol alias', () => {
+    expect(normalizeModelName(' openai/gpt-5.5-2026-04-23 ')).toBe('gpt-5.5');
+    expect(normalizeModelName('gpt-5.6')).toBe('gpt-5.6-sol');
+    expect(normalizeModelName('other-vendor/gpt-5.5')).toBe('other-vendor/gpt-5.5');
+  });
   test('strips -YYYYMMDD suffix from Claude model', () => {
     expect(normalizeModelName('claude-sonnet-4-20250514')).toBe('claude-sonnet-4');
   });
@@ -54,6 +59,30 @@ describe('normalizeModelName', () => {
 // ---------------------------------------------------------------------------
 
 describe('getModelPricing', () => {
+  test('prices the GPT-5.6 family with verified cache write rates', () => {
+    expect(getModelPricing('gpt-5.6-sol')).toEqual({ input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5 });
+    expect(getModelPricing('gpt-5.6-terra')?.output).toBe(12);
+    expect(getModelPricing('gpt-5.6-luna')?.input).toBe(0.2);
+    expect(getModelPricing('gpt-5.3-codex-spark')).toBeUndefined();
+  });
+
+  test('uses verified API Fast rates and aliases without guessing unsupported tiers', () => {
+    expect(getModelPricing('gpt-5.5', { serviceTier: 'fast' })?.input).toBe(12.5);
+    expect(getModelPricing('gpt-5.5', { serviceTier: 'priority' })?.output).toBe(75);
+    expect(getModelPricing('gpt-5.4-fast')?.input).toBe(5);
+    expect(getModelPricing('gpt-5.6-sol', { serviceTier: 'ultrafast' })).toBeUndefined();
+    expect(getModelPricing('gpt-4o', { serviceTier: 'fast' })).toBeUndefined();
+  });
+
+  test('applies long-context pricing to the full request including cached input', () => {
+    expect(getModelPricing('gpt-5.6-sol', { inputTokens: 272000 })?.input).toBe(4);
+    expect(getModelPricing('gpt-5.6-sol', { inputTokens: 272001 })?.input).toBe(8);
+    expect(getModelPricing('gpt-5.6-sol', { inputTokens: 272001, serviceTier: 'fast' })).toEqual({
+      input: 16, output: 60, cacheRead: 1.6, cacheWrite: 20,
+    });
+    expect(getModelPricing('gpt-5.5', { inputTokens: 272001, serviceTier: 'fast' })).toBeUndefined();
+    expect(estimateCost('gpt-5.6-sol', 1, 0, 272000, 0)).toBeCloseTo(0.217608);
+  });
   test('returns pricing for known Claude 3 model', () => {
     const pricing = getModelPricing('claude-3-haiku');
     expect(pricing).toBeDefined();

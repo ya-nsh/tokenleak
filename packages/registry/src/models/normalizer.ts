@@ -6,7 +6,7 @@
  * so that usage data can be grouped by canonical model name.
  */
 
-const DATE_SUFFIX_PATTERN = /-\d{8}$/;
+const DATE_SUFFIX_PATTERN = /-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
 
 /**
  * Normalizes a model name by stripping a trailing `-YYYYMMDD` date suffix.
@@ -17,5 +17,22 @@ const DATE_SUFFIX_PATTERN = /-\d{8}$/;
  * normalizeModelName('')                          // => ''
  */
 export function normalizeModelName(model: string): string {
-  return model.replace(DATE_SUFFIX_PATTERN, '');
+  const normalized = model.trim().replace(/^openai\//, '').replace(DATE_SUFFIX_PATTERN, '');
+  return normalized === 'gpt-5.6' ? 'gpt-5.6-sol' : normalized;
+}
+
+/** Fast is a service tier, not a different base model. Preserve it separately. */
+export function resolveModelIdentity(model: string): { model: string; serviceTier?: string } {
+  const normalized = normalizeModelName(model);
+  if (/^gpt-[a-z0-9.-]+-fast$/.test(normalized)) {
+    return { model: normalizeModelName(normalized.slice(0, -5)), serviceTier: 'fast' };
+  }
+  return { model: normalized };
+}
+
+export function normalizeServiceTier(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const tier = value.trim().toLowerCase();
+  if (tier === 'priority') return 'fast';
+  return ['default', 'fast', 'flex', 'auto', 'ultrafast', 'unknown'].includes(tier) ? tier : 'unknown';
 }
