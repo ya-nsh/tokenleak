@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -72,6 +72,42 @@ describe('resolveCursorSetupStatus', () => {
       hasCredentials: false,
       hasCache: false,
     });
+  });
+
+  test('classifies a successful HTML sign-in redirect as expired auth and preserves cached data', async () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    mkdirSync(getCursorCacheDir(), { recursive: true });
+    const cache = join(getCursorCacheDir(), 'usage.csv');
+    writeFileSync(cache, SAMPLE_CSV);
+    globalThis.fetch = (async () => {
+      const response = new Response('<html>Sign in</html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+      Object.defineProperty(response, 'url', { value: 'https://authenticator.cursor.sh/' });
+      return response;
+    }) as typeof fetch;
+    const result = await resolveCursorSetupStatus({ attemptSync: true });
+    expect(result.reason).toBe('auth');
+    expect(result.hasCache).toBe(true);
+    expect(result.error).toContain('tokenleak cursor login');
+    expect(readFileSync(cache, 'utf8')).toBe(SAMPLE_CSV);
+  });
+
+  test('accepts BOM and quoted CSV headers without treating them as auth failures', async () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    globalThis.fetch = (async () => new Response('\uFEFF' + SAMPLE_CSV.replace('Date,', '"Date",'), { status: 200 })) as typeof fetch;
+    const result = await resolveCursorSetupStatus({ attemptSync: true });
+    expect(result.state).toBe('ready');
+    expect(result.hasCache).toBe(true);
+  });
+
+  test('rejects changed or HTML export formats without replacing a good cache', async () => {
+    saveCursorCredentials('user-work::token-work', 'work');
+    mkdirSync(getCursorCacheDir(), { recursive: true });
+    const cache = join(getCursorCacheDir(), 'usage.csv');
+    writeFileSync(cache, SAMPLE_CSV);
+    globalThis.fetch = (async () => new Response('Date,Unexpected\n2026-03-10,invalid')) as typeof fetch;
+    const result = await resolveCursorSetupStatus({ attemptSync: true });
+    expect(result.reason).toBe('parse');
+    expect(readFileSync(cache, 'utf8')).toBe(SAMPLE_CSV);
   });
 
   test('returns ready after a successful initial sync', async () => {
