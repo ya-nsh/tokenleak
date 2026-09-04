@@ -34,6 +34,32 @@ test('response-only usage followed by a cumulative-only update is counted once',
   expect(data.totalTokens).toBe(2200);
 });
 
+test('late response records reconcile with their earlier cumulative aggregate', async () => {
+  const data = await load([context(), notification(2000, 200, false), modern('r1'), modern('r2')]);
+  expect(data.totalTokens).toBe(2200);
+  expect(data.events!.map((event) => event.responseId)).toEqual(['r1', 'r2']);
+  expect(data.totalCost).toBeCloseTo(0.016, 8);
+});
+
+test('responses newer than a cumulative aggregate remain additional usage', async () => {
+  const later = { ...modern('r1'), timestamp: '2026-03-12T10:01:00Z' };
+  const data = await load([context(), notification(2000, 200, false), later]);
+  expect(data.totalTokens).toBe(3300);
+});
+
+test('late responses cannot be subtracted from a subsequent reset', async () => {
+  const first = notification(2000, 200, false);
+  const reset = { ...notification(500, 50, false), timestamp: '2026-03-12T10:01:00Z' };
+  const data = await load([context(), first, reset, modern('r1'), modern('r2')]);
+  expect(data.totalTokens).toBe(2750);
+});
+
+test('late response coverage preserves overlapping archive identity', async () => {
+  const counter = notification(2000, 200, false);
+  const data = await load([context(), counter], [context(), counter, modern('r1'), modern('r2')]);
+  expect(data.totalTokens).toBe(2200);
+});
+
 test.each([false, true])('overlapping archive copies reconcile with response records in either copy (%s)', async (modernInArchive) => {
   const prefix = [context(), notification()];
   const data = modernInArchive ? await load(prefix, [...prefix, modern()]) : await load([...prefix, modern()], prefix);
