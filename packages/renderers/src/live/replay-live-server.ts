@@ -63,7 +63,7 @@ function tryServe(
   port: number,
 ): { server: ReturnType<typeof Bun.serve>; error: null } | { server: null; error: unknown } {
   try {
-    const server = Bun.serve({ port, fetch: buildHandler() });
+    const server = Bun.serve({ hostname: '127.0.0.1', port, fetch: buildHandler() });
     return { server, error: null };
   } catch (err: unknown) {
     return { server: null, error: err };
