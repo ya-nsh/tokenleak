@@ -260,8 +260,8 @@ export function computeAchievements(output: TokenleakOutput): Achievement[] {
   if (stats.cacheHitRate > 0.5) {
     all.push({ icon: 'target', title: 'Cache Master', subtitle: `${(stats.cacheHitRate * 100).toFixed(0)}% hit rate`, color: '#f472b6' });
   }
-  if (stats.topModels.length >= 4) {
-    all.push({ icon: 'circle', title: 'Model Hopper', subtitle: `${stats.topModels.length} models used`, color: '#a78bfa' });
+  if ((stats.allModels ?? stats.topModels).length >= 4) {
+    all.push({ icon: 'circle', title: 'Model Hopper', subtitle: `${(stats.allModels ?? stats.topModels).length} models used`, color: '#a78bfa' });
   }
   if (stats.totalDays > 0 && stats.activeDays / stats.totalDays > 0.8) {
     all.push({ icon: 'calendar', title: 'Daily Driver', subtitle: `${stats.activeDays}/${stats.totalDays} days active`, color: '#38bdf8' });

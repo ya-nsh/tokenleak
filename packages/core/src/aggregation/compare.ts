@@ -62,6 +62,10 @@ export function parseCompareRange(rangeStr: string): DateRange | null {
   const [since, until] = parts as [string, string];
   if (!DATE_PATTERN.test(since) || !DATE_PATTERN.test(until)) return null;
 
+  if ([since, until].some((date) => {
+    const millis = dateToUtcMs(date);
+    return !Number.isFinite(millis) || formatDateStringUtc(new Date(millis)) !== date;
+  })) return null;
   if (since > until) return null;
 
   return { since, until };

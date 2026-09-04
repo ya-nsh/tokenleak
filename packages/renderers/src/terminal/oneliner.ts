@@ -3,7 +3,7 @@ import type { ProviderData, TokenleakOutput, RenderOptions } from '@tokenleak/co
 import { formatTokens } from './dashboard';
 
 function countActiveProviders(providers: ProviderData[]): number {
-  return providers.filter((provider) => provider.daily.some((entry) => entry.totalTokens > 0)).length;
+  return providers.filter((provider) => provider.daily.some((entry) => (entry.totalTokens > 0 || entry.cost > 0))).length;
 }
 
 export function renderOneliner(output: TokenleakOutput, options: RenderOptions): string {

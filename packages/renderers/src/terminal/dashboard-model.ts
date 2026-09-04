@@ -98,7 +98,7 @@ function buildSparkline(daily: DailyUsage[], points = 14): string {
 }
 
 function getLastActiveDate(provider: ProviderData): string | null {
-  const activeDays = provider.daily.filter((entry) => entry.totalTokens > 0);
+  const activeDays = provider.daily.filter((entry) => (entry.totalTokens > 0 || entry.cost > 0));
   return activeDays.at(-1)?.date ?? null;
 }
 

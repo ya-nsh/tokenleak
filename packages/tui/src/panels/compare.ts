@@ -5,10 +5,10 @@ import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
 
-function deltaStr(value: number, isPercent: boolean): string {
-  const sign = value >= 0 ? '+' : '';
-  if (isPercent) return `${sign}${(value * 100).toFixed(1)}%`;
-  return `${sign}${value.toFixed(1)}`;
+function relativeDelta(current: number, previous: number): string {
+  if (previous === 0) return current === 0 ? '+0.0%' : 'New';
+  const percent = ((current - previous) / Math.abs(previous)) * 100;
+  return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
 }
 
 function deltaArrow(value: number): string {
@@ -26,7 +26,7 @@ interface MetricRow {
 
 function buildMetricRows(output: CompareOutput): MetricRow[] {
   // periodA = previous range, periodB = current range (from ensureCompareOutput)
-  // deltas = periodA - periodB, so negate for "current vs previous" display
+  // Deltas are absolute current minus previous values.
   const a = output.periodB.stats; // current
   const b = output.periodA.stats; // previous
   const d = output.deltas;
@@ -37,7 +37,7 @@ function buildMetricRows(output: CompareOutput): MetricRow[] {
       current: formatTokens(a.totalTokens),
       previous: formatTokens(b.totalTokens),
       delta: d.tokens,
-      deltaLabel: `${deltaArrow(d.tokens)} ${deltaStr(d.tokens, true)}`,
+      deltaLabel: `${deltaArrow(d.tokens)} ${relativeDelta(a.totalTokens, b.totalTokens)}`,
       invertColor: false,
     },
     {
@@ -46,7 +46,7 @@ function buildMetricRows(output: CompareOutput): MetricRow[] {
       previous: formatCostWithCompleteness(b.totalCost, b.costCompleteness),
       delta: d.cost,
       deltaLabel: [a, b].some((stats) => stats.costCompleteness && stats.costCompleteness.status !== 'complete')
-        ? 'Unknown' : `${deltaArrow(d.cost)} ${deltaStr(d.cost, true)}`,
+        ? 'Unknown' : `${deltaArrow(d.cost)} ${relativeDelta(a.totalCost, b.totalCost)}`,
       invertColor: true,
     },
     {
@@ -62,7 +62,7 @@ function buildMetricRows(output: CompareOutput): MetricRow[] {
       current: formatTokens(a.averageDailyTokens),
       previous: formatTokens(b.averageDailyTokens),
       delta: d.averageDailyTokens,
-      deltaLabel: `${deltaArrow(d.averageDailyTokens)} ${deltaStr(d.averageDailyTokens, true)}`,
+      deltaLabel: `${deltaArrow(d.averageDailyTokens)} ${relativeDelta(a.averageDailyTokens, b.averageDailyTokens)}`,
       invertColor: false,
     },
     {
