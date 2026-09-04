@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join, relative, sep } from 'node:path';
 import type {
   DailyUsage,
@@ -41,6 +41,7 @@ export interface LocalProviderMetadata {
 export function collectFiles(
   root: string,
   predicate: (path: string, name: string) => boolean,
+  visited = new Set<string>(),
 ): string[] {
   const results: string[] = [];
 
@@ -50,6 +51,9 @@ export function collectFiles(
 
   let entries: string[];
   try {
+    const canonical = realpathSync(root);
+    if (visited.has(canonical)) return results;
+    visited.add(canonical);
     entries = readdirSync(root);
   } catch {
     return results;
@@ -65,7 +69,7 @@ export function collectFiles(
     }
 
     if (stats.isDirectory()) {
-      results.push(...collectFiles(fullPath, predicate));
+      results.push(...collectFiles(fullPath, predicate, visited));
     } else if (stats.isFile() && predicate(fullPath, entry)) {
       results.push(fullPath);
     }
@@ -111,11 +115,15 @@ export function extractDate(timestamp: string): string | null {
 
 export function timestampToIso(value: unknown): string | null {
   if (typeof value === 'string') {
-    if (extractDate(value)) {
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return null;
+    const date = extractDate(value);
+    if (date) {
+      const midnight = Date.parse(`${date}T00:00:00Z`);
+      if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== date) return null;
       return value;
     }
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+    return new Date(parsed).toISOString();
   }
 
   const numeric = safeNumber(value);

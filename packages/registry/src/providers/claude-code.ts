@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, join, relative, sep } from 'path';
 import { homedir } from 'os';
 import type {
@@ -11,6 +11,7 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
+import { collectFiles } from './local-usage';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
@@ -53,24 +54,7 @@ function resolveBaseDir(baseDir?: string): string {
  * Recursively collects all `.jsonl` file paths under a directory.
  */
 function collectJsonlFiles(dir: string): string[] {
-  const results: string[] = [];
-
-  if (!existsSync(dir)) {
-    return results;
-  }
-
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      results.push(...collectJsonlFiles(fullPath));
-    } else if (entry.endsWith('.jsonl')) {
-      results.push(fullPath);
-    }
-  }
-
-  return results;
+  return collectFiles(dir, (_path, name) => name.endsWith('.jsonl'));
 }
 
 /**
@@ -117,7 +101,8 @@ function extractUsage(record: unknown): UsageRecord | null {
   const cacheWriteTokens =
     typeof u['cache_creation_input_tokens'] === 'number' ? u['cache_creation_input_tokens'] : 0;
   const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-  if (totalTokens === 0) {
+  if (!Number.isFinite(totalTokens) || totalTokens === 0 ||
+    [inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens].some((value) => !Number.isFinite(value) || value < 0)) {
     return null;
   }
 
@@ -333,7 +318,7 @@ export class ClaudeCodeProvider implements IProvider {
             continue;
           }
           const usage = extractUsage(record);
-          if (usage !== null && isInRange(usage.date, range)) {
+          if (usage !== null) {
             usage.sessionId = relativeFile;
             usage.projectId = usage.projectId ?? projectId;
             if (lastPrompt !== null) {
@@ -355,7 +340,7 @@ export class ClaudeCodeProvider implements IProvider {
 
       return [...latestRecordsByMessageId.values(), ...anonymousRecords];
     });
-    const allRecords = recordsByFile.flat();
+    const allRecords = recordsByFile.flat().filter((record) => isInRange(record.date, range));
 
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {

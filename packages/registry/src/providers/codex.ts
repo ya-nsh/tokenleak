@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -11,6 +11,7 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
+import { collectFiles } from './local-usage';
 import { splitJsonlRecords } from '../parsers/jsonl-splitter';
 import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
 import { mergeServiceTiers } from '@tokenleak/core';
@@ -165,22 +166,7 @@ function incrementWarningCount(
 }
 
 function collectJsonlFiles(dir: string): string[] {
-  if (!existsSync(dir)) {
-    return [];
-  }
-
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      files.push(...collectJsonlFiles(fullPath));
-    } else if (entry.endsWith('.jsonl')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
+  return collectFiles(dir, (_path, name) => name.endsWith('.jsonl'));
 }
 
 function inferModelFromContext(record: unknown): string | null {

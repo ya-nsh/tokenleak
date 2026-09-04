@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-import type { DateRange, ProviderColors, ProviderData } from '@tokenleak/core';
+import type { DateRange, ProviderColors, ProviderData, ProviderWarning } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { isInRange } from '../utils';
 import {
@@ -11,7 +11,6 @@ import {
   extractDate,
   nonNegativeNumber,
   objectValue,
-  sessionIdFromFile,
   stringValue,
   timestampToIso,
   type LocalProviderMetadata,
@@ -50,7 +49,11 @@ function projectFromCwd(cwd: unknown): string | undefined {
   return stringValue(cwd)?.split(/[\\/]/).filter(Boolean).at(-1);
 }
 
-function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionId: string, range: DateRange): LocalUsageRecord[] {
+interface KiroUsageRecord extends LocalUsageRecord {
+  turnKey: string;
+}
+
+function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionId: string, range: DateRange): KiroUsageRecord[] {
   const state = objectValue(value['session_state']);
   const modelInfo = objectValue(objectValue(state?.['rts_model_state'])?.['model_info']);
   const model = stringValue(modelInfo?.['model_id']) ?? 'kiro-unknown';
@@ -64,7 +67,7 @@ function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionI
     if (!turn) return [];
     const timestamp = timestampToIso(turn['end_timestamp']);
     const date = timestamp ? extractDate(timestamp) : null;
-    if (!timestamp || !date || !isInRange(date, range)) return [];
+    if (!timestamp || !date) return [];
     const inputTokens = nonNegativeNumber(turn['input_token_count']);
     const outputTokens = nonNegativeNumber(turn['output_token_count']);
     if (inputTokens + outputTokens === 0) return [];
@@ -76,22 +79,23 @@ function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionI
       outputTokens,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      sessionId: `${sessionId}:${index}`,
+      sessionId,
+      turnKey: JSON.stringify([sessionId, stringValue(turn['turn_id']) ?? index]),
       projectId,
     }];
   });
 }
 
-function parseKiroFile(file: string, range: DateRange): LocalUsageRecord[] {
+function parseKiroFile(file: string, range: DateRange): KiroUsageRecord[] {
   try {
     const value = objectValue(JSON.parse(readFileSync(file, 'utf-8')));
-    return value ? parseKiroSessionObject(value, sessionIdFromFile(file), range) : [];
+    return value ? parseKiroSessionObject(value, file, range) : [];
   } catch {
     return [];
   }
 }
 
-function parseKiroSqlite(dbPath: string, range: DateRange): LocalUsageRecord[] {
+function parseKiroSqlite(dbPath: string, range: DateRange, warnings: ProviderWarning[]): KiroUsageRecord[] {
   if (!existsSync(dbPath)) return [];
   let db: InstanceType<typeof Database>;
   try {
@@ -102,8 +106,13 @@ function parseKiroSqlite(dbPath: string, range: DateRange): LocalUsageRecord[] {
   try {
     const rows = db.query('SELECT id, history FROM conversations_v2').all() as Array<Record<string, unknown>>;
     return rows.flatMap((row) => {
-      const history = objectValue(JSON.parse(String(row['history'] ?? '{}')));
-      return history ? parseKiroSessionObject(history, stringValue(row['id']) ?? 'kiro-sqlite', range) : [];
+      try {
+        const history = objectValue(JSON.parse(String(row['history'] ?? '{}')));
+        return history ? parseKiroSessionObject(history, `${dbPath}:${stringValue(row['id']) ?? 'kiro-sqlite'}`, range) : [];
+      } catch {
+        warnings.push({ kind: 'parse', file: dbPath, count: 1 });
+        return [];
+      }
     });
   } catch {
     return [];
@@ -130,10 +139,18 @@ export class KiroProvider implements IProvider {
   }
 
   async load(range: DateRange): Promise<ProviderData> {
+    const warnings: ProviderWarning[] = [];
     const records = collectFiles(this.baseDir, isKiroFile).flatMap((file) => parseKiroFile(file, range));
     for (const dbPath of this.dbPaths) {
-      records.push(...parseKiroSqlite(dbPath, range));
+      records.push(...parseKiroSqlite(dbPath, range, warnings));
     }
-    return buildProviderData(METADATA, records);
+    const turns = new Map<string, KiroUsageRecord>();
+    for (const record of records) {
+      const previous = turns.get(record.turnKey);
+      if (!previous || Date.parse(record.timestamp) >= Date.parse(previous.timestamp)) {
+        turns.set(record.turnKey, record);
+      }
+    }
+    return buildProviderData(METADATA, [...turns.values()].filter((record) => isInRange(record.date, range)), warnings);
   }
 }
