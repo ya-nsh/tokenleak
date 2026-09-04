@@ -1,3 +1,5 @@
+import { formatCostWithCompleteness } from '../cost-completeness';
+import type { CostCompleteness } from '../types';
 import type { ReceiptCategory } from './receipt-lines';
 
 /**
@@ -37,6 +39,6 @@ export const CATEGORY_LABELS_SHORT: Record<ReceiptCategory, string> = {
  * Always render receipt amounts with two decimal places so every surface
  * agrees on cent-priced display.
  */
-export function formatReceiptDollars(cost: number): string {
-  return `$${cost.toFixed(2)}`;
+export function formatReceiptDollars(cost: number, completeness?: CostCompleteness): string {
+  return formatCostWithCompleteness(cost, completeness);
 }

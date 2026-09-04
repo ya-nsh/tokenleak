@@ -1,7 +1,7 @@
 import type { DailyUsage } from '../types';
 
 /**
- * Returns 0-1 ratio of cacheReadTokens / (inputTokens + cacheReadTokens).
+ * Returns 0-1 ratio of cacheReadTokens / (inputTokens + cacheReadTokens + cacheWriteTokens).
  * Returns 0 if denominator is 0.
  */
 export function cacheHitRate(daily: DailyUsage[]): number {
@@ -10,7 +10,7 @@ export function cacheHitRate(daily: DailyUsage[]): number {
 
   for (const entry of daily) {
     totalCacheRead += entry.cacheReadTokens;
-    totalInput += entry.inputTokens;
+    totalInput += entry.inputTokens + entry.cacheWriteTokens;
   }
 
   const denominator = totalInput + totalCacheRead;

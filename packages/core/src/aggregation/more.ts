@@ -116,7 +116,7 @@ function buildCacheEconomics(providers: ProviderData[]): MoreStats['cacheEconomi
     }
   }
 
-  const readCoverage = readTokens + inputTokens > 0 ? readTokens / (readTokens + inputTokens) : 0;
+  const readCoverage = readTokens + inputTokens + writeTokens > 0 ? readTokens / (readTokens + inputTokens + writeTokens) : 0;
   return {
     readTokens,
     writeTokens,
@@ -441,8 +441,8 @@ function buildModelEfficiency(events: UsageEvent[]): NonNullable<MoreStats['mode
       outputInputRatio: model.outputTokens / model.inputTokens,
       outputPerDollar: model.outputTokens / model.cost,
       cacheCoverage:
-        model.inputTokens + model.cacheReadTokens > 0
-          ? model.cacheReadTokens / (model.inputTokens + model.cacheReadTokens)
+        model.inputTokens + model.cacheReadTokens + model.cacheWriteTokens > 0
+          ? model.cacheReadTokens / (model.inputTokens + model.cacheReadTokens + model.cacheWriteTokens)
           : 0,
       costPer1MTotal: model.totalTokens > 0 ? (model.cost / model.totalTokens) * 1_000_000 : 0,
     });

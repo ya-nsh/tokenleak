@@ -1,4 +1,5 @@
-import type { UsageEvent } from '../types';
+import { buildEventCostCompleteness } from '../cost-completeness';
+import type { CostCompleteness, UsageEvent } from '../types';
 
 const DEFAULT_SIMILARITY_THRESHOLD = 0.6;
 const MIN_TOKEN_LENGTH = 3;
@@ -7,6 +8,7 @@ const SAMPLE_PROMPT_COUNT = 3;
 const SAMPLE_PROMPT_MAX_CHARS = 120;
 
 export interface PromptCluster {
+  costCompleteness?: CostCompleteness;
   /** The representative prompt text — the one that cost the most in the cluster. */
   canonicalPrompt: string;
   /** Number of prompts rolled into this cluster. */
@@ -46,6 +48,8 @@ export function clusterPrompts(
   if (withPrompts.length === 0) return [];
 
   interface WorkingCluster {
+    promptKeys: Set<string>;
+    events: UsageEvent[];
     canonicalPrompt: string;
     canonicalCost: number;
     signature: Set<string>;
@@ -58,7 +62,11 @@ export function clusterPrompts(
 
   const clusters: WorkingCluster[] = [];
 
-  for (const event of withPrompts) {
+  for (const [index, event] of withPrompts.entries()) {
+    const promptId = event.promptId?.trim() || event.turnId?.trim();
+    const promptKey = promptId
+      ? JSON.stringify([event.provider, event.sessionId, promptId])
+      : JSON.stringify(['event', index]);
     const prompt = event.prompt!.trim();
     const signature = tokenBigrams(prompt);
     if (signature.size === 0) {
@@ -78,7 +86,9 @@ export function clusterPrompts(
 
     if (best !== null) {
       const c = best.cluster;
-      c.count += 1;
+      c.promptKeys.add(promptKey);
+      c.count = c.promptKeys.size;
+      c.events.push(event);
       c.totalCost += event.cost;
       c.totalTokens += event.totalTokens;
       if (event.cost > c.canonicalCost) {
@@ -89,6 +99,8 @@ export function clusterPrompts(
       insertTopMember(c.topMembers, prompt, event.cost);
     } else {
       clusters.push({
+        promptKeys: new Set([promptKey]),
+        events: [event],
         canonicalPrompt: prompt,
         canonicalCost: event.cost,
         signature,
@@ -102,6 +114,7 @@ export function clusterPrompts(
 
   return clusters
     .map((c) => ({
+      costCompleteness: buildEventCostCompleteness(c.events),
       canonicalPrompt: c.canonicalPrompt,
       count: c.count,
       totalCost: c.totalCost,

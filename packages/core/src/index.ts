@@ -158,6 +158,7 @@ export {
 } from './date-utils';
 
 export {
+  combineCostCompleteness,
   buildDailyCostCompleteness,
   buildEventCostCompleteness,
   mergeCostCompleteness,

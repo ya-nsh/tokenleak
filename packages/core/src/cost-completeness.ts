@@ -36,6 +36,22 @@ function statusFor(totalTokens: number, unpricedTokens: number): CostCompletenes
   return 'partial';
 }
 
+/** Combine completeness for receipt clusters, including overflow and filtered views. */
+export function combineCostCompleteness(parts: (CostCompleteness | undefined)[]): CostCompleteness {
+  const result = emptyCostCompleteness();
+  const models = new Set<string>();
+  for (const part of parts) {
+    if (!part) continue;
+    result.totalTokens += part.totalTokens;
+    result.pricedTokens += part.pricedTokens;
+    result.unpricedTokens += part.unpricedTokens;
+    mergeUnknownModels(models, part.unknownModels);
+  }
+  result.status = statusFor(result.totalTokens, result.unpricedTokens);
+  result.unknownModels = [...models].sort();
+  return result;
+}
+
 export function buildEventCostCompleteness(events: UsageEvent[]): CostCompleteness {
   let totalTokens = 0;
   let pricedTokens = 0;

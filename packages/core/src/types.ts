@@ -127,6 +127,8 @@ export interface UsageEvent {
   durationMs?: number;
   /** The most recent user prompt that triggered this assistant response, if captured by the parser. */
   prompt?: string;
+  /** Identity of the user submission that triggered this usage (scoped to its session). */
+  promptId?: string;
 }
 
 export interface DayOfWeekEntry {

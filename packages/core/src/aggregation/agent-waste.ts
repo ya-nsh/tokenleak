@@ -1,3 +1,4 @@
+import { sessionKey } from './session-identity';
 import type {
   AgentWasteReport,
   AgentWasteSignal,
@@ -60,7 +61,7 @@ function estimatedSavings(cost: number, fraction: number): number | null {
 function bySession(events: UsageEvent[]): Map<string, UsageEvent[]> {
   const sessions = new Map<string, UsageEvent[]>();
   for (const event of events) {
-    const key = event.sessionId?.trim() || `${event.provider}:${event.date}`;
+    const key = sessionKey(event.provider, event.sessionId?.trim() || event.date);
     const list = sessions.get(key) ?? [];
     list.push(event);
     sessions.set(key, list);
@@ -180,7 +181,7 @@ function detectCacheWaste(providers: ProviderData[]): AgentWasteSignal[] {
     if (read === 0 && write === 0) {
       continue;
     }
-    const hitRate = input + read > 0 ? read / (input + read) : 0;
+    const hitRate = input + read + write > 0 ? read / (input + read + write) : 0;
     if (hitRate < CACHE_HIT_LOW) {
       signals.push({
         kind: 'cache-miss-heavy',
@@ -281,7 +282,7 @@ export function buildAgentWasteReport(
   const estimated = signals
     .map((signal) => signal.estimatedSavings)
     .filter((value): value is number => value !== null);
-  const sessions = new Set(events.map((event) => event.sessionId ?? `${event.provider}:${event.date}`));
+  const sessions = new Set(events.map((event) => sessionKey(event.provider, event.sessionId ?? event.date)));
 
   return {
     method: METHOD,

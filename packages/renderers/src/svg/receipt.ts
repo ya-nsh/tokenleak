@@ -3,6 +3,7 @@ import {
   formatReceiptDollars,
   type Receipt,
   type ReceiptCategory,
+  type CostCompleteness,
 } from '@tokenleak/core';
 import { escapeXml } from './utils';
 
@@ -130,12 +131,12 @@ export function renderReceiptSvg(
   y += SECTION_GAP;
 
   // ── Totals ───────────────────────────────────────────────────────
-  parts.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal), y, theme, false));
+  parts.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal, receipt.summary.subtotalCompleteness), y, theme, false));
   y += 36;
   parts.push(
     totalRow(
       `SERVICE FEES  (${receipt.summary.unlabeledEvents} uncaptured)`,
-      formatReceiptDollars(receipt.summary.serviceFees),
+      formatReceiptDollars(receipt.summary.serviceFees, receipt.summary.serviceFeesCompleteness),
       y,
       theme,
       false,
@@ -144,7 +145,7 @@ export function renderReceiptSvg(
   y += 36;
   parts.push(dottedRule(y, theme));
   y += 28;
-  parts.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total), y, theme, true));
+  parts.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total, receipt.summary.costCompleteness), y, theme, true));
   y += 48;
 
   // ── Footer ───────────────────────────────────────────────────────
@@ -167,13 +168,13 @@ function dottedRule(y: number, theme: ReceiptTheme): string {
 }
 
 function lineItemRow(
-  line: { description: string; category: ReceiptCategory; quantity: number; totalCost: number },
+  line: { description: string; category: ReceiptCategory; quantity: number; totalCost: number; costCompleteness?: CostCompleteness },
   y: number,
   theme: ReceiptTheme,
 ): string {
   const categoryLabel = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
   const qtyStr = `${line.quantity}×`;
-  const costStr = formatReceiptDollars(line.totalCost);
+  const costStr = formatReceiptDollars(line.totalCost, line.costCompleteness);
   const leftX = PAD_X;
   const rightX = WIDTH - PAD_X;
 
