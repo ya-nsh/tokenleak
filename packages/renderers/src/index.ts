@@ -35,3 +35,4 @@ export {
 export type { TimeRange, MetricTab } from './terminal/index';
 export { renderAdvisorView } from './terminal/index';
 export { colorize256, bold256, dim, bold } from './terminal/index';
+export { quotaLines, formatQuotaReset, formatQuotaWindow } from './quota';

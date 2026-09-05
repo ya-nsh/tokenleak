@@ -1154,3 +1154,32 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, PR workflow, and
 ## License
 
 MIT
+
+## Subscription quotas
+
+Open the **Quotas** tab in the TUI (press uppercase **U**) to see account-wide remaining capacity and reset times. This screen is independent of historical tokens, estimated API costs, and the selected date range. It works even when no session logs exist.
+
+```bash
+tokenleak usage
+tokenleak usage --json
+tokenleak usage --provider claude,codex
+tokenleak usage --format json --output quotas.json
+```
+
+| Provider | Existing authentication | Capacity shown |
+| --- | --- | --- |
+| Claude | Claude Code OAuth in `~/.claude/.credentials.json`, or the default macOS Keychain entry; honors `CLAUDE_CONFIG_DIR` | Session, weekly, and model-scoped limits returned by the provider |
+| Codex | ChatGPT OAuth in `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`), or the matching macOS Keychain entry | Primary, secondary, and additional named quota windows |
+| GitHub Copilot | `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token --hostname github.com` | Paid quota snapshots, unlimited buckets, or free-plan quotas |
+
+Sign in using Claude Code `/login`, `codex login`, or `gh auth login`. API-only Codex credentials cannot report ChatGPT subscription capacity. Other providers, including Cursor, are not supported by this quota command yet; unsupported filters fail with an explanation. A custom Claude configuration does not fall back to the default account's Keychain entry. Linux/Windows secure-store-only Codex/Claude logins are not read in this release; file-based OAuth credentials are supported there.
+
+Press **r** to refresh and **j/k** to scroll. Returning to the tab checks for updated data, and the visible tab refreshes every 60 seconds. Successful results are cached in memory for up to 60 seconds; manual refresh (`r` or `--refresh`) can bypass this cache after a 15-second minimum interval. Provider `Retry-After` cooldowns take precedence, bounded to 1 minute–1 hour. There is no background polling when the tab is closed, and nothing is persisted between processes.
+
+Each provider reports its own status: ready, not configured, authentication required, rate limited, or unavailable. Temporary errors retain the last successful reading for the same credentials and mark it **STALE**, with the original check time. Rejected or changed credentials discard old readings. Missing values display as unavailable; unlimited capacity is labeled explicitly. An elapsed reset time is a prompt to refresh, never an assumption that the quota has renewed. Reset timestamps display in local time; JSON timestamps use UTC.
+
+The CLI returns all selected provider statuses even if only some succeed (exit 0 for a valid snapshot, including no configured accounts). Invalid arguments and output-write errors fail the command. Date filters do not apply. Automation should inspect each provider's `status`, `stale`, `fetchedAt`, and `retryAt` fields.
+
+MCP clients can call `get_subscription_quotas` with optional `provider` (`claude`, `codex`, or `copilot`) and `refresh` arguments. This explicitly queries live provider endpoints using existing credentials; ordinary historical MCP tools do not query quotas.
+
+Quota reads send credentials only to fixed HTTPS endpoints with redirects disabled and a 10-second request deadline. Credentials are never written, refreshed, switched, or included in output. Snapshots omit account IDs and emails, and provider error bodies are not exposed. These vendor-reported limits are not independently inferred from local usage. The underlying Claude, Codex WHAM, and Copilot internal endpoints can change; unavailable/unauthorized responses remain visible rather than being converted to zero usage. Additional purchased credit balances, extra-spend budgets, account switching, and quota notifications are outside this release.

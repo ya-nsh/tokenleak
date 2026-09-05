@@ -1,3 +1,4 @@
+import { handleGetSubscriptionQuotas } from './get-subscription-quotas.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { z } from 'zod';
@@ -25,6 +26,12 @@ const behaviorSelectorSchema = z.object({
 });
 
 export function registerTools(server: McpServer, registry: ProviderRegistry): void {
+  server.tool(
+    'get_subscription_quotas',
+    'Read live account-wide subscription capacity and reset times from Claude, Codex, or GitHub Copilot using existing credentials. Makes provider network requests; no historical log scan or credential changes.',
+    { provider: z.enum(['claude', 'codex', 'copilot']).optional(), refresh: z.boolean().optional() },
+    async (args) => handleGetSubscriptionQuotas(args),
+  );
   server.tool(
     'list_providers',
     'List all registered data providers and their availability status',

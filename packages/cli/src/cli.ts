@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { runUsage } from './usage.js';
 import { defineCommand, runMain } from 'citty';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -282,6 +283,7 @@ function buildHelpText(): string {
     '  tokenleak nutrition [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
+    '  tokenleak usage [--json] [--provider claude,codex,copilot]',
     '  tokenleak simulate-routing [flags]',
     '  tokenleak waste [flags]',
     '  tokenleak behavior-diff [flags]',
@@ -3781,6 +3783,15 @@ const isDirectExecution =
 if (isDirectExecution) {
   const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
   const argv = normalizedArgv;
+
+  if (argv[0] === 'usage') {
+    try {
+      await runUsage(argv.slice(1));
+    } catch (error: unknown) {
+      handleError(error);
+    }
+    process.exit(0);
+  }
 
   if (argv[0] === 'explain') {
     try {

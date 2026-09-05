@@ -90,3 +90,4 @@ export type {
   SyncCursorResult,
   ValidateCursorSessionResult,
 } from './cursor-auth';
+export { QuotaClient, quotaClient, QUOTA_PROVIDERS } from './quotas/client';

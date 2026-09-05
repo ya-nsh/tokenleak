@@ -1,3 +1,5 @@
+import { refreshQuotas, startQuotaPolling } from './lib/quotas.js';
+import { createQuotasPanel } from './panels/quotas.js';
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
@@ -263,6 +265,10 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
   const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
   const hasWindowData = Boolean(state.data?.windows[state.selectedWindowIndex]);
+
+  if (state.selectedView === 'quotas') {
+    return createQuotasPanel(state, renderer.width, renderer.height);
+  }
 
   if (!state.data && state.loadError) {
     return createDeferredPanel('Refresh failed', state.loadError, true);
@@ -985,6 +991,11 @@ function moveReceiptSelection(state: AppState, direction: number): void {
 }
 
 function handleViewSwitch(mode: ViewMode): void {
+  if (mode === 'quotas') {
+    void refreshQuotas(currentState).then(() => {
+      if (!currentRenderer.isDestroyed) render(currentState, currentRenderer);
+    });
+  }
   if (currentState.selectedView !== mode) {
     currentState.selectedView = mode;
     currentState.modelScrollOffset = 0;
@@ -1109,6 +1120,7 @@ function shiftExplainDate(state: AppState, direction: number): void {
 }
 
 const VIEW_KEYS: Record<string, ViewMode> = {
+  U: 'quotas',
   '1': 'overview',
   '2': 'matrix',
   '3': 'advisor',
@@ -1127,6 +1139,7 @@ const VIEW_KEYS: Record<string, ViewMode> = {
 
 const VIEW_ORDER: ViewMode[] = [
   'overview',
+  'quotas',
   'matrix',
   'advisor',
   'focus',
@@ -1397,6 +1410,10 @@ export async function main(): Promise<void> {
   const state = createInitialState();
   currentState = state;
   currentRenderer = renderer;
+  const stopQuotaPolling = startQuotaPolling(state, () => {
+    if (!renderer.isDestroyed) render(state, renderer);
+  });
+  renderer.on('destroy', stopQuotaPolling);
 
   // Show loading state immediately
   render(state, renderer);
@@ -1461,6 +1478,23 @@ export async function main(): Promise<void> {
 
     if (sequence === 'c') {
       return tryOpenCursorSetup(state, renderer);
+    }
+
+    if (state.selectedView === 'quotas') {
+      if (sequence === 'r') {
+        void refreshQuotas(state, undefined, true).then(() => {
+          if (!renderer.isDestroyed) render(state, renderer);
+        });
+        render(state, renderer);
+        return true;
+      }
+      if (['j', 'k', '\x1b[B', '\x1b[A'].includes(sequence)) {
+        const direction = sequence === 'j' || sequence === '\x1b[B' ? 1 : -1;
+        state.quotasScrollOffset = Math.max(0, state.quotasScrollOffset + direction);
+        render(state, renderer);
+        return true;
+      }
+      if (['\t', '>', '<', '\x1b[Z'].includes(sequence)) return true;
     }
 
     // Tab or >: next time window
