@@ -12,7 +12,8 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { collectFiles } from './local-usage';
-import { splitJsonlRecords } from '../parsers/jsonl-splitter';
+import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
+import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
 import { addUnknownPricingWarnings, buildEventCostCompleteness, resolveUsageCost } from '../costing';
@@ -302,6 +303,7 @@ export class ClaudeCodeProvider implements IProvider {
     const files = collectJsonlFiles(this.baseDir);
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
+    const cache = new UsageFileCache<UsageRecord>('claude-code-v2', this.baseDir, isCachedUsageRecord);
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const latestRecordsByMessageId = new Map<string, UsageRecord>();
       const anonymousRecords: UsageRecord[] = [];
@@ -309,31 +311,37 @@ export class ClaudeCodeProvider implements IProvider {
       const projectId = relative(this.baseDir, dirname(file)).split(sep).join('/');
 
       try {
-        let lastPrompt: string | null = null;
-        let promptSequence = 0;
-        for await (const record of splitJsonlRecords(file, {
-          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
-        })) {
-          const userPrompt = extractUserPrompt(record);
-          if (userPrompt !== null) {
-            lastPrompt = userPrompt;
-            promptSequence += 1;
-            continue;
-          }
-          const usage = extractUsage(record);
-          if (usage !== null) {
-            usage.sessionId = relativeFile;
-            usage.projectId = usage.projectId ?? projectId;
-            if (lastPrompt !== null) {
-              usage.prompt = lastPrompt;
-              usage.promptId = `user:${promptSequence}`;
+        const parsed = await cache.read(file, async () => {
+          const records: UsageRecord[] = [];
+          const fileWarnings: JsonlRecordWarning[] = [];
+          let lastPrompt: string | null = null;
+          let promptSequence = 0;
+          for await (const record of splitJsonlRecords(file, {
+            onWarning: (warning) => fileWarnings.push(warning),
+          })) {
+            const userPrompt = extractUserPrompt(record);
+            if (userPrompt !== null) {
+              lastPrompt = userPrompt;
+              promptSequence += 1;
+              continue;
             }
-            if (usage.messageId) {
-              latestRecordsByMessageId.set(usage.messageId, usage);
-            } else {
-              anonymousRecords.push(usage);
+            const usage = extractUsage(record);
+            if (usage !== null) {
+              usage.sessionId = relativeFile;
+              usage.projectId = usage.projectId ?? projectId;
+              if (lastPrompt !== null) {
+                usage.prompt = lastPrompt;
+                usage.promptId = `user:${promptSequence}`;
+              }
+              records.push(usage);
             }
           }
+          return { records, warnings: fileWarnings };
+        });
+        for (const warning of parsed.warnings) incrementWarningCount(warnings, warning.kind, warning.file);
+        for (const usage of parsed.records) {
+          if (usage.messageId) latestRecordsByMessageId.set(usage.messageId, usage);
+          else anonymousRecords.push(usage);
         }
       } catch {
         // Skip files that fail to parse — corrupted files shouldn't
@@ -344,6 +352,7 @@ export class ClaudeCodeProvider implements IProvider {
 
       return [...latestRecordsByMessageId.values(), ...anonymousRecords];
     });
+    await cache.save();
     const allRecords = recordsByFile.flat().filter((record) => isInRange(record.date, range));
 
     const daily = buildDailyUsage(allRecords);

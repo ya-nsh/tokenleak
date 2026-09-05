@@ -12,7 +12,8 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { collectFiles } from './local-usage';
-import { splitJsonlRecords } from '../parsers/jsonl-splitter';
+import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
+import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
 import { mergeServiceTiers } from '@tokenleak/core';
 import { isInRange, mapWithConcurrency } from '../utils';
@@ -660,6 +661,7 @@ export class CodexProvider implements IProvider {
     const files = [...collectJsonlFiles(this.sessionsDir),
       ...(this.archivedSessionsDir ? collectJsonlFiles(this.archivedSessionsDir) : [])];
     const warnings = new Map<string, ProviderWarning>();
+    const cache = new UsageFileCache<CodexUsageRecord>('codex-v2', this.sessionsDir, isCachedUsageRecord);
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const candidates: UsageCandidate[] = [];
       let pendingRecords: UsageCandidate[] = [];
@@ -674,17 +676,22 @@ export class CodexProvider implements IProvider {
       const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
 
       try {
-        for await (const record of splitJsonlRecords(file, {
-          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
-        })) {
-          const usage = parseUsageRecord(record, context);
-          if (!usage) {
-            continue;
+        const parsed = await cache.read(file, async () => {
+          const records: CodexUsageRecord[] = [];
+          const fileWarnings: JsonlRecordWarning[] = [];
+          for await (const record of splitJsonlRecords(file, {
+            onWarning: (warning) => fileWarnings.push(warning),
+          })) {
+            const usage = parseUsageRecord(record, context);
+            if (!usage) continue;
+            usage.sessionId = context.sessionId ?? basename(relativeFile);
+            usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
+            records.push(usage);
           }
-
-          usage.sessionId = context.sessionId ?? basename(relativeFile);
-          usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
-
+          return { records, warnings: fileWarnings };
+        });
+        for (const warning of parsed.warnings) incrementWarningCount(warnings, warning.kind, warning.file);
+        for (const usage of parsed.records) {
           const identity = resolveModelIdentity(compactModelDateSuffix(usage.model));
           const normalizedModel = identity.model;
           const serviceTier = usage.serviceTier ?? identity.serviceTier ?? 'unknown';
@@ -738,6 +745,7 @@ export class CodexProvider implements IProvider {
       }
       return reconcileUsageRecords(candidates);
     });
+    await cache.save();
     // Moving a session into the archive must not count overlapping copies twice.
     // Include timestamp and session identity: equal token counts alone are not duplicates.
     const all = eventsByFile.flatMap((entries, fileIndex) => entries.map((candidate) => ({ candidate, fileIndex })));

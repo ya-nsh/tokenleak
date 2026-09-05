@@ -109,6 +109,17 @@ export function inferRepoRoot(projectId?: string | null): string | null {
   return dirname(normalized);
 }
 
+/** Reuse filesystem discovery within one calculation; refreshes see new repositories. */
+function createRepoRootResolver(): typeof inferRepoRoot {
+  const roots = new Map<string | null | undefined, string | null>();
+  return (projectId) => {
+    if (roots.has(projectId)) return roots.get(projectId)!;
+    const root = inferRepoRoot(projectId);
+    roots.set(projectId, root);
+    return root;
+  };
+}
+
 export function inferDirectoryLabel(
   projectId?: string | null,
   repoRoot?: string | null,
@@ -280,12 +291,13 @@ function buildAttributionWindows(sessions: SessionDrilldownEntry[]): Attribution
 }
 
 export function buildSessionRollups(events: UsageEvent[], topModelLimit: number = 3): SessionDrilldownEntry[] {
+  const resolveRepoRoot = createRepoRootResolver();
   const sessions = new Map<string, SessionAccumulator>();
 
   for (const event of events) {
     const sessionId = event.sessionId?.trim() || `${event.provider}:${event.timestamp}`;
     const projectId = event.projectId?.trim() || null;
-    const repoRoot = event.repoRoot ?? inferRepoRoot(projectId);
+    const repoRoot = event.repoRoot ?? resolveRepoRoot(projectId);
     const directory = event.directory ?? inferDirectoryLabel(projectId, repoRoot);
     const label = projectId ?? sessionId;
 
@@ -386,6 +398,7 @@ export function buildProjectRollups(
   topSessionLimit: number = 3,
 ): ProjectDrilldownEntry[] {
   const sessions = buildSessionRollups(events, topModelLimit);
+  const resolveRepoRoot = createRepoRootResolver();
   const byProject = new Map<string, {
     projectId: string;
     repoRoot: string | null;
@@ -408,7 +421,7 @@ export function buildProjectRollups(
       continue;
     }
 
-    const repoRoot = event.repoRoot ?? inferRepoRoot(projectId);
+    const repoRoot = event.repoRoot ?? resolveRepoRoot(projectId);
     const directory = event.directory ?? inferDirectoryLabel(projectId, repoRoot);
     let project = byProject.get(projectId);
     if (!project) {

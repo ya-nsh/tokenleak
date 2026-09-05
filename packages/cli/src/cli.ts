@@ -786,7 +786,7 @@ async function selectAvailableProviders(
     );
   }
   const cursorSync = await shouldSyncCursorForRun(config);
-  if (cursorSync.attempted && cursorSync.error) {
+  if (cursorSync.error) {
     if (hasCursorUsageCache()) {
       process.stderr.write(`Cursor sync failed, using cached data: ${cursorSync.error}\n`);
     } else if (requestedCursor) {
