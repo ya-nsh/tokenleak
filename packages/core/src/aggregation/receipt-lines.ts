@@ -1,4 +1,5 @@
-import type { DateRange, UsageEvent } from '../types';
+import { buildEventCostCompleteness, combineCostCompleteness } from '../cost-completeness';
+import type { CostCompleteness, DateRange, UsageEvent } from '../types';
 import { clusterPrompts } from './prompt-clusters';
 
 const DEFAULT_TOP_LINES = 12;
@@ -16,6 +17,7 @@ export type ReceiptCategory =
   | 'misc';
 
 export interface ReceiptLine {
+  costCompleteness?: CostCompleteness;
   description: string;
   category: ReceiptCategory;
   quantity: number;
@@ -32,6 +34,9 @@ export interface ReceiptLine {
 }
 
 export interface ReceiptSummary {
+  costCompleteness?: CostCompleteness;
+  subtotalCompleteness?: CostCompleteness;
+  serviceFeesCompleteness?: CostCompleteness;
   dateRange: DateRange;
   /** Number of prompts that rolled up into the returned lines. */
   accountedPrompts: number;
@@ -69,12 +74,14 @@ export function buildReceipt(
   const topLines = options.topLines ?? DEFAULT_TOP_LINES;
 
   const withPrompts: UsageEvent[] = [];
+  const unprompted: UsageEvent[] = [];
   let unlabeledEvents = 0;
   let serviceFees = 0;
   for (const e of events) {
     if (typeof e.prompt === 'string' && e.prompt.trim().length > 0) {
       withPrompts.push(e);
     } else {
+      unprompted.push(e);
       unlabeledEvents += 1;
       serviceFees += e.cost;
     }
@@ -88,6 +95,7 @@ export function buildReceipt(
   const hasOverflow = clusters.length > maxLines;
   const ranked = clusters.slice(0, hasOverflow ? maxLines - 1 : maxLines);
   const lines: ReceiptLine[] = ranked.map((c) => ({
+    costCompleteness: c.costCompleteness,
     description: formatDescription(c.canonicalPrompt),
     category: classify(c.canonicalPrompt),
     quantity: c.count,
@@ -99,6 +107,7 @@ export function buildReceipt(
   const overflow = clusters.slice(ranked.length);
   if (overflow.length > 0) {
     lines.push({
+      costCompleteness: combineCostCompleteness(overflow.map((cluster) => cluster.costCompleteness)),
       description: `Other prompt clusters (${overflow.length})`,
       category: 'misc',
       quantity: overflow.reduce((sum, c) => sum + c.count, 0),
@@ -117,6 +126,9 @@ export function buildReceipt(
   return {
     lines,
     summary: {
+      costCompleteness: buildEventCostCompleteness(events),
+      subtotalCompleteness: buildEventCostCompleteness(withPrompts),
+      serviceFeesCompleteness: buildEventCostCompleteness(unprompted),
       dateRange,
       accountedPrompts,
       unlabeledEvents,

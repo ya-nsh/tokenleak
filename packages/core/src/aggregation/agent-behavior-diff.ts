@@ -1,3 +1,4 @@
+import { sessionKey } from './session-identity';
 import type {
   AgentBehaviorDiffReport,
   BehaviorCohortMetrics,
@@ -44,7 +45,7 @@ function nullWhenMissing(value: number, hasDenominator: boolean): number | null 
 function modelSwitchesPerSession(events: UsageEvent[]): number {
   const bySession = new Map<string, UsageEvent[]>();
   for (const event of events) {
-    const key = event.sessionId ?? `${event.provider}:${event.date}`;
+    const key = sessionKey(event.provider, event.sessionId ?? event.date);
     const list = bySession.get(key) ?? [];
     list.push(event);
     bySession.set(key, list);
@@ -84,7 +85,7 @@ function metricsFor(events: UsageEvent[], dateRange: DateRange): BehaviorCohortM
     cost,
     inputPerOutput: output > 0 ? input / output : null,
     outputPerDollar: cost > 0 ? output / cost : null,
-    cacheHitRate: input + read > 0 ? read / (input + read) : 0,
+    cacheHitRate: input + read + write > 0 ? read / (input + read + write) : 0,
     cacheReuseRatio: write > 0 ? read / write : null,
     modelSwitchesPerSession: modelSwitchesPerSession(events),
     wasteSignals: waste.signals.length,

@@ -130,8 +130,8 @@ function renderFlowBlockCard(
   const events = block.events.slice(0, REPLAY_EVENT_DETAIL_LIMIT);
   for (const event of events) {
     const time = formatTime(event.timestamp);
-    const cacheRate = (event.inputTokens + event.cacheReadTokens) > 0
-      ? event.cacheReadTokens / (event.inputTokens + event.cacheReadTokens)
+    const cacheRate = (event.inputTokens + event.cacheReadTokens + event.cacheWriteTokens) > 0
+      ? event.cacheReadTokens / (event.inputTokens + event.cacheReadTokens + event.cacheWriteTokens)
       : 0;
     const line = `${padRight(time, 6)} ${padRight(truncate(event.model, 20), 21)} ${padLeft(formatTokens(event.totalTokens), 8)} tok  cache ${padLeft(formatPercent(cacheRate), 6)}  ${padLeft(formatCost(event.cost), 8)}`;
     children.push(renderDetailLine(line, contentWidth, COLORS.white));
@@ -259,8 +259,8 @@ function renderPlaybackEventList(report: ReplayReport, playback: ReplayPlaybackV
     const e: UsageEvent = report.events[i];
     const isCursor = i === playback.cursorIndex;
     const isFuture = i > playback.cursorIndex;
-    const cacheRate = (e.inputTokens + e.cacheReadTokens) > 0
-      ? e.cacheReadTokens / (e.inputTokens + e.cacheReadTokens)
+    const cacheRate = (e.inputTokens + e.cacheReadTokens + e.cacheWriteTokens) > 0
+      ? e.cacheReadTokens / (e.inputTokens + e.cacheReadTokens + e.cacheWriteTokens)
       : 0;
     const marker = isCursor ? '▶' : ' ';
     const line = ` ${marker} ${padRight(formatTimeSeconds(e.timestamp), 9)} ${padRight(truncate(e.model, 22), 23)} ${padLeft(formatTokens(e.totalTokens), 8)} tok  cache ${padLeft(formatPercent(cacheRate), 5)}  ${padLeft(formatCost(e.cost), 8)}`;

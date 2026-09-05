@@ -52,6 +52,7 @@ interface CodexUsageRecord {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   prompt?: string;
+  promptId?: string;
   sessionId?: string;
   projectId?: string;
   turnId?: string;
@@ -79,6 +80,9 @@ interface SessionContext {
     cacheWriteTokens: number;
   } | null;
   lastUserPrompt?: string;
+  lastUserPromptId?: string;
+  promptSequence?: number;
+  promptSource?: string;
 }
 
 const MAX_PROMPT_CHARS = 2_000;
@@ -391,6 +395,7 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     cacheReadTokens,
     cacheWriteTokens,
     prompt: context.lastUserPrompt,
+    promptId: context.lastUserPromptId,
     counterAdvanced: cumulative !== null,
     cumulativeOnly: cumulative !== null && !hasLastUsage,
   };
@@ -447,6 +452,9 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   const userPrompt = extractUserPrompt(record);
   if (userPrompt) {
     context.lastUserPrompt = userPrompt;
+    context.promptSequence = (context.promptSequence ?? 0) + 1;
+    // The sequence is local to this file, even when several files share a session ID.
+    context.lastUserPromptId = JSON.stringify([context.promptSource, context.promptSequence]);
     return null;
   }
 
@@ -479,6 +487,7 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     prompt: context.lastUserPrompt,
+    promptId: context.lastUserPromptId,
   };
 }
 
@@ -656,6 +665,7 @@ export class CodexProvider implements IProvider {
       let pendingRecords: UsageCandidate[] = [];
       const context: SessionContext = {
         model: 'unknown',
+        promptSource: relative(this.sessionsDir, file).split(sep).join('/'),
         projectId: undefined,
         previousTotals: null,
         lastUserPrompt: undefined,
@@ -712,6 +722,7 @@ export class CodexProvider implements IProvider {
             serviceTierSource: usage.serviceTierSource ?? (identity.serviceTier ? 'model-name' : undefined),
             projectId: usage.projectId,
             prompt: usage.prompt,
+            promptId: usage.promptId,
           } };
           if (usage.source === 'record') pendingRecords.push(candidate);
           if (usage.counterAdvanced) {

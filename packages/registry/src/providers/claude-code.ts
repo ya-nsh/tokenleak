@@ -37,6 +37,7 @@ interface UsageRecord {
   sessionId?: string;
   projectId?: string;
   prompt?: string;
+  promptId?: string;
 }
 
 const MAX_PROMPT_CHARS = 2_000;
@@ -309,12 +310,14 @@ export class ClaudeCodeProvider implements IProvider {
 
       try {
         let lastPrompt: string | null = null;
+        let promptSequence = 0;
         for await (const record of splitJsonlRecords(file, {
           onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
         })) {
           const userPrompt = extractUserPrompt(record);
           if (userPrompt !== null) {
             lastPrompt = userPrompt;
+            promptSequence += 1;
             continue;
           }
           const usage = extractUsage(record);
@@ -323,6 +326,7 @@ export class ClaudeCodeProvider implements IProvider {
             usage.projectId = usage.projectId ?? projectId;
             if (lastPrompt !== null) {
               usage.prompt = lastPrompt;
+              usage.promptId = `user:${promptSequence}`;
             }
             if (usage.messageId) {
               latestRecordsByMessageId.set(usage.messageId, usage);
@@ -374,6 +378,7 @@ export class ClaudeCodeProvider implements IProvider {
         sessionId: record.sessionId,
         projectId: record.projectId,
         prompt: record.prompt,
+        promptId: record.promptId,
       });
     }
     addUnknownPricingWarnings(warnings, allEvents);

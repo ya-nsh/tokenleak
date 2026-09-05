@@ -1,11 +1,13 @@
 import { Box, Text } from '@opentui/core';
 import {
   CATEGORY_LABELS_SHORT,
+  formatReceiptDollars,
+  combineCostCompleteness,
   type Receipt,
   type ReceiptCategory,
   type ReceiptLine,
 } from '@tokenleak/core';
-import { formatCost, padRight, padLeft, truncate, wrapText } from '../lib/format.js';
+import { padRight, padLeft, truncate, wrapText } from '../lib/format.js';
 import { deriveReceiptLines } from '../lib/data.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { ReceiptsSortMode } from '../lib/state.js';
@@ -36,7 +38,7 @@ function renderLine(
   const rankStr = padLeft(`${rank}.`, 3);
   const category = CATEGORY_LABELS_SHORT[line.category] ?? line.category.toUpperCase();
   const qty = `${line.quantity}×`;
-  const cost = formatCost(line.totalCost);
+  const cost = formatReceiptDollars(line.totalCost, line.costCompleteness);
   const desc = truncate(line.description, descColWidth);
   const pointer = isSelected ? '▸' : ' ';
   const expandIcon = isExpanded ? '▼' : '▶';
@@ -204,13 +206,13 @@ export function createReceiptsPanel(
             fg: COLORS.dimWhite,
           }),
           Text({
-            content: formatCost(filteredSubtotal),
+            content: formatReceiptDollars(filteredSubtotal, combineCostCompleteness(derivedLines.map((line) => line.costCompleteness))),
             fg: COLORS.amber,
             attributes: BOLD,
           }),
         ),
         ...wrapText(
-          `All categories · Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
+          `All categories · Subtotal ${formatReceiptDollars(receipt.summary.subtotal, receipt.summary.subtotalCompleteness)}  ·  Service fees ${formatReceiptDollars(receipt.summary.serviceFees, receipt.summary.serviceFeesCompleteness)}  ·  Total ${formatReceiptDollars(receipt.summary.total, receipt.summary.costCompleteness)}`,
           contentWidth - 2,
           2,
         ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
@@ -218,7 +220,7 @@ export function createReceiptsPanel(
     : Box(
         { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
         ...wrapText(
-          `Subtotal ${formatCost(receipt.summary.subtotal)}  ·  Service fees ${formatCost(receipt.summary.serviceFees)}  ·  Total ${formatCost(receipt.summary.total)}`,
+          `Subtotal ${formatReceiptDollars(receipt.summary.subtotal, receipt.summary.subtotalCompleteness)}  ·  Service fees ${formatReceiptDollars(receipt.summary.serviceFees, receipt.summary.serviceFeesCompleteness)}  ·  Total ${formatReceiptDollars(receipt.summary.total, receipt.summary.costCompleteness)}`,
           contentWidth - 2,
           2,
         ).map((line) => Text({ content: line, fg: COLORS.dimWhite })),
