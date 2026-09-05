@@ -60,6 +60,8 @@ export interface ProviderWarning {
 export type CostSource = 'provider-reported' | 'estimated' | 'unpriced';
 
 export interface CostCompleteness {
+  /** Known positive spend reported without token counts. */
+  hasKnownCostOnly?: boolean;
   status: 'complete' | 'partial' | 'unknown';
   totalTokens: number;
   pricedTokens: number;
