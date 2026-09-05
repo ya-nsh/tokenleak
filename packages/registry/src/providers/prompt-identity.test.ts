@@ -24,3 +24,22 @@ test.each(['codex', 'claude'])('tracks repeated submissions separately from resp
     expect(buildReceipt(data.events!, range).summary.accountedPrompts).toBe(2);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('keeps identical submissions in separate fragments of one Codex session distinct', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'tokenleak-prompt-fragments-'));
+  try {
+    const timestamp = '2026-03-12T10:00:00Z';
+    for (const i of [1, 2]) {
+      writeFileSync(join(root, `part-${i}.jsonl`), [
+        { type: 'session_meta', payload: { id: 'same-session' } },
+        { type: 'event_msg', timestamp, payload: { type: 'user_message', message: 'Implement this feature' } },
+        { type: 'token_usage_record', timestamp, payload: { model: 'gpt-5.5', turn_id: `t${i}`, response_id: `r${i}`, usage: { input_tokens: 100, output_tokens: 10 } } },
+      ].map((row) => JSON.stringify(row)).join('\n'));
+    }
+    const range = { since: '2026-03-12', until: '2026-03-12' };
+    const data = await new CodexProvider(root).load(range);
+    expect(data.events).toHaveLength(2);
+    expect(buildReceipt(data.events!, range).summary.accountedPrompts).toBe(2);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

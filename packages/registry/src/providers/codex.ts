@@ -81,6 +81,7 @@ interface SessionContext {
   lastUserPrompt?: string;
   lastUserPromptId?: string;
   promptSequence?: number;
+  promptSource?: string;
 }
 
 const MAX_PROMPT_CHARS = 2_000;
@@ -466,7 +467,8 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
   if (userPrompt) {
     context.lastUserPrompt = userPrompt;
     context.promptSequence = (context.promptSequence ?? 0) + 1;
-    context.lastUserPromptId = `user:${context.promptSequence}`;
+    // The sequence is local to this file, even when several files share a session ID.
+    context.lastUserPromptId = JSON.stringify([context.promptSource, context.promptSequence]);
     return null;
   }
 
@@ -635,6 +637,7 @@ export class CodexProvider implements IProvider {
       let pendingRecords: UsageCandidate[] = [];
       const context: SessionContext = {
         model: 'unknown',
+        promptSource: relative(this.sessionsDir, file).split(sep).join('/'),
         projectId: undefined,
         previousTotals: null,
         lastUserPrompt: undefined,
