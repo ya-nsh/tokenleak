@@ -11,6 +11,7 @@ function tryServe(
 ): { server: ReturnType<typeof Bun.serve>; error: null } | { server: null; error: unknown } {
   try {
     const server = Bun.serve({
+      hostname: '127.0.0.1',
       port,
       fetch(_req: Request): Response {
         return new Response(html, {
