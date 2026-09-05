@@ -561,9 +561,12 @@ function reconcileUsageRecords(candidates: UsageCandidate[]): UsageCandidate[] {
   }
 
   // Response records can be written after their cumulative notification. Use
-  // event time to place unassigned responses into the first counter boundary
+  // event time to place delayed responses into the first counter boundary
   // that covers them; do not borrow responses from a later request or reset.
-  const assigned = new Set(unique.flatMap((candidate) => candidate.coveredRecords ?? []));
+  const assigned = new Map<UsageCandidate, UsageCandidate>();
+  for (const boundary of unique) {
+    for (const record of boundary.coveredRecords ?? []) assigned.set(record, boundary);
+  }
   const boundaries = new Map<string | undefined, UsageCandidate[]>();
   for (const candidate of unique) {
     if (!candidate.counterAdvanced || !Number.isFinite(Date.parse(candidate.event.timestamp))) continue;
@@ -575,7 +578,7 @@ function reconcileUsageRecords(candidates: UsageCandidate[]): UsageCandidate[] {
     list.sort((a, b) => Date.parse(a.event.timestamp) - Date.parse(b.event.timestamp));
   }
   for (const candidate of unique) {
-    if (candidate.source !== 'record' || assigned.has(candidate) || matchedRecords.has(candidate)) continue;
+    if (candidate.source !== 'record' || matchedRecords.has(candidate)) continue;
     const timestamp = Date.parse(candidate.event.timestamp);
     if (!Number.isFinite(timestamp)) continue;
     const list = boundaries.get(candidate.event.sessionId) ?? [];
@@ -587,7 +590,15 @@ function reconcileUsageRecords(candidates: UsageCandidate[]): UsageCandidate[] {
       else high = middle;
     }
     const boundary = list[low];
-    if (boundary?.coveredRecords) boundary.coveredRecords.push(candidate);
+    const previous = assigned.get(candidate);
+    // Equal timestamps cannot disambiguate counters; retain file-order coverage.
+    if (previous && (!boundary || Date.parse(boundary.event.timestamp) >= Date.parse(previous.event.timestamp))) continue;
+    if (boundary?.coveredRecords) {
+      if (previous?.coveredRecords) {
+        previous.coveredRecords = previous.coveredRecords.filter((record) => record !== candidate);
+      }
+      boundary.coveredRecords.push(candidate);
+    }
   }
 
   const uniqueRecords = new Set(unique.filter((candidate) => candidate.source === 'record'));

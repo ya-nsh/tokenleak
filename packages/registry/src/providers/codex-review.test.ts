@@ -156,3 +156,18 @@ test('turn-level tier metadata wins over resumed session defaults without a turn
   const data = await load([turn, { type: 'session_meta', payload: { service_tier: 'fast' } }, notification()]);
   expect(data.events![0]!.serviceTier).toBe('default');
 });
+
+
+test.each([false, true])('reassigns delayed responses captured by a later counter (reset=%s)', async (reset) => {
+  const first = notification(2000, 200, false);
+  const next = { ...notification(reset ? 500 : 3000, reset ? 50 : 300, false), timestamp: '2026-03-12T10:05:00Z' };
+  const delayed = (id: string) => ({ ...modern(id), timestamp: '2026-03-12T09:59:00Z' });
+  const data = await load([context(), first, delayed('r1'), delayed('r2'), next]);
+  expect(data.totalTokens).toBe(reset ? 2750 : 3300);
+  expect(data.events!.filter((event) => event.responseId)).toHaveLength(2);
+});
+
+test('retains file-order coverage when successive counters share a timestamp', async () => {
+  const data = await load([context(), notification(2000, 200, false), modern('r1'), modern('r2'), notification(4000, 400, false)]);
+  expect(data.totalTokens).toBe(4400);
+});
