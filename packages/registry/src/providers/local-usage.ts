@@ -8,7 +8,8 @@ import type {
   ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
-import { normalizeModelName } from '../models/normalizer';
+import { mergeServiceTiers } from '@tokenleak/core';
+import { resolveModelIdentity } from '../models/normalizer';
 import {
   addUnknownPricingWarnings,
   buildEventCostCompleteness,
@@ -161,9 +162,11 @@ export function toUsageEvent(
   metadata: LocalProviderMetadata,
   record: LocalUsageRecord,
 ): UsageEvent {
-  const normalizedModel = normalizeModelName(record.model);
+  const identity = resolveModelIdentity(record.model);
+  const normalizedModel = identity.model;
   const cost = resolveUsageCost({
     model: normalizedModel,
+    serviceTier: identity.serviceTier,
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     cacheReadTokens: record.cacheReadTokens,
@@ -179,6 +182,8 @@ export function toUsageEvent(
   return {
     provider: metadata.provider,
     timestamp: record.timestamp,
+    serviceTier: identity.serviceTier,
+    serviceTierSource: identity.serviceTier ? 'model-name' : undefined,
     date: record.date,
     model: normalizedModel,
     inputTokens: record.inputTokens,
@@ -237,6 +242,10 @@ export function buildProviderData(
       dateMap.set(event.model, model);
     }
 
+    model.serviceTiers = mergeServiceTiers(model.serviceTiers, [{
+      tier: event.serviceTier ?? 'unknown', tokens: event.totalTokens, cost: event.cost,
+      unpricedTokens: event.unpricedTokens ?? 0,
+    }]);
     model.inputTokens += event.inputTokens;
     model.outputTokens += event.outputTokens;
     model.cacheReadTokens += event.cacheReadTokens;
