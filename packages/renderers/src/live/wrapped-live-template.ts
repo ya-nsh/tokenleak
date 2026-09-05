@@ -341,7 +341,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   <h2 class="title">Your go-to<br><span class="hl">models</span></h2>
   ${modelBars}
   <div class="rule"></div>
-  <div class="info">You used <span class="hi">${stats.topModels.length} model${stats.topModels.length !== 1 ? 's' : ''}</span> total during this period.</div>
+  <div class="info">You used <span class="hi">${(stats.allModels ?? stats.topModels).length} model${(stats.allModels ?? stats.topModels).length !== 1 ? 's' : ''}</span> total during this period.</div>
   <div style="margin-top:auto;padding-top:34px">${stamp}</div>
 </div>`;
 
@@ -522,7 +522,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
       </div>
       <div class="sc">
         <div class="lb">Models Used</div>
-        <div class="vl">${stats.topModels.length}</div>
+        <div class="vl">${(stats.allModels ?? stats.topModels).length}</div>
       </div>
     </div>
     <div class="rule" style="width:100%"></div>

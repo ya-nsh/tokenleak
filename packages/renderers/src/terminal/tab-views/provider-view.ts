@@ -16,7 +16,7 @@ function formatTokens(n: number): string {
 
 function getLastActiveDate(output: TokenleakOutput, providerName: string): string | null {
   const provider = output.providers.find((entry) => entry.provider === providerName);
-  const activeDays = provider?.daily.filter((entry) => entry.totalTokens > 0) ?? [];
+  const activeDays = provider?.daily.filter((entry) => (entry.totalTokens > 0 || entry.cost > 0)) ?? [];
   return activeDays.at(-1)?.date ?? null;
 }
 
@@ -30,7 +30,7 @@ export function renderProviderView(output: TokenleakOutput, width: number, noCol
         lastActiveDate: getLastActiveDate(output, provider.provider),
       };
     })
-    .filter((entry) => entry.stats.totalTokens > 0)
+    .filter((entry) => (entry.stats.totalTokens > 0 || entry.stats.totalCost > 0))
     .sort((left, right) => right.stats.totalTokens - left.stats.totalTokens);
 
   if (rows.length === 0) {

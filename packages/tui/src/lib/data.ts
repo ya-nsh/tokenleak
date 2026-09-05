@@ -705,3 +705,22 @@ export function getDayOfWeekForWindow(state: AppState) {
   const daily = getDailyForWindow(state.data, state.selectedWindowIndex);
   return dayOfWeekBreakdown(daily);
 }
+
+/** Keep exported and Wrapped provider data in the same window as the header totals. */
+export function buildTokenleakOutput(
+  state: AppState,
+  options: { computeMore?: boolean } = {},
+): TokenleakOutput | null {
+  const stats = state.data?.windows[state.selectedWindowIndex]?.stats;
+  const scoped = getScopedWindowData(state);
+  if (!stats || !scoped) return null;
+  const more = options.computeMore ? ensureMoreStats(state) : state.cachedMoreStats;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    generated: new Date().toISOString(),
+    dateRange: scoped.windowRange,
+    providers: scoped.scopedProviders,
+    aggregated: stats,
+    ...(more ? { more } : {}),
+  };
+}

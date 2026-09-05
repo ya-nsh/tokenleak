@@ -4,9 +4,7 @@ import type { TokenleakOutput } from '@tokenleak/core';
 import {
   buildCommonsExport,
   buildCommonsPromptExport,
-  SCHEMA_VERSION,
   getTodayLocal,
-  shiftDateStringLocal,
 } from '@tokenleak/core';
 import {
   CursorAuthError,
@@ -37,6 +35,7 @@ import {
   ensureReceipt,
   deriveReceiptLines,
   getScopedWindowData,
+  buildTokenleakOutput,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -411,7 +410,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       const output = buildTokenleakOutput(state, { computeMore: false });
       const achievements = output ? computeAchievements(output) : [];
       const providers =
-        state.data?.providers.map((p) => ({
+        (output?.providers ?? []).map((p) => ({
           displayName: p.displayName,
           totalTokens: p.totalTokens,
           totalCost: p.totalCost,
@@ -490,52 +489,8 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   }
 }
 
-/** Build a TokenleakOutput from current state for renderers */
-function buildTokenleakOutput(
-  state: AppState,
-  options: { computeMore?: boolean } = {},
-): TokenleakOutput | null {
-  if (!state.data || state.data.windows.length === 0) return null;
-  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
-  if (!windowStats) return null;
-
-  // Scope dateRange to the selected window
-  const days = WINDOW_DAYS[state.selectedWindowIndex];
-  const today = getTodayLocal();
-
-  const dateRange = days && days > 0
-    ? { since: shiftDateStringLocal(today, -(days - 1)), until: today }
-    : state.data.dateRange;
-
-  // Attach more stats if available for achievements that need hourOfDay
-  const more = options.computeMore ? ensureMoreStats(state) : state.cachedMoreStats;
-
-  const output: TokenleakOutput = {
-    schemaVersion: SCHEMA_VERSION,
-    generated: new Date().toISOString(),
-    dateRange,
-    providers: state.data.providers,
-    aggregated: windowStats,
-  };
-
-  // Attach more stats for computeAchievements to use
-  if (more) {
-    (output as TokenleakOutput & { more?: unknown }).more = more;
-  }
-
-  return output;
-}
-
 function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
-  const output = buildTokenleakOutput(state, { computeMore: true });
-  if (!output || !state.data) return null;
-  const scoped = getScopedWindowData(state);
-  if (!scoped) return null;
-
-  return {
-    ...output,
-    providers: scoped.scopedProviders,
-  };
+  return buildTokenleakOutput(state, { computeMore: true });
 }
 
 function resetCursorSetupForm(state: AppState): void {

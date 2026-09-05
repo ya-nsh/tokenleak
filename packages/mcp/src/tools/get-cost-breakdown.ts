@@ -40,7 +40,7 @@ export async function handleGetCostBreakdown(
               dateRange: range,
               totalCost: stats.totalCost,
               costCompleteness: stats.costCompleteness,
-              models: stats.topModels,
+              models: stats.allModels ?? stats.topModels,
               warnings,
             },
             null,
