@@ -1,3 +1,4 @@
+import { sessionKey } from './session-identity';
 import { existsSync } from 'node:fs';
 import { dirname, basename, relative } from 'node:path';
 import { join } from 'node:path';
@@ -300,7 +301,7 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
     const directory = event.directory ?? inferDirectoryLabel(projectId, repoRoot);
     const label = projectId ?? sessionId;
 
-    let session = sessions.get(sessionId);
+    let session = sessions.get(sessionKey(event.provider, sessionId));
     if (!session) {
       session = {
         sessionId,
@@ -322,7 +323,7 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
         modelTokens: new Map(),
         activeDates: new Set(),
       };
-      sessions.set(sessionId, session);
+      sessions.set(sessionKey(event.provider, sessionId), session);
     } else {
       if (!session.projectId && projectId) {
         session.projectId = projectId;
@@ -530,7 +531,7 @@ export function buildAttributionClusters(
     const taskStyle = inferAttributionTaskStyle(session);
     const scope = resolveAttributionScope(session);
     const clusterId = `${scope.key}::style:${taskStyle}`;
-    clusterBySessionId.set(session.sessionId, clusterId);
+    clusterBySessionId.set(sessionKey(session.provider, session.sessionId), clusterId);
 
     let cluster = clusters.get(clusterId);
     if (!cluster) {
@@ -555,7 +556,7 @@ export function buildAttributionClusters(
 
   for (const event of events) {
     const sessionId = event.sessionId?.trim() || `${event.provider}:${event.timestamp}`;
-    const clusterId = clusterBySessionId.get(sessionId);
+    const clusterId = clusterBySessionId.get(sessionKey(event.provider, sessionId));
     if (!clusterId) {
       continue;
     }

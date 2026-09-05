@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join, relative, sep } from 'node:path';
 import type {
   DailyUsage,
@@ -8,7 +8,8 @@ import type {
   ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
-import { normalizeModelName } from '../models/normalizer';
+import { mergeServiceTiers } from '@tokenleak/core';
+import { resolveModelIdentity } from '../models/normalizer';
 import {
   addUnknownPricingWarnings,
   buildEventCostCompleteness,
@@ -41,6 +42,7 @@ export interface LocalProviderMetadata {
 export function collectFiles(
   root: string,
   predicate: (path: string, name: string) => boolean,
+  visited = new Set<string>(),
 ): string[] {
   const results: string[] = [];
 
@@ -50,6 +52,9 @@ export function collectFiles(
 
   let entries: string[];
   try {
+    const canonical = realpathSync(root);
+    if (visited.has(canonical)) return results;
+    visited.add(canonical);
     entries = readdirSync(root);
   } catch {
     return results;
@@ -65,7 +70,7 @@ export function collectFiles(
     }
 
     if (stats.isDirectory()) {
-      results.push(...collectFiles(fullPath, predicate));
+      results.push(...collectFiles(fullPath, predicate, visited));
     } else if (stats.isFile() && predicate(fullPath, entry)) {
       results.push(fullPath);
     }
@@ -111,11 +116,15 @@ export function extractDate(timestamp: string): string | null {
 
 export function timestampToIso(value: unknown): string | null {
   if (typeof value === 'string') {
-    if (extractDate(value)) {
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return null;
+    const date = extractDate(value);
+    if (date) {
+      const midnight = Date.parse(`${date}T00:00:00Z`);
+      if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== date) return null;
       return value;
     }
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+    return new Date(parsed).toISOString();
   }
 
   const numeric = safeNumber(value);
@@ -153,9 +162,11 @@ export function toUsageEvent(
   metadata: LocalProviderMetadata,
   record: LocalUsageRecord,
 ): UsageEvent {
-  const normalizedModel = normalizeModelName(record.model);
+  const identity = resolveModelIdentity(record.model);
+  const normalizedModel = identity.model;
   const cost = resolveUsageCost({
     model: normalizedModel,
+    serviceTier: identity.serviceTier,
     inputTokens: record.inputTokens,
     outputTokens: record.outputTokens,
     cacheReadTokens: record.cacheReadTokens,
@@ -171,6 +182,8 @@ export function toUsageEvent(
   return {
     provider: metadata.provider,
     timestamp: record.timestamp,
+    serviceTier: identity.serviceTier,
+    serviceTierSource: identity.serviceTier ? 'model-name' : undefined,
     date: record.date,
     model: normalizedModel,
     inputTokens: record.inputTokens,
@@ -229,6 +242,10 @@ export function buildProviderData(
       dateMap.set(event.model, model);
     }
 
+    model.serviceTiers = mergeServiceTiers(model.serviceTiers, [{
+      tier: event.serviceTier ?? 'unknown', tokens: event.totalTokens, cost: event.cost,
+      unpricedTokens: event.unpricedTokens ?? 0,
+    }]);
     model.inputTokens += event.inputTokens;
     model.outputTokens += event.outputTokens;
     model.cacheReadTokens += event.cacheReadTokens;

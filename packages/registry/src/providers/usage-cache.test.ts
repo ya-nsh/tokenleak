@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  readdirSync,
+  readFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodexProvider } from './codex';
@@ -54,12 +62,34 @@ for (const Provider of [CodexProvider, ClaudeCodeProvider]) {
     const provider = new Provider(source);
     const cold = await provider.load(range);
     expect(await new Provider(source).load(range)).toEqual(cold);
+    const cacheFile = join(root, 'cache', readdirSync(join(root, 'cache'))[0]!);
+    const validCache = readFileSync(cacheFile, 'utf8');
+    for (const corrupt of [
+      (entry: { records: unknown[]; warnings: unknown[] }) => {
+        entry.records = [null];
+      },
+      (entry: { records: unknown[]; warnings: unknown[] }) => {
+        entry.records = [{}];
+      },
+      (entry: { records: unknown[]; warnings: unknown[] }) => {
+        entry.warnings = [null];
+      },
+      (entry: { records: unknown[]; warnings: unknown[] }) => {
+        entry.warnings = [{ kind: 'parse', file, line: 'bad' }];
+      },
+    ]) {
+      const payload = JSON.parse(validCache);
+      corrupt(payload.entries[file]);
+      writeFileSync(cacheFile, JSON.stringify(payload));
+      expect(await provider.load(range)).toEqual(cold);
+      expect(await provider.load(range)).toEqual(cold);
+    }
     process.env['TOKENLEAK_USAGE_CACHE'] = '0';
     expect(await provider.load(range)).toEqual(cold);
     delete process.env['TOKENLEAK_USAGE_CACHE'];
     const narrow = await provider.load({ since: range.since, until: range.since });
-    // Claude must filter before deduplication, even when the same ID crosses days.
-    expect(narrow.totalTokens).toBe(110);
+    // Preserve main's latest-message deduplication before date filtering.
+    expect(narrow.totalTokens).toBe(Provider === ClaudeCodeProvider ? 0 : 110);
     expect(narrow.warnings?.some((w) => w.kind === 'parse')).toBe(true);
     setRemotePricingForTest({ 'gpt-4o': { input: 10, output: 20, cacheRead: 1, cacheWrite: 10 } });
     const repriced = await provider.load(range);

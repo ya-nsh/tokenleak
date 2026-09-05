@@ -1,4 +1,4 @@
-import { aggregate, mergeProviderData } from '@tokenleak/core';
+import { aggregate, mergeProviderData, formatCostWithCompleteness, formatModelWithTier } from '@tokenleak/core';
 import type {
   AggregatedStats,
   CacheRoiSummary,
@@ -98,7 +98,7 @@ function buildSparkline(daily: DailyUsage[], points = 14): string {
 }
 
 function getLastActiveDate(provider: ProviderData): string | null {
-  const activeDays = provider.daily.filter((entry) => entry.totalTokens > 0);
+  const activeDays = provider.daily.filter((entry) => (entry.totalTokens > 0 || entry.cost > 0));
   return activeDays.at(-1)?.date ?? null;
 }
 
@@ -110,22 +110,22 @@ function buildMetricEntries(
     { label: 'Current Streak', value: `${stats.currentStreak}d` },
     { label: 'Longest Streak', value: `${stats.longestStreak}d` },
     { label: 'Total Tokens', value: formatTokens(stats.totalTokens) },
-    { label: 'Total Cost', value: formatCost(stats.totalCost) },
+    { label: 'Total Cost', value: formatCostWithCompleteness(stats.totalCost, stats.costCompleteness) },
   ];
 
   if (stats.rolling30dTokens > 0 || stats.rolling30dCost > 0) {
     metrics.push({ label: '30d Tokens', value: formatTokens(stats.rolling30dTokens) });
-    metrics.push({ label: '30d Cost', value: formatCost(stats.rolling30dCost) });
+    metrics.push({ label: '30d Cost', value: formatCostWithCompleteness(stats.rolling30dCost, stats.rolling30dCostCompleteness ?? stats.costCompleteness) });
   }
 
   if (stats.rolling7dTokens > 0 || stats.rolling7dCost > 0) {
     metrics.push({ label: '7d Tokens', value: formatTokens(stats.rolling7dTokens) });
-    metrics.push({ label: '7d Cost', value: formatCost(stats.rolling7dCost) });
+    metrics.push({ label: '7d Cost', value: formatCostWithCompleteness(stats.rolling7dCost, stats.rolling7dCostCompleteness ?? stats.costCompleteness) });
   }
 
   if (stats.activeDays > 0) {
     metrics.push({ label: 'Avg Daily Tokens', value: formatTokens(stats.averageDailyTokens) });
-    metrics.push({ label: 'Avg Daily Cost', value: formatCost(stats.averageDailyCost) });
+    metrics.push({ label: 'Avg Daily Cost', value: formatCostWithCompleteness(stats.averageDailyCost, stats.costCompleteness) });
   }
 
   if (stats.totalTokens > 0) {
@@ -160,7 +160,7 @@ function buildMetricEntries(
 function buildProviderSummary(provider: ProviderData, stats: AggregatedStats): string[] {
   const parts = [
     `${formatTokens(stats.totalTokens)} tokens`,
-    formatCost(stats.totalCost),
+    formatCostWithCompleteness(stats.totalCost, stats.costCompleteness),
     `${stats.activeDays} active day${stats.activeDays === 1 ? '' : 's'}`,
   ];
   const lastActiveDate = getLastActiveDate(provider);
@@ -214,14 +214,14 @@ function buildTopModelPatterns(stats: AggregatedStats): PatternEntry[] {
     .slice(0, 5)
     .filter((entry) => entry.tokens > 0)
     .map((entry) => ({
-      label: entry.model,
+      label: formatModelWithTier(entry.model, entry.serviceTiers),
       value: formatSharePercent(entry.percentage),
       share: Math.max(0.03, entry.percentage / 100),
     }));
 }
 
-function buildProviderModel(provider: ProviderData, until: string): ProviderDashboardModel | null {
-  const stats = aggregate(provider.daily, until);
+function buildProviderModel(provider: ProviderData, dateRange: TokenleakOutput['dateRange']): ProviderDashboardModel | null {
+  const stats = aggregate(provider.daily, dateRange.until, dateRange);
   if (stats.totalTokens <= 0) {
     return null;
   }
@@ -245,7 +245,7 @@ function buildOverview(output: TokenleakOutput, activeProviders: ProviderDashboa
     : [];
   const summary = [
     `${formatTokens(output.aggregated.totalTokens)} tokens`,
-    formatCost(output.aggregated.totalCost),
+    formatCostWithCompleteness(output.aggregated.totalCost, output.aggregated.costCompleteness),
     `${activeProviders.length} active provider${activeProviders.length === 1 ? '' : 's'}`,
     `${output.aggregated.activeDays} active day${output.aggregated.activeDays === 1 ? '' : 's'}`,
   ];
@@ -283,7 +283,7 @@ export function buildDashboardModel(
   const inactiveProviders: string[] = [];
 
   for (const provider of output.providers) {
-    const model = buildProviderModel(provider, output.dateRange.until);
+    const model = buildProviderModel(provider, output.dateRange);
     if (model) {
       activeProviders.push(model);
     } else {

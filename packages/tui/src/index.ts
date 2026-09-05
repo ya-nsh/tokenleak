@@ -4,9 +4,7 @@ import type { TokenleakOutput } from '@tokenleak/core';
 import {
   buildCommonsExport,
   buildCommonsPromptExport,
-  SCHEMA_VERSION,
   getTodayLocal,
-  shiftDateStringLocal,
 } from '@tokenleak/core';
 import {
   CursorAuthError,
@@ -30,10 +28,14 @@ import {
   ensureMoreStats,
   ensureReplayReport,
   ensureWasteReport,
+  ensureAgentWasteReport,
+  ensureRoutingSimulationReport,
+  ensureAgentBehaviorDiffReport,
   ensureNutritionReport,
   ensureReceipt,
   deriveReceiptLines,
   getScopedWindowData,
+  buildTokenleakOutput,
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
@@ -80,6 +82,9 @@ import {
 import type { ReplayPlaybackSpeed } from './lib/state.js';
 import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
+import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, SIMULATOR_VISIBLE_ROWS } from './panels/simulator.js';
+import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, WASTE_VISIBLE_ROWS } from './panels/waste.js';
+import { createBehaviorPanel } from './panels/behavior.js';
 import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
@@ -154,6 +159,12 @@ function getSelectedViewTaskKey(state: AppState, view: ViewMode = state.selected
       return `nutrition:${base}`;
     case 'receipts':
       return `receipts:${base}`;
+    case 'simulator':
+      return `simulator:${base}`;
+    case 'waste':
+      return `waste:${base}`;
+    case 'behavior':
+      return `behavior:${base}`;
     default:
       return `${view}:${base}`;
   }
@@ -399,10 +410,11 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       const output = buildTokenleakOutput(state, { computeMore: false });
       const achievements = output ? computeAchievements(output) : [];
       const providers =
-        state.data?.providers.map((p) => ({
+        (output?.providers ?? []).map((p) => ({
           displayName: p.displayName,
           totalTokens: p.totalTokens,
           totalCost: p.totalCost,
+          costCompleteness: p.costCompleteness,
         })) ?? [];
       return createWrappedPanel(
         windowStats,
@@ -431,57 +443,54 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           render(state, renderer);
         },
       );
+    case 'simulator':
+      if (!hasWindowData) {
+        return createSimulatorPanel(null);
+      }
+      if (!state.cachedRoutingSimulationReport) {
+        const key = getSelectedViewTaskKey(state, 'simulator');
+        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', () => {
+          ensureRoutingSimulationReport(state);
+        });
+      }
+      return createSimulatorPanel(
+        state.cachedRoutingSimulationReport,
+        state.simulatorScrollOffset,
+        getPanelContentWidth(renderer, SIMULATOR_MAX_CONTENT_WIDTH),
+      );
+    case 'waste':
+      if (!hasWindowData) {
+        return createWastePanel(null);
+      }
+      if (!state.cachedAgentWasteReport) {
+        const key = getSelectedViewTaskKey(state, 'waste');
+        return deferredPanelForTask(state, renderer, key, 'Waste Signals', () => {
+          ensureAgentWasteReport(state);
+        });
+      }
+      return createWastePanel(
+        state.cachedAgentWasteReport,
+        state.wasteScrollOffset,
+        getPanelContentWidth(renderer, WASTE_MAX_CONTENT_WIDTH),
+      );
+    case 'behavior':
+      if (!hasWindowData) {
+        return createBehaviorPanel(null);
+      }
+      if (!state.cachedBehaviorDiffReport) {
+        const key = getSelectedViewTaskKey(state, 'behavior');
+        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', () => {
+          ensureAgentBehaviorDiffReport(state);
+        });
+      }
+      return createBehaviorPanel(state.cachedBehaviorDiffReport);
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
 }
 
-/** Build a TokenleakOutput from current state for renderers */
-function buildTokenleakOutput(
-  state: AppState,
-  options: { computeMore?: boolean } = {},
-): TokenleakOutput | null {
-  if (!state.data || state.data.windows.length === 0) return null;
-  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
-  if (!windowStats) return null;
-
-  // Scope dateRange to the selected window
-  const days = WINDOW_DAYS[state.selectedWindowIndex];
-  const today = getTodayLocal();
-
-  const dateRange = days && days > 0
-    ? { since: shiftDateStringLocal(today, -(days - 1)), until: today }
-    : state.data.dateRange;
-
-  // Attach more stats if available for achievements that need hourOfDay
-  const more = options.computeMore ? ensureMoreStats(state) : state.cachedMoreStats;
-
-  const output: TokenleakOutput = {
-    schemaVersion: SCHEMA_VERSION,
-    generated: new Date().toISOString(),
-    dateRange,
-    providers: state.data.providers,
-    aggregated: windowStats,
-  };
-
-  // Attach more stats for computeAchievements to use
-  if (more) {
-    (output as TokenleakOutput & { more?: unknown }).more = more;
-  }
-
-  return output;
-}
-
 function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
-  const output = buildTokenleakOutput(state, { computeMore: true });
-  if (!output || !state.data) return null;
-  const scoped = getScopedWindowData(state);
-  if (!scoped) return null;
-
-  return {
-    ...output,
-    providers: scoped.scopedProviders,
-  };
+  return buildTokenleakOutput(state, { computeMore: true });
 }
 
 function resetCursorSetupForm(state: AppState): void {
@@ -526,6 +535,9 @@ function applyLoadedData(
   state.receiptsExpandedLineIndex = null;
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
+  state.simulatorScrollOffset = 0;
+  state.wasteScrollOffset = 0;
+  state.behaviorScrollOffset = 0;
   state.nutritionSignalsLoading = false;
   state.nutritionSignalsLoadedKeys.clear();
   clearViewTaskState(state);
@@ -981,6 +993,9 @@ function handleViewSwitch(mode: ViewMode): void {
     currentState.nutritionScrollOffset = 0;
     currentState.compareScrollOffset = 0;
     currentState.wrappedScrollOffset = 0;
+    currentState.simulatorScrollOffset = 0;
+    currentState.wasteScrollOffset = 0;
+    currentState.behaviorScrollOffset = 0;
     resetReplayPanelState(currentState);
     resetReceiptsInteraction(currentState);
     currentState.receiptsSortMode = 'cost';
@@ -1041,6 +1056,9 @@ function invalidateWindowCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  state.cachedRoutingSimulationReport = null;
+  state.cachedAgentWasteReport = null;
+  state.cachedBehaviorDiffReport = null;
   resetReceiptsInteraction(state);
   state.receiptsSortMode = 'cost';
   state.receiptsCategoryFilter = null;
@@ -1061,6 +1079,9 @@ function invalidateAllCaches(state: AppState): void {
   state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
+  state.cachedRoutingSimulationReport = null;
+  state.cachedAgentWasteReport = null;
+  state.cachedBehaviorDiffReport = null;
   resetReplayDataState(state);
   resetReceiptsInteraction(state);
   state.nutritionSignalsLoading = false;
@@ -1099,6 +1120,9 @@ const VIEW_KEYS: Record<string, ViewMode> = {
   '9': 'replay',
   '0': 'nutrition',
   R: 'receipts',
+  X: 'simulator',
+  Y: 'waste',
+  Z: 'behavior',
 };
 
 const VIEW_ORDER: ViewMode[] = [
@@ -1113,6 +1137,9 @@ const VIEW_ORDER: ViewMode[] = [
   'replay',
   'nutrition',
   'receipts',
+  'simulator',
+  'waste',
+  'behavior',
 ];
 
 /** Views that support j/k scrolling and their scroll offset field */
@@ -1124,6 +1151,9 @@ const SCROLLABLE_VIEWS = new Set<ViewMode>([
   'replay',
   'nutrition',
   'receipts',
+  'simulator',
+  'waste',
+  'behavior',
 ]);
 
 function getScrollableItemCount(state: AppState): number {
@@ -1146,6 +1176,12 @@ function getScrollableItemCount(state: AppState): number {
     case 'receipts': {
       return getReceiptLineCount(state);
     }
+    case 'simulator':
+      return state.cachedRoutingSimulationReport?.candidates.length ?? 0;
+    case 'waste':
+      return state.cachedAgentWasteReport?.signals.length ?? 0;
+    case 'behavior':
+      return 12;
     default:
       return 0;
   }
@@ -1167,6 +1203,11 @@ function getVisibleCount(view: ViewMode): number {
       return NUTRITION_VISIBLE_ROWS;
     case 'receipts':
       return RECEIPTS_VISIBLE_ROWS;
+    case 'simulator':
+    case 'waste':
+      return view === 'simulator' ? SIMULATOR_VISIBLE_ROWS : WASTE_VISIBLE_ROWS;
+    case 'behavior':
+      return 8;
     default:
       return 10;
   }
@@ -1188,6 +1229,12 @@ function getScrollOffset(state: AppState): number {
       return state.nutritionScrollOffset;
     case 'receipts':
       return state.receiptsScrollOffset;
+    case 'simulator':
+      return state.simulatorScrollOffset;
+    case 'waste':
+      return state.wasteScrollOffset;
+    case 'behavior':
+      return state.behaviorScrollOffset;
     default:
       return 0;
   }
@@ -1215,6 +1262,15 @@ function setScrollOffset(state: AppState, value: number): void {
       break;
     case 'receipts':
       state.receiptsScrollOffset = value;
+      break;
+    case 'simulator':
+      state.simulatorScrollOffset = value;
+      break;
+    case 'waste':
+      state.wasteScrollOffset = value;
+      break;
+    case 'behavior':
+      state.behaviorScrollOffset = value;
       break;
   }
 }
@@ -1474,7 +1530,7 @@ export async function main(): Promise<void> {
     if (sequence === 'j' || sequence === '\x1b[B') {
       if (state.selectedView === 'overview') {
         const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
-        const modelCount = windowStats?.topModels.length ?? 0;
+        const modelCount = (windowStats?.allModels ?? windowStats?.topModels)?.length ?? 0;
         const visibleCount = 10;
         const maxOffset = Math.max(0, modelCount - visibleCount);
         if (state.modelScrollOffset < maxOffset) {

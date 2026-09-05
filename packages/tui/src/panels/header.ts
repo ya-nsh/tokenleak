@@ -28,6 +28,9 @@ const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
   { key: '9', label: 'Replay', mode: 'replay' },
   { key: '0', label: 'AI ROI', mode: 'nutrition' },
   { key: 'R', label: 'Receipts', mode: 'receipts' },
+  { key: 'X', label: 'Sim', mode: 'simulator' },
+  { key: 'Y', label: 'Waste', mode: 'waste' },
+  { key: 'Z', label: 'Diff', mode: 'behavior' },
 ];
 
 export function buildHeader(

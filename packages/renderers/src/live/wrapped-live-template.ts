@@ -57,11 +57,23 @@ const PROVIDER_COLORS: Record<string, string> = {
   gemini: '#4285f4',
   copilot: '#6e7781',
   amp: '#ff5a1f',
+  codebuff: '#2563eb',
+  droid: '#f97316',
   qwen: '#7c3aed',
   'roo-code': '#0f766e',
   'kilo-code': '#2563eb',
+  kimi: '#111827',
+  kilo: '#f59e0b',
+  mux: '#ec4899',
+  crush: '#ef4444',
   openclaw: '#dc2626',
   hermes: '#16a34a',
+  goose: '#0f766e',
+  antigravity: '#7c3aed',
+  zed: '#0891b2',
+  kiro: '#6366f1',
+  trae: '#06b6d4',
+  synthetic: '#10b981',
   pi: '#5a4a70',
 };
 
@@ -329,7 +341,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
   <h2 class="title">Your go-to<br><span class="hl">models</span></h2>
   ${modelBars}
   <div class="rule"></div>
-  <div class="info">You used <span class="hi">${stats.topModels.length} model${stats.topModels.length !== 1 ? 's' : ''}</span> total during this period.</div>
+  <div class="info">You used <span class="hi">${(stats.allModels ?? stats.topModels).length} model${(stats.allModels ?? stats.topModels).length !== 1 ? 's' : ''}</span> total during this period.</div>
   <div style="margin-top:auto;padding-top:34px">${stamp}</div>
 </div>`;
 
@@ -510,7 +522,7 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
       </div>
       <div class="sc">
         <div class="lb">Models Used</div>
-        <div class="vl">${stats.topModels.length}</div>
+        <div class="vl">${(stats.allModels ?? stats.topModels).length}</div>
       </div>
     </div>
     <div class="rule" style="width:100%"></div>

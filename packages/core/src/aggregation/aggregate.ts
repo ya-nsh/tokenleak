@@ -1,5 +1,5 @@
-import type { AggregatedStats, DailyUsage } from '../types';
-import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
+import type { AggregatedStats, DailyUsage, DateRange } from '../types';
+import { ONE_DAY_MS, dateToUtcMs, inclusiveDaySpan } from '../date-utils';
 import { buildDailyCostCompleteness } from '../cost-completeness';
 import { calculateStreaks } from './streaks';
 import { rollingWindow } from './rolling-window';
@@ -19,6 +19,7 @@ const ROLLING_WINDOW_DAYS = 30;
 export function aggregate(
   daily: DailyUsage[],
   referenceDate: string,
+  range?: DateRange,
 ): AggregatedStats {
   const streaks = calculateStreaks(daily, referenceDate);
   const rolling30 = rollingWindow(daily, 30, referenceDate);
@@ -26,7 +27,11 @@ export function aggregate(
   const peak = findPeakDay(daily);
   const dow = dayOfWeekBreakdown(daily);
   const cache = cacheHitRate(daily);
-  const models = topModels(daily);
+  const models = topModels(daily, Infinity);
+  const windowCompleteness = (days: number) => buildDailyCostCompleteness(daily.filter((day) => {
+    const age = dateToUtcMs(referenceDate) - dateToUtcMs(day.date);
+    return age >= 0 && age < days * ONE_DAY_MS;
+  }));
 
   let totalTokens = 0;
   let totalInputTokens = 0;
@@ -41,7 +46,7 @@ export function aggregate(
 
   const rolling30dTopModel = computeRolling30dTopModel(daily, referenceDate);
   const activeDays = daily.length;
-  const totalDays = computeTotalDays(daily);
+  const totalDays = range ? computeRangeDays(range) : computeTotalDays(daily);
   const averages = calculateAverages(daily, totalDays);
   const costCompleteness = buildDailyCostCompleteness(daily);
 
@@ -63,10 +68,17 @@ export function aggregate(
     totalDays,
     activeDays,
     dayOfWeek: dow,
-    topModels: models,
+    topModels: models.slice(0, 10),
+    allModels: models,
     rolling30dTopModel,
     costCompleteness,
+    rolling30dCostCompleteness: windowCompleteness(30),
+    rolling7dCostCompleteness: windowCompleteness(7),
   };
+}
+
+function computeRangeDays(range: DateRange): number {
+  return Math.max(0, inclusiveDaySpan(range.since, range.until));
 }
 
 /**

@@ -21,6 +21,14 @@ export interface ModelBreakdown {
   costSource?: CostSource;
   pricedTokens?: number;
   unpricedTokens?: number;
+  serviceTiers?: ServiceTierUsage[];
+}
+
+export interface ServiceTierUsage {
+  tier: string;
+  tokens: number;
+  cost: number;
+  unpricedTokens: number;
 }
 
 export interface CachePricingDetails {
@@ -52,6 +60,8 @@ export interface ProviderWarning {
 export type CostSource = 'provider-reported' | 'estimated' | 'unpriced';
 
 export interface CostCompleteness {
+  /** Known positive spend reported without token counts. */
+  hasKnownCostOnly?: boolean;
   status: 'complete' | 'partial' | 'unknown';
   totalTokens: number;
   pricedTokens: number;
@@ -84,8 +94,12 @@ export interface AggregatedStats {
   activeDays: number;
   dayOfWeek: DayOfWeekEntry[];
   topModels: TopModelEntry[];
+  /** Complete inventory for model browsers; topModels remains the top-ten summary. */
+  allModels?: TopModelEntry[];
   rolling30dTopModel: string | null;
   costCompleteness?: CostCompleteness;
+  rolling30dCostCompleteness?: CostCompleteness;
+  rolling7dCostCompleteness?: CostCompleteness;
 }
 
 export interface UsageEvent {
@@ -104,12 +118,19 @@ export interface UsageEvent {
   pricedTokens?: number;
   unpricedTokens?: number;
   sessionId?: string;
+  turnId?: string;
+  responseId?: string;
+  /** Canonical recorded tier; missing historical metadata is explicitly unknown for Codex. */
+  serviceTier?: string;
+  serviceTierSource?: 'response' | 'request' | 'model-name';
   projectId?: string;
   repoRoot?: string;
   directory?: string;
   durationMs?: number;
   /** The most recent user prompt that triggered this assistant response, if captured by the parser. */
   prompt?: string;
+  /** Identity of the user submission that triggered this usage (scoped to its session). */
+  promptId?: string;
 }
 
 export interface DayOfWeekEntry {
@@ -125,6 +146,8 @@ export interface TopModelEntry {
   tokens: number;
   cost: number;
   percentage: number;
+  costCompleteness?: CostCompleteness;
+  serviceTiers?: ServiceTierUsage[];
 }
 
 export interface InputOutputMetrics {
@@ -520,6 +543,156 @@ export interface NutritionReport {
   missingOutcomeRepos: string[];
 }
 
+export type OptimizationConfidence = 'high' | 'medium' | 'low';
+export type OptimizationImpact = 'cost' | 'tokens' | 'cache' | 'time' | 'quality-risk';
+
+export interface OptimizationEvidence {
+  provider?: string;
+  model?: string;
+  projectId?: string | null;
+  repoRoot?: string | null;
+  sessionId?: string | null;
+  date?: string;
+  eventCount: number;
+  tokens: number;
+  cost: number;
+  reason: string;
+}
+
+export type RoutingRuleKind =
+  | 'premium-short-output'
+  | 'quick-lookup'
+  | 'low-output-ratio'
+  | 'receipt-category'
+  | 'session-style'
+  | 'project-default'
+  | 'manual-model-map';
+
+export interface RoutingRule {
+  id: string;
+  label: string;
+  kind: RoutingRuleKind;
+  fromModels: string[];
+  toModel: string;
+  provider?: string;
+  maxOutputTokens?: number;
+  maxTotalTokens?: number;
+  maxDurationMs?: number;
+  receiptCategories?: string[];
+  taskStyles?: string[];
+}
+
+export interface RoutingSimulationCandidate {
+  ruleId: string;
+  eventId: string;
+  provider: string;
+  fromModel: string;
+  toModel: string;
+  currentCost: number;
+  simulatedCost: number | null;
+  savings: number | null;
+  tokens: number;
+  confidence: OptimizationConfidence;
+  reasons: string[];
+}
+
+export interface RoutingSimulationReport {
+  method: string;
+  dateRange: DateRange;
+  strategy: string;
+  currentCost: number;
+  simulatedCost: number;
+  estimatedSavings: number;
+  estimatedSavingsPercent: number;
+  affectedEvents: number;
+  affectedTokens: number;
+  candidates: RoutingSimulationCandidate[];
+  rules: RoutingRule[];
+  warnings: string[];
+}
+
+export type WasteSignalKind =
+  | 'context-drag'
+  | 'retry-loop'
+  | 'model-churn'
+  | 'premium-for-small-task'
+  | 'cache-miss-heavy'
+  | 'cache-write-waste'
+  | 'burst-with-low-output'
+  | 'long-session-low-yield'
+  | 'prompt-repeat'
+  | 'outcome-missing';
+
+export interface AgentWasteSignal {
+  kind: WasteSignalKind;
+  title: string;
+  severity: 'high' | 'medium' | 'low';
+  confidence: OptimizationConfidence;
+  estimatedSavings: number | null;
+  evidence: OptimizationEvidence;
+  recipes: WasteRecipe[];
+}
+
+export interface AgentWasteReport {
+  method: string;
+  dateRange: DateRange;
+  summary: {
+    totalSignals: number;
+    highSeverity: number;
+    estimatedSavings: number | null;
+    analyzedEvents: number;
+    analyzedSessions: number;
+  };
+  signals: AgentWasteSignal[];
+  warnings: string[];
+}
+
+export type BehaviorDiffDimension = 'provider' | 'model' | 'project' | 'repo' | 'date-range' | 'session-style';
+
+export interface BehaviorCohortSelector {
+  label: string;
+  dimension: BehaviorDiffDimension;
+  provider?: string;
+  model?: string;
+  projectId?: string;
+  repoRoot?: string;
+  dateRange?: DateRange;
+  taskStyle?: AttributionTaskStyle;
+}
+
+export interface BehaviorCohortMetrics {
+  events: number;
+  sessions: number;
+  activeDays: number;
+  tokens: number;
+  cost: number;
+  inputPerOutput: number | null;
+  outputPerDollar: number | null;
+  cacheHitRate: number;
+  cacheReuseRatio: number | null;
+  modelSwitchesPerSession: number;
+  wasteSignals: number;
+  highSeverityWasteSignals: number;
+  estimatedWasteSavings: number | null;
+  averageSessionDurationMs: number | null;
+}
+
+export interface AgentBehaviorDiffReport {
+  method: string;
+  dateRange: DateRange;
+  baseline: {
+    selector: BehaviorCohortSelector;
+    metrics: BehaviorCohortMetrics;
+  };
+  comparison: {
+    selector: BehaviorCohortSelector;
+    metrics: BehaviorCohortMetrics;
+  };
+  deltas: Record<keyof BehaviorCohortMetrics, number | null>;
+  takeaways: string[];
+  warnings: string[];
+}
+
 export interface ModelMixShiftEntry {
   model: string;
   currentShare: number;
@@ -563,6 +736,11 @@ export interface TokenleakOutput {
   providers: ProviderData[];
   aggregated: AggregatedStats;
   more?: MoreStats | null;
+  optimization?: {
+    routingSimulation?: RoutingSimulationReport | null;
+    agentWaste?: AgentWasteReport | null;
+    behaviorDiff?: AgentBehaviorDiffReport | null;
+  };
 }
 
 export interface RenderOptions {

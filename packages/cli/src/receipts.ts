@@ -46,16 +46,16 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
   }
 
   lines.push(dottedDivider);
-  lines.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal), w));
+  lines.push(totalRow('SUBTOTAL', formatReceiptDollars(receipt.summary.subtotal, receipt.summary.subtotalCompleteness), w));
   lines.push(
     totalRow(
       `SERVICE FEES (${receipt.summary.unlabeledEvents} uncaptured)`,
-      formatReceiptDollars(receipt.summary.serviceFees),
+      formatReceiptDollars(receipt.summary.serviceFees, receipt.summary.serviceFeesCompleteness),
       w,
     ),
   );
   lines.push(divider);
-  lines.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total), w));
+  lines.push(totalRow('TOTAL', formatReceiptDollars(receipt.summary.total, receipt.summary.costCompleteness), w));
   lines.push('');
   lines.push(centerLine('THANK YOU FOR YOUR PATRONAGE', w));
   lines.push(centerLine(`tokenleak · ${new Date().toISOString().slice(0, 10)}`, w));
@@ -66,7 +66,7 @@ export function renderReceiptTerminal(receipt: Receipt, width: number = 64): str
 function renderLineItem(line: ReceiptLine, width: number): string[] {
   const category = CATEGORY_LABELS[line.category] ?? line.category.toUpperCase();
   const qtyStr = `${line.quantity}×`;
-  const costStr = formatReceiptDollars(line.totalCost);
+  const costStr = formatReceiptDollars(line.totalCost, line.costCompleteness);
 
   const descriptionSpace = width - costStr.length - MIN_DOT_PADDING;
   const description = truncate(`${qtyStr} ${line.description}`, descriptionSpace);

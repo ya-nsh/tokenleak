@@ -1,8 +1,11 @@
-export const VERSION = '2.1.0';
+export const VERSION = '2.1.1';
+export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
+export { formatCostWithCompleteness } from './cost-completeness';
 
 export type {
   DailyUsage,
   ModelBreakdown,
+  ServiceTierUsage,
   CachePricingDetails,
   ProviderData,
   ProviderColors,
@@ -47,6 +50,20 @@ export type {
   WasteRecipe,
   WasteFinding,
   WasteReport,
+  OptimizationConfidence,
+  OptimizationImpact,
+  OptimizationEvidence,
+  RoutingRuleKind,
+  RoutingRule,
+  RoutingSimulationCandidate,
+  RoutingSimulationReport,
+  WasteSignalKind,
+  AgentWasteSignal,
+  AgentWasteReport,
+  BehaviorDiffDimension,
+  BehaviorCohortSelector,
+  BehaviorCohortMetrics,
+  AgentBehaviorDiffReport,
   NutritionOutcomeSignal,
   NutritionRepoSummary,
   NutritionReport,
@@ -95,6 +112,9 @@ export {
   buildCommonsPromptExport,
   inspectCommonsExport,
   buildWasteReport,
+  buildAgentWasteReport,
+  buildRoutingSimulationReport,
+  buildAgentBehaviorDiffReport,
   buildNutritionReport,
   collectGitOutcomeSignals,
   clusterPrompts,
@@ -106,6 +126,8 @@ export {
 } from './aggregation';
 
 export type {
+  BuildRoutingSimulationOptions,
+  RoutingModelPricing,
   PromptCluster,
   ClusterOptions,
   Receipt,
@@ -136,6 +158,7 @@ export {
 } from './date-utils';
 
 export {
+  combineCostCompleteness,
   buildDailyCostCompleteness,
   buildEventCostCompleteness,
   mergeCostCompleteness,

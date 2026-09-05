@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, join, relative, sep } from 'path';
 import { homedir } from 'os';
 import type {
@@ -11,8 +11,9 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
+import { collectFiles } from './local-usage';
 import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
-import { UsageFileCache } from '../parsers/usage-cache';
+import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
 import { addUnknownPricingWarnings, buildEventCostCompleteness, resolveUsageCost } from '../costing';
@@ -37,6 +38,7 @@ interface UsageRecord {
   sessionId?: string;
   projectId?: string;
   prompt?: string;
+  promptId?: string;
 }
 
 const MAX_PROMPT_CHARS = 2_000;
@@ -54,24 +56,7 @@ function resolveBaseDir(baseDir?: string): string {
  * Recursively collects all `.jsonl` file paths under a directory.
  */
 function collectJsonlFiles(dir: string): string[] {
-  const results: string[] = [];
-
-  if (!existsSync(dir)) {
-    return results;
-  }
-
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      results.push(...collectJsonlFiles(fullPath));
-    } else if (entry.endsWith('.jsonl')) {
-      results.push(fullPath);
-    }
-  }
-
-  return results;
+  return collectFiles(dir, (_path, name) => name.endsWith('.jsonl'));
 }
 
 /**
@@ -118,7 +103,8 @@ function extractUsage(record: unknown): UsageRecord | null {
   const cacheWriteTokens =
     typeof u['cache_creation_input_tokens'] === 'number' ? u['cache_creation_input_tokens'] : 0;
   const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-  if (totalTokens === 0) {
+  if (!Number.isFinite(totalTokens) || totalTokens === 0 ||
+    [inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens].some((value) => !Number.isFinite(value) || value < 0)) {
     return null;
   }
 
@@ -317,7 +303,7 @@ export class ClaudeCodeProvider implements IProvider {
     const files = collectJsonlFiles(this.baseDir);
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
-    const cache = new UsageFileCache<UsageRecord>('claude-code-v1', this.baseDir);
+    const cache = new UsageFileCache<UsageRecord>('claude-code-v2', this.baseDir, isCachedUsageRecord);
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const latestRecordsByMessageId = new Map<string, UsageRecord>();
       const anonymousRecords: UsageRecord[] = [];
@@ -329,30 +315,31 @@ export class ClaudeCodeProvider implements IProvider {
           const records: UsageRecord[] = [];
           const fileWarnings: JsonlRecordWarning[] = [];
           let lastPrompt: string | null = null;
+          let promptSequence = 0;
           for await (const record of splitJsonlRecords(file, {
             onWarning: (warning) => fileWarnings.push(warning),
           })) {
             const userPrompt = extractUserPrompt(record);
             if (userPrompt !== null) {
               lastPrompt = userPrompt;
+              promptSequence += 1;
               continue;
             }
             const usage = extractUsage(record);
             if (usage !== null) {
               usage.sessionId = relativeFile;
               usage.projectId = usage.projectId ?? projectId;
-              if (lastPrompt !== null) usage.prompt = lastPrompt;
+              if (lastPrompt !== null) {
+                usage.prompt = lastPrompt;
+                usage.promptId = `user:${promptSequence}`;
+              }
               records.push(usage);
             }
           }
           return { records, warnings: fileWarnings };
         });
-        for (const warning of parsed.warnings) {
-          incrementWarningCount(warnings, warning.kind, warning.file);
-        }
-        // Keep range filtering before message deduplication: one ID can span days.
+        for (const warning of parsed.warnings) incrementWarningCount(warnings, warning.kind, warning.file);
         for (const usage of parsed.records) {
-          if (!isInRange(usage.date, range)) continue;
           if (usage.messageId) latestRecordsByMessageId.set(usage.messageId, usage);
           else anonymousRecords.push(usage);
         }
@@ -366,7 +353,7 @@ export class ClaudeCodeProvider implements IProvider {
       return [...latestRecordsByMessageId.values(), ...anonymousRecords];
     });
     await cache.save();
-    const allRecords = recordsByFile.flat();
+    const allRecords = recordsByFile.flat().filter((record) => isInRange(record.date, range));
 
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {
@@ -400,6 +387,7 @@ export class ClaudeCodeProvider implements IProvider {
         sessionId: record.sessionId,
         projectId: record.projectId,
         prompt: record.prompt,
+        promptId: record.promptId,
       });
     }
     addUnknownPricingWarnings(warnings, allEvents);

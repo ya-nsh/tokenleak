@@ -1,4 +1,5 @@
 import type { CostCompleteness } from '@tokenleak/core';
+export { formatCostWithCompleteness } from '@tokenleak/core';
 
 /** Format a token count into a human-readable abbreviated string */
 export function formatTokens(n: number): string {
@@ -15,14 +16,6 @@ export function formatCost(n: number): string {
 
 export function isCostComplete(completeness: CostCompleteness | undefined): boolean {
   return !completeness || completeness.status === 'complete';
-}
-
-export function formatCostWithCompleteness(
-  n: number,
-  completeness: CostCompleteness | undefined,
-): string {
-  const formatted = formatCost(n);
-  return isCostComplete(completeness) ? formatted : `${formatted}+`;
 }
 
 export function formatCostCompletenessWarning(

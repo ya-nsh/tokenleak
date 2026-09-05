@@ -1,5 +1,6 @@
 import {
   CursorAuthError,
+  diagnoseCursorConnection,
   getActiveCursorCredentials,
   getCursorCacheDir,
   getCursorCredentialsFor,
@@ -19,6 +20,8 @@ import {
   type CursorAccountInfo,
   type CursorCredentials,
   type CursorCredentialsStore,
+  type CursorDiagnosticCheck,
+  type CursorDiagnosticResult,
   type SyncCursorResult,
   type ValidateCursorSessionResult,
 } from '@tokenleak/registry';
@@ -43,11 +46,14 @@ export {
   shouldSyncCursorForRun,
   syncCursorCache,
   validateCursorSession,
+  diagnoseCursorConnection,
 };
 export type {
   CursorAccountInfo,
   CursorCredentials,
   CursorCredentialsStore,
+  CursorDiagnosticCheck,
+  CursorDiagnosticResult,
   SyncCursorResult,
   ValidateCursorSessionResult,
 };
@@ -118,6 +124,7 @@ export function buildCursorHelpText(): string {
     'Usage:',
     '  tokenleak cursor login [--name <label>]',
     '  tokenleak cursor status [--name <label>]',
+    '  tokenleak cursor doctor [--name <label>] [--with-token] [--insecure-skip-tls-verify]',
     '  tokenleak cursor accounts [--json]',
     '  tokenleak cursor switch <name-or-id>',
     '  tokenleak cursor logout [--name <label> | --all] [--purge-cache]',
@@ -126,10 +133,38 @@ export function buildCursorHelpText(): string {
     'Notes:',
     '  Session tokens come from https://www.cursor.com/settings',
     '  Session tokens are stored in plaintext with local-only file permissions.',
+    '  For protected VPN/proxy networks, run: tokenleak cursor doctor',
     `  Credentials: ${getCursorCredentialsPath()}`,
     `  Cache: ${getCursorCacheDir()}`,
     '',
   ].join('\n');
+}
+
+function formatDiagnosticCheck(check: CursorDiagnosticCheck): string {
+  const prefix = check.ok ? '[ok]' : '[fail]';
+  const status = check.status === undefined ? '' : ` HTTP ${check.status}`;
+  const kind = check.kind ? ` ${check.kind}` : '';
+  const hint = check.hint ? `\n       Hint: ${check.hint}` : '';
+  return `  ${prefix} ${check.name}${status}${kind}: ${check.message}${hint}`;
+}
+
+function printCursorDoctorResult(result: CursorDiagnosticResult, tokenEnabled: boolean): void {
+  process.stdout.write('Cursor network doctor\n');
+  process.stdout.write(`Timeout: ${result.network.timeoutMs}ms\n`);
+  process.stdout.write(`Proxy: ${result.network.proxy ?? 'not configured'}\n`);
+  if (result.network.proxySource) {
+    process.stdout.write(`Proxy source: ${result.network.proxySource}\n`);
+  }
+  if (result.network.noProxyMatched) {
+    process.stdout.write('Proxy bypass: matched NO_PROXY/no_proxy\n');
+  }
+  process.stdout.write(`CA file: ${result.network.caFile ?? 'not configured'}\n`);
+  process.stdout.write(`TLS verification: ${result.network.tlsVerification}\n`);
+  process.stdout.write(`Token check: ${tokenEnabled ? 'enabled' : 'disabled'}\n`);
+  process.stdout.write('Checks:\n');
+  for (const check of result.checks) {
+    process.stdout.write(`${formatDiagnosticCheck(check)}\n`);
+  }
 }
 
 function printCursorAccounts(json: boolean): void {
@@ -191,6 +226,27 @@ async function runCursorStatus(name?: string): Promise<void> {
   if (result.membershipType) {
     process.stdout.write(`Membership: ${result.membershipType}\n`);
   }
+}
+
+async function runCursorDoctor(options: {
+  name?: string;
+  withToken: boolean;
+  insecureSkipTlsVerify: boolean;
+}): Promise<void> {
+  let credentials: CursorCredentials | null = null;
+  if (options.withToken) {
+    credentials = options.name ? getCursorCredentialsFor(options.name) : getActiveCursorCredentials();
+    if (!credentials) {
+      throw new TokenleakError(options.name ? `Account not found: ${options.name}` : 'No saved Cursor accounts');
+    }
+  }
+
+  const result = await diagnoseCursorConnection({
+    credentials,
+    includeToken: options.withToken,
+    insecureSkipTlsVerify: options.insecureSkipTlsVerify,
+  });
+  printCursorDoctorResult(result, options.withToken);
 }
 
 function runCursorLogout(name: string | undefined, all: boolean, purgeCache: boolean): void {
@@ -272,6 +328,37 @@ export async function runCursorCommand(argv: string[]): Promise<void> {
 
     try {
       await runCursorStatus(name);
+    } catch (error: unknown) {
+      wrapCursorError(error);
+    }
+    return;
+  }
+
+  if (command === 'doctor') {
+    let name: string | undefined;
+    let withToken = false;
+    let insecureSkipTlsVerify = false;
+    for (let index = 1; index < argv.length; ) {
+      const arg = argv[index]!;
+      if (arg === '--name') {
+        [name, index] = parseNameFlag(argv, index);
+        continue;
+      }
+      if (arg === '--with-token') {
+        withToken = true;
+        index += 1;
+        continue;
+      }
+      if (arg === '--insecure-skip-tls-verify') {
+        insecureSkipTlsVerify = true;
+        index += 1;
+        continue;
+      }
+      throw new TokenleakError(`Unknown cursor doctor flag "${arg}"`);
+    }
+
+    try {
+      await runCursorDoctor({ name, withToken, insecureSkipTlsVerify });
     } catch (error: unknown) {
       wrapCursorError(error);
     }

@@ -1,3 +1,4 @@
+import { sessionKey } from './session-identity';
 import type {
   FlowBlock,
   FlowBlockLabel,
@@ -66,7 +67,7 @@ function countModelSwitches(events: UsageEvent[]): number {
 
 function computeCacheHitRateTrend(events: UsageEvent[]): number[] {
   return events.map((event) => {
-    const denominator = event.inputTokens + event.cacheReadTokens;
+    const denominator = event.inputTokens + event.cacheReadTokens + event.cacheWriteTokens;
     return denominator > 0 ? event.cacheReadTokens / denominator : 0;
   });
 }
@@ -160,7 +161,7 @@ function buildDaySummary(
   const sessionIds = new Set<string>();
   for (const event of sortedEvents) {
     if (event.sessionId) {
-      sessionIds.add(event.sessionId);
+      sessionIds.add(sessionKey(event.provider, event.sessionId));
     }
   }
 

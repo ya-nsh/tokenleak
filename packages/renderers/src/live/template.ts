@@ -4,6 +4,7 @@ import type {
   ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
+import { inclusiveDaySpan, buildDailyCostCompleteness } from '@tokenleak/core';
 import { formatNumber, formatCost } from '../svg/utils';
 import { buildHeatmapModel } from '../shared/heatmap-model';
 import {
@@ -16,10 +17,6 @@ import {
   MODEL_PERCENT_WIDTH,
 } from '../card/layout';
 
-const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
 const MONTH_NAMES_FULL = [
   'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
@@ -28,8 +25,7 @@ const MONTH_NAMES_FULL = [
 function formatDateRange(since: string, until: string): string {
   const s = new Date(since + 'T00:00:00Z');
   const u = new Date(until + 'T00:00:00Z');
-  const diffMs = u.getTime() - s.getTime();
-  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const days = inclusiveDaySpan(since, until);
   const sMonth = MONTH_NAMES_FULL[s.getUTCMonth()] ?? '';
   const uMonth = MONTH_NAMES_FULL[u.getUTCMonth()] ?? '';
   return `${sMonth} ${s.getUTCFullYear()} &mdash; ${uMonth} ${u.getUTCFullYear()} &middot; ${days} DAYS`;
@@ -152,7 +148,7 @@ function renderProviderHeatmapHtml(
     return `<span class="day-label" style="top:${y - 10}px">${d.label}</span>`;
   }).join('\n');
 
-  const summaryText = `${esc(formatNumber(provider.totalTokens))} tokens &middot; ${esc(formatCost(provider.totalCost))}`;
+  const summaryText = `${esc(formatNumber(provider.totalTokens))} tokens &middot; ${esc(formatCost(provider.totalCost, provider.costCompleteness ?? buildDailyCostCompleteness(provider.daily)))}`;
 
   return `<div class="provider-section" data-provider="${esc(provider.provider)}">
     <div class="provider-header">
@@ -200,7 +196,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       { label: 'TOTAL TOKENS', value: esc(formatNumber(stats.totalTokens)), accent: true },
     ],
     [
-      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost)), accent: false },
+      { label: 'TOTAL COST', value: esc(formatCost(stats.totalCost, stats.costCompleteness)), accent: false },
       { label: '30-DAY TOKENS', value: esc(formatNumber(stats.rolling30dTokens)), accent: false },
       { label: 'CACHE HIT RATE', value: esc(formatPercentage(stats.cacheHitRate)), accent: false },
     ],
@@ -221,6 +217,29 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       <span class="model-pct">${m.percentage.toFixed(0)}%</span>
     </div>`;
   }).join('');
+
+  const optimization = output.optimization;
+  const optimizationHtml = optimization
+    ? `<hr class="divider" style="margin-top:8px">
+    <div class="models-section">
+      <div class="models-label">OPTIMIZATION INTELLIGENCE</div>
+      <div class="model-row">
+        <span class="model-name">Routing savings</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.routingSimulation?.estimatedSavingsPercent ?? 0) * 100))}%"></div></div>
+        <span class="model-pct">${esc(formatCost(optimization.routingSimulation?.estimatedSavings ?? 0))}</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">Waste signals</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.agentWaste?.summary.totalSignals ?? 0) * 8))}%"></div></div>
+        <span class="model-pct">${optimization.agentWaste?.summary.totalSignals ?? 0}</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">${esc(optimization.behaviorDiff?.baseline.selector.label ?? 'Baseline')} vs ${esc(optimization.behaviorDiff?.comparison.selector.label ?? 'Compare')}</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:50%"></div></div>
+        <span class="model-pct">${optimization.behaviorDiff?.deltas.cost === null || optimization.behaviorDiff?.deltas.cost === undefined ? '-' : esc(formatCost(optimization.behaviorDiff.deltas.cost))}</span>
+      </div>
+    </div>`
+    : '';
 
   const overallLabel = providers.length > 1
     ? '<div class="overall-label">OVERALL</div>'
@@ -371,6 +390,7 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
       <div class="models-label">TOP MODELS</div>
       ${modelsHtml}
     </div>
+    ${optimizationHtml}
     <button class="refresh-btn" onclick="location.reload()">&#x21bb; Refresh</button>
   </div>
 </div>

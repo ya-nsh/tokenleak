@@ -467,4 +467,17 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('Cost totals are incomplete');
     expect(result).toContain('gpt-5.4');
   });
+
+  it('labels unpriced cost metrics Unknown instead of zero dollars', async () => {
+    const daily = createDailyUsageSequence(1);
+    daily[0]!.cost = 0;
+    daily[0]!.models[0]!.cost = 0;
+    daily[0]!.models[0]!.costSource = 'unpriced';
+    const output = createTerminalOutput([createProvider('codex', 'Codex', daily)]);
+    for (const width of [24, 60, 96]) {
+      const result = await renderer.render(output, createTerminalOptions({ width, noColor: true }));
+      expect(result).toContain('Unknown');
+      expect(result).not.toContain('$0.00');
+    }
+  });
 });

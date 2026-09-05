@@ -43,6 +43,39 @@ interface HermesRow {
   actual_cost_usd?: number | null;
 }
 
+function tableColumns(db: InstanceType<typeof Database>, table: string): Set<string> {
+  try {
+    return new Set(
+      (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>)
+        .map((row) => row.name),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function selectColumn(columns: Set<string>, name: keyof HermesRow, fallback: string = 'NULL'): string {
+  return columns.has(name) ? name : `${fallback} AS ${name}`;
+}
+
+function signalPredicate(columns: Set<string>): string {
+  const tokenColumns = [
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'cache_write_tokens',
+    'reasoning_tokens',
+  ].filter((name) => columns.has(name));
+  const predicates = tokenColumns.map((name) => `COALESCE(${name}, 0) > 0`);
+  if (columns.has('actual_cost_usd') || columns.has('estimated_cost_usd')) {
+    const actual = columns.has('actual_cost_usd') ? 'actual_cost_usd' : 'NULL';
+    const estimated = columns.has('estimated_cost_usd') ? 'estimated_cost_usd' : 'NULL';
+    predicates.push(`COALESCE(${actual}, ${estimated}, 0) > 0`);
+  }
+
+  return predicates.length > 0 ? predicates.join(' OR ') : '0';
+}
+
 function resolveDbPath(dbPath?: string): string {
   if (dbPath) {
     return dbPath;
@@ -71,31 +104,25 @@ function loadRows(dbPath: string): HermesRow[] {
       return [];
     }
 
+    const columns = tableColumns(db, 'sessions');
     return db
       .query(`
         SELECT
           id,
           model,
-          billing_provider,
+          ${selectColumn(columns, 'billing_provider')},
           started_at,
-          input_tokens,
-          output_tokens,
-          cache_read_tokens,
-          cache_write_tokens,
-          reasoning_tokens,
-          estimated_cost_usd,
-          actual_cost_usd
+          ${selectColumn(columns, 'input_tokens', '0')},
+          ${selectColumn(columns, 'output_tokens', '0')},
+          ${selectColumn(columns, 'cache_read_tokens', '0')},
+          ${selectColumn(columns, 'cache_write_tokens', '0')},
+          ${selectColumn(columns, 'reasoning_tokens', '0')},
+          ${selectColumn(columns, 'estimated_cost_usd')},
+          ${selectColumn(columns, 'actual_cost_usd')}
         FROM sessions
         WHERE model IS NOT NULL
           AND TRIM(model) != ''
-          AND (
-            COALESCE(input_tokens, 0) > 0 OR
-            COALESCE(output_tokens, 0) > 0 OR
-            COALESCE(cache_read_tokens, 0) > 0 OR
-            COALESCE(cache_write_tokens, 0) > 0 OR
-            COALESCE(reasoning_tokens, 0) > 0 OR
-            COALESCE(actual_cost_usd, estimated_cost_usd, 0) > 0
-          )
+          AND (${signalPredicate(columns)})
       `)
       .all() as HermesRow[];
   } catch {
@@ -118,7 +145,11 @@ function rowToRecord(row: HermesRow, range: DateRange): LocalUsageRecord | null 
     nonNegativeNumber(row.reasoning_tokens);
   const cacheReadTokens = nonNegativeNumber(row.cache_read_tokens);
   const cacheWriteTokens = nonNegativeNumber(row.cache_write_tokens);
-  if (inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens === 0) {
+  const explicitCost = safeNumber(row.actual_cost_usd) ?? safeNumber(row.estimated_cost_usd) ?? undefined;
+  if (
+    inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens === 0 &&
+    !(explicitCost !== undefined && explicitCost > 0)
+  ) {
     return null;
   }
 
@@ -130,7 +161,7 @@ function rowToRecord(row: HermesRow, range: DateRange): LocalUsageRecord | null 
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
-    explicitCost: safeNumber(row.actual_cost_usd) ?? safeNumber(row.estimated_cost_usd) ?? undefined,
+    explicitCost,
     sessionId: row.id,
     projectId: stringValue(row.billing_provider) ?? undefined,
   };

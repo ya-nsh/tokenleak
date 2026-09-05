@@ -1,8 +1,8 @@
 import { Box, Text } from '@opentui/core';
-import type { AggregatedStats, MoreStats } from '@tokenleak/core';
+import type { AggregatedStats, MoreStats, CostCompleteness } from '@tokenleak/core';
 import type { Achievement } from '@tokenleak/renderers';
 import { COLORS, BOLD } from '../lib/theme.js';
-import { formatTokens, formatCost, padRight, padLeft, asciiBar } from '../lib/format.js';
+import { formatTokens, formatCostWithCompleteness, padRight, padLeft, asciiBar } from '../lib/format.js';
 
 const ACHIEVEMENT_ICONS: Record<string, string> = {
   fire: '\u{1F525}',
@@ -42,7 +42,7 @@ function bigStat(label: string, value: string, valueColor: string) {
 export function createWrappedPanel(
   stats: AggregatedStats | null,
   achievements: Achievement[],
-  providers: Array<{ displayName: string; totalTokens: number; totalCost: number }>,
+  providers: Array<{ displayName: string; totalTokens: number; totalCost: number; costCompleteness?: CostCompleteness }>,
   scrollOffset: number,
   more: MoreStats | null,
 ) {
@@ -75,7 +75,7 @@ export function createWrappedPanel(
     Text({ content: '', fg: COLORS.dimWhite }),
     statRow(
       bigStat('TOTAL TOKENS', formatTokens(stats.totalTokens), COLORS.green),
-      bigStat('TOTAL COST', formatCost(stats.totalCost), COLORS.amber),
+      bigStat('TOTAL COST', formatCostWithCompleteness(stats.totalCost, stats.costCompleteness), COLORS.amber),
       bigStat('ACTIVE DAYS', activePct, COLORS.cyan),
     ),
     Text({ content: '', fg: COLORS.dimWhite }),
@@ -145,9 +145,9 @@ export function createWrappedPanel(
     );
 
     const burn = more.monthlyBurn;
-    const projCost = formatCost(burn.projectedCost);
+    const projCost = formatCostWithCompleteness(burn.projectedCost, stats.costCompleteness);
     const dailyRate = burn.observedDays > 0
-      ? formatCost(burn.projectedCost / (burn.calendarDays || 30))
+      ? formatCostWithCompleteness(burn.projectedCost / (burn.calendarDays || 30), stats.costCompleteness)
       : '-';
 
     contentRows.push(
@@ -190,7 +190,7 @@ export function createWrappedPanel(
           }),
           Text({ content: asciiBar(ratio, 15), fg: isTop ? COLORS.amber : COLORS.green }),
           Text({ content: `  ${m.percentage.toFixed(1)}%`, fg: COLORS.white }),
-          Text({ content: padLeft(formatCost(m.cost), 10), fg: COLORS.amber }),
+          Text({ content: padLeft(formatCostWithCompleteness(m.cost, m.costCompleteness), 10), fg: COLORS.amber }),
         ),
       );
     }
@@ -215,7 +215,7 @@ export function createWrappedPanel(
           { flexDirection: 'row', width: '100%' },
           Text({ content: `  ${padRight(p.displayName, 16)}`, fg: COLORS.green, attributes: BOLD }),
           Text({ content: padLeft(`${formatTokens(p.totalTokens)} tokens`, 16), fg: COLORS.green }),
-          Text({ content: padLeft(formatCost(p.totalCost), 10), fg: COLORS.amber }),
+          Text({ content: padLeft(formatCostWithCompleteness(p.totalCost, p.costCompleteness), 10), fg: COLORS.amber }),
           Text({ content: padLeft(`${pct}%`, 7), fg: COLORS.white }),
         ),
       );

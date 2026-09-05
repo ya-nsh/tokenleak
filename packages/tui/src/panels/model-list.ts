@@ -1,8 +1,8 @@
 import { Box, Text } from '@opentui/core';
 import type { AggregatedStats } from '@tokenleak/core';
+import { formatModelWithTier } from '@tokenleak/core';
 import {
   formatTokens,
-  formatCost,
   formatCostCompletenessWarning,
   formatCostWithCompleteness,
   truncate,
@@ -35,7 +35,7 @@ export function createModelList(state: AppState, stats: AggregatedStats | null) 
     );
   }
 
-  const models = stats.topModels;
+  const models = stats.allModels ?? stats.topModels;
   const sortedModels = [...models].sort((a, b) =>
     state.sortMode === 'cost' ? b.cost - a.cost : b.tokens - a.tokens,
   );
@@ -86,8 +86,8 @@ export function createModelList(state: AppState, stats: AggregatedStats | null) 
     const colorIdx = sortedModels.indexOf(m);
     const color = MODEL_COLORS[colorIdx % MODEL_COLORS.length]!;
     const pct = `(${m.percentage.toFixed(1)}%)`;
-    const nameStr = truncate(m.model, 30);
-    const costStr = formatCost(m.cost);
+    const nameStr = truncate(formatModelWithTier(m.model, m.serviceTiers), 30);
+    const costStr = formatCostWithCompleteness(m.cost, m.costCompleteness);
     const tokStr = formatTokens(m.tokens);
 
     // Single line: ● name (pct%)    cost    tokens

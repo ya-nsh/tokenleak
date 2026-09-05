@@ -5,6 +5,7 @@ import type {
   ProviderData,
   ProviderColors,
 } from '@tokenleak/core';
+import { inclusiveDaySpan, buildDailyCostCompleteness } from '@tokenleak/core';
 import { escapeXml, formatNumber, formatCost } from '../svg/utils';
 import {
   CARD_PADDING,
@@ -144,8 +145,7 @@ const MONTH_NAMES_FULL = [
 function formatDateRange(since: string, until: string): string {
   const s = new Date(since + 'T00:00:00Z');
   const u = new Date(until + 'T00:00:00Z');
-  const diffMs = u.getTime() - s.getTime();
-  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const days = inclusiveDaySpan(since, until);
   const sMonth = MONTH_NAMES_FULL[s.getUTCMonth()] ?? '';
   const uMonth = MONTH_NAMES_FULL[u.getUTCMonth()] ?? '';
   return `${sMonth} ${s.getUTCFullYear()} — ${uMonth} ${u.getUTCFullYear()} · ${days} DAYS`;
@@ -648,7 +648,7 @@ export function renderTerminalCardSvg(
 
   // ── Per-provider sections (stacked vertically) ────────────────────
   for (let pi = 0; pi < providerHeatmaps.length; pi++) {
-    const { provider, heatmap, heatmapColors } = providerHeatmaps[pi];
+    const { provider, heatmap } = providerHeatmaps[pi];
 
     // Provider header: colored dot + display name + token/cost summary
     const provDotRadius = 7;
@@ -662,7 +662,7 @@ export function renderTerminalCardSvg(
     );
 
     // Inline summary on the right: total tokens · cost
-    const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost)}`;
+    const summaryText = `${formatNumber(provider.totalTokens)} tokens · ${formatCost(provider.totalCost, provider.costCompleteness ?? buildDailyCostCompleteness(provider.daily))}`;
     sections.push(
       `<text x="${cardWidth - pad}" y="${y + 15}" fill="${escapeXml(theme.muted)}" font-size="12" font-family="${escapeXml(FONT_FAMILY)}" font-weight="500" text-anchor="end">${escapeXml(summaryText)}</text>`,
     );
@@ -717,7 +717,7 @@ export function renderTerminalCardSvg(
     { label: 'TOTAL TOKENS', value: formatNumber(stats.totalTokens), accent: true },
   ];
   const statsRow2 = [
-    { label: 'TOTAL COST', value: formatCost(stats.totalCost), accent: false },
+    { label: 'TOTAL COST', value: formatCost(stats.totalCost, stats.costCompleteness), accent: false },
     { label: '30-DAY TOKENS', value: formatNumber(stats.rolling30dTokens), accent: false },
     { label: 'CACHE HIT RATE', value: formatPercentage(stats.cacheHitRate), accent: false },
   ];
@@ -841,7 +841,7 @@ export function renderTerminalCardSvg(
     const burnLines = [
       {
         label: 'Projected Cost',
-        value: formatCost(more.monthlyBurn.projectedCost),
+        value: formatCost(more.monthlyBurn.projectedCost, stats.costCompleteness),
         accent: true,
       },
       {

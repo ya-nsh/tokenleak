@@ -62,6 +62,19 @@ describe('startLiveServer', () => {
     expect(html).toContain('TOTAL TOKENS');
   });
 
+  it('HTML renders date range length inclusively', async () => {
+    const { port, stop } = await startLiveServer(
+      createOutput({ dateRange: { since: '2026-03-11', until: '2026-03-11' } }),
+      { ...createRenderOptions(), port: 0 },
+    );
+    cleanups.push(stop);
+
+    const res = await fetch(`http://localhost:${port}/`);
+    const html = await res.text();
+
+    expect(html).toContain('1 DAYS');
+  });
+
   it('shuts down cleanly', async () => {
     const { port, stop } = await startLiveServer(
       createOutput(),

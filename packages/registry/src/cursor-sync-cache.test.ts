@@ -7,7 +7,14 @@ import { getCursorCacheDir, saveCursorCredentials, shouldSyncCursorForRun } from
 const originalDir = process.env['TOKENLEAK_CURSOR_DIR'];
 const originalInterval = process.env['TOKENLEAK_CURSOR_SYNC_INTERVAL_MS'];
 const originalFetch = globalThis.fetch;
-const config = { cursor: false, claude: false, codex: false, pi: false, openCode: false, allProviders: false };
+const config = {
+  cursor: false,
+  claude: false,
+  codex: false,
+  pi: false,
+  openCode: false,
+  allProviders: false,
+};
 let root: string;
 let requests: number;
 beforeEach(() => {
@@ -60,10 +67,28 @@ test('reuses a successful automatic sync without fetching again', async () => {
   globalThis.fetch = (async (url) => {
     requests++;
     if (String(url).includes('usage-summary')) return new Response('{}');
-    return new Response('Date,Model,Cost\n2026-03-10,gpt-4o,0.01\n');
+    return new Response('Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost\n2026-03-10T12:34:56Z,chat,gpt-4o,false,1200,1000,200,300,1700,$0.01\n');
   }) as typeof fetch;
   expect(await shouldSyncCursorForRun(config)).toEqual({ attempted: true, error: undefined });
   const count = requests;
   expect(await shouldSyncCursorForRun(config)).toEqual({ attempted: false, error: undefined });
   expect(requests).toBe(count);
+});
+
+test('does not memoize an old request after credentials change in flight', async () => {
+  let changed = false;
+  globalThis.fetch = (async () => {
+    requests++;
+    if (!changed) {
+      changed = true;
+      saveCursorCredentials('test-user::new-credentials-during-request');
+    }
+    return new Response('forbidden', { status: 403 });
+  }) as typeof fetch;
+  expect((await shouldSyncCursorForRun(config)).attempted).toBe(true);
+  const beforeRetry = requests;
+  expect((await shouldSyncCursorForRun(config)).attempted).toBe(true);
+  expect(requests).toBeGreaterThan(beforeRetry);
+  // The retry used the current credentials, so its result can now be reused.
+  expect((await shouldSyncCursorForRun(config)).attempted).toBe(false);
 });

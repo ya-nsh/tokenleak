@@ -1,6 +1,6 @@
 # Tokenleak
 
-See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Gemini**, **GitHub Copilot**, **Amp**, **Qwen**, **Roo Code**, **Kilo Code**, **OpenClaw**, **Hermes**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
+See where your AI tokens actually go. Tokenleak reads usage data from **Claude Code**, **Codex**, **Cursor**, **Gemini**, **GitHub Copilot**, **Amp**, **Codebuff**, **Droid**, **Qwen**, **Roo Code**, **Kilo Code**, **Kimi**, **Kilo CLI**, **Mux**, **Crush**, **OpenClaw**, **Hermes**, **Goose**, **Antigravity**, **Zed Agent**, **Kiro**, **Trae**, **Synthetic**, **Pi (`pi-mono`)**, and **OpenCode**, then renders terminal dashboards, heatmaps, compare reports, explain/focus reports, and shareable image cards from the CLI.
 
 ![Tokenleak OpenTUI overview](./docs/tui-overview.png)
 
@@ -16,18 +16,30 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" alt="Gemini icon" /> | Gemini | `~/.gemini/tmp/**/*.{json,jsonl}` | `gemini`, `google` | Yes |
 | <img width="36" height="36" src="https://cdn.simpleicons.org/githubcopilot/000000" alt="GitHub Copilot icon" /> | GitHub Copilot | `~/.copilot/otel/**/*.jsonl` | `copilot`, `github-copilot`, `copilot-otel` | Yes |
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=ampcode.com&sz=64" alt="Amp icon" /> | Amp | `${XDG_DATA_HOME:-~/.local/share}/amp/threads/T-*.json` | `amp`, `sourcegraph-amp` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=codebuff.com&sz=64" alt="Codebuff icon" /> | Codebuff | `~/.config/manicode/projects/**/chats/**/chat-messages.json` | `codebuff`, `manicode` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=factory.ai&sz=64" alt="Droid icon" /> | Droid | `~/.factory/sessions/*.settings.json` | `droid`, `factory` | Yes |
 | <img width="36" height="36" src="https://avatars.githubusercontent.com/QwenLM?s=64" alt="Qwen icon" /> | Qwen | `~/.qwen/projects/**/*.jsonl` | `qwen` | Yes |
 | <img width="36" height="36" src="https://avatars.githubusercontent.com/RooCodeInc?s=64" alt="Roo Code icon" /> | Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**/ui_messages.json` | `roo-code`, `roo`, `roocode` | Yes |
-| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo Code icon" /> | Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilo`, `kilocode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo Code icon" /> | Kilo Code | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json` | `kilo-code`, `kilocode` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/MoonshotAI?s=64" alt="Kimi icon" /> | Kimi CLI | `~/.kimi/sessions/**/wire.jsonl` | `kimi`, `kimi-cli` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/Kilo-Org?s=64" alt="Kilo CLI icon" /> | Kilo CLI | `~/.local/share/kilo/kilo.db` | `kilo`, `kilo-cli` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=coder.com&sz=64" alt="Mux icon" /> | Mux | `~/.mux/sessions/**/session-usage.json` | `mux` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=crush.ai&sz=64" alt="Crush icon" /> | Crush | `${XDG_DATA_HOME:-~/.local/share}/crush/projects.json` project databases | `crush` | Yes |
 | <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=openclaw.ai&sz=64" alt="OpenClaw icon" /> | OpenClaw | `~/.openclaw/agents/**/*.jsonl*` | `openclaw`, `open-claw` | Yes |
-| <img width="36" height="36" src="https://avatars.githubusercontent.com/NousResearch?s=64" alt="Hermes icon" /> | Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes` | Yes |
+| <img width="36" height="36" src="https://avatars.githubusercontent.com/NousResearch?s=64" alt="Hermes icon" /> | Hermes | `${HERMES_HOME:-~/.hermes}/state.db` | `hermes`, `hermes-agent` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=block.github.io&sz=64" alt="Goose icon" /> | Goose | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db` | `goose` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=antigravity.google&sz=64" alt="Antigravity icon" /> | Antigravity | `~/.config/tokenleak/antigravity-cache/sessions/*.jsonl` cache | `antigravity` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=zed.dev&sz=64" alt="Zed icon" /> | Zed Agent | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db` | `zed`, `zed-agent` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=kiro.dev&sz=64" alt="Kiro icon" /> | Kiro | `~/.kiro/sessions/cli/*.json` | `kiro` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=trae.ai&sz=64" alt="Trae icon" /> | Trae | `~/.config/tokenleak/trae-cache/sessions/*.json` cache | `trae` | Yes |
+| <img width="36" height="36" src="https://www.google.com/s2/favicons?domain=synthetic.new&sz=64" alt="Synthetic icon" /> | Synthetic | `~/.local/share/octofriend/sqlite.db` | `synthetic`, `octofriend` | Yes |
 | <img width="36" height="36" src="https://opencode.ai/favicon.ico" alt="OpenCode icon" /> | OpenCode | `~/.local/share/opencode/storage/message/<session>/*.json` or `~/.config/opencode/storage/message/<session>/*.json`<br />Legacy: `~/.opencode/opencode.db`, `~/.opencode/sessions.db`, `~/.opencode/sessions/*.json` | `open-code`, `opencode`, `open_code` | Yes |
 | <img width="36" height="36" src="https://pi.dev/logo.svg" alt="Pi icon" /> | Pi (`pi-mono`) | `~/.pi/agent/sessions/**/*.jsonl` | `pi`, `pi-mono` | Yes |
 
 - Use `CLAUDE_CONFIG_DIR` to override the Claude Code base directory.
 - Use `CODEX_HOME` to override the Codex base directory.
 - Use `TOKENLEAK_CURSOR_DIR` to override the Cursor credentials/cache directory.
-- Use `TOKENLEAK_GEMINI_DIR`, `TOKENLEAK_COPILOT_OTEL_DIR`, `TOKENLEAK_AMP_DIR`, `TOKENLEAK_QWEN_DIR`, `TOKENLEAK_ROO_CODE_DIR`, `TOKENLEAK_KILO_CODE_DIR`, `TOKENLEAK_OPENCLAW_DIR`, and `TOKENLEAK_HERMES_DIR` to override the new provider data locations.
+- Use `TOKENLEAK_GEMINI_DIR`, `TOKENLEAK_COPILOT_OTEL_DIR`, `TOKENLEAK_AMP_DIR`, `TOKENLEAK_CODEBUFF_DIR`, `TOKENLEAK_DROID_DIR`, `TOKENLEAK_QWEN_DIR`, `TOKENLEAK_ROO_CODE_DIR`, `TOKENLEAK_KILO_CODE_DIR`, `TOKENLEAK_KIMI_DIR`, `TOKENLEAK_KILO_DIR`, `TOKENLEAK_MUX_DIR`, `TOKENLEAK_CRUSH_DIR`, `TOKENLEAK_OPENCLAW_DIR`, `TOKENLEAK_HERMES_DIR`, `TOKENLEAK_GOOSE_DIR`, `TOKENLEAK_ANTIGRAVITY_DIR`, `TOKENLEAK_ZED_DIR`, `TOKENLEAK_KIRO_DIR`, `TOKENLEAK_TRAE_DIR`, and `TOKENLEAK_SYNTHETIC_DIR` to override provider data locations.
 - Hermes also honors `HERMES_HOME`.
 - Use `PI_CODING_AGENT_DIR` to override the Pi base directory.
 - See [Provider details](#provider-details) for the parser behavior and per-provider notes.
@@ -35,6 +47,8 @@ Tokenleak auto-detects supported providers from their local logs and storage. Th
 ## Install
 
 Install Tokenleak with the package manager you already use:
+
+Tokenleak requires Bun on your `PATH`, including when installed with npm. Run `bun --version` first; release validation uses Bun 1.3.10.
 
 ```bash
 # Bun
@@ -74,8 +88,12 @@ bun run build
 bun run bundle
 
 # Run directly
-bun dist/tokenleak.js
+bun dist/tokenleak
 ```
+
+If an existing global launcher points to a missing file, reinstall using the same package manager (`bun install -g tokenleak --force` or `npm install -g tokenleak --force`), then check `tokenleak --version`. If the launcher reports that Bun cannot be found, add Bun's bin directory to your shell's `PATH`.
+
+Maintainers can run `bun run prepublish && bun run verify:package` to build, pack, install, and exercise the actual npm package in an isolated temporary directory without publishing it.
 
 ## Usage
 
@@ -142,6 +160,11 @@ tokenleak focus --provider codex --days 30
 tokenleak nutrition
 tokenleak nutrition --days 30 --format json
 
+# Optimization intelligence
+tokenleak simulate-routing --days 30
+tokenleak waste --severity high
+tokenleak behavior-diff --provider claude-code,codex --days 30 --format json
+
 # Authenticate Cursor and sync its local cache
 tokenleak cursor login --name work
 
@@ -151,7 +174,7 @@ tokenleak --list-providers
 
 ### Analysis commands
 
-Tokenleak ships three dedicated investigation commands in addition to the main dashboard flow:
+Tokenleak ships dedicated investigation and optimization commands in addition to the main dashboard flow:
 
 ```bash
 # Explain what drove a specific day
@@ -181,12 +204,24 @@ tokenleak nutrition --days 30
 
 # Emit the AI ROI report as JSON
 tokenleak nutrition --format json --output ai-roi.json
+
+# Estimate savings from model routing
+tokenleak simulate-routing --days 30
+
+# Detect agent waste signals with evidence and recipes
+tokenleak waste --days 30
+
+# Compare two agent/provider/model cohorts
+tokenleak behavior-diff --provider claude-code,codex --days 30
 ```
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
 - `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI on `http://localhost:3567` — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
+- `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.
+- `tokenleak waste` detects deterministic waste signals such as context drag, repeated prompt clusters, model churn, cache misses, and premium models used for small tasks.
+- `tokenleak behavior-diff` compares cohorts such as provider-vs-provider or model-vs-model and emits deterministic takeaways for engineering teams.
 
 ### Cursor commands
 
@@ -196,6 +231,7 @@ Use these commands to manage Cursor authentication and the local cache that Toke
 tokenleak cursor login --name work
 tokenleak cursor status
 tokenleak cursor accounts --json
+tokenleak cursor doctor
 tokenleak cursor switch work
 tokenleak cursor logout --name work
 tokenleak cursor logout --all --purge-cache
@@ -237,6 +273,28 @@ bun packages/cli/dist/cli.js --provider cursor --format json
 - `tokenleak --list-providers` reports whether local provider data exists. For Cursor, that means `cursor-cache/usage*.csv` must already be present.
 - If `cursor status` is valid but `--list-providers` still shows Cursor as unavailable, run `tokenleak --provider cursor` once to sync the cache, then rerun `--list-providers`.
 - Cursor session tokens are stored in plaintext at `~/.config/tokenleak/cursor-credentials.json` (or under `TOKENLEAK_CURSOR_DIR`) with local-only file permissions.
+
+#### Corporate VPN / protected network
+
+If `tokenleak cursor login` works off VPN but fails on a company protected VPN with a connection, proxy, or certificate error, run the token-free doctor first:
+
+```bash
+tokenleak cursor doctor
+```
+
+For managed proxy networks, pass a Cursor-specific proxy or use your standard shell proxy variables:
+
+```bash
+TOKENLEAK_CURSOR_PROXY=http://proxy.company:8080 tokenleak cursor doctor
+```
+
+For TLS inspection networks, export the company root CA as a PEM file and point Tokenleak at it:
+
+```bash
+TOKENLEAK_CURSOR_CA_FILE=/path/company-root-ca.pem tokenleak cursor doctor --with-token
+```
+
+Tokenleak also honors `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, and `TOKENLEAK_CURSOR_TIMEOUT_MS` for Cursor API requests. `tokenleak cursor doctor --insecure-skip-tls-verify` exists only to prove that TLS inspection is the failure mode; do not use it for normal login or sync.
 
 ### Date filtering
 
@@ -592,6 +650,28 @@ Reads Sourcegraph Amp thread JSON files and combines usage ledger rows with mess
 | **Provider name** | `amp`                                                            |
 | **Aliases**       | `sourcegraph-amp`                                                |
 
+### Codebuff
+
+Reads Codebuff/Manicode chat history files and parses assistant usage from direct metadata or provider-options run-state fallbacks.
+
+|                   |                                                                      |
+| ----------------- | -------------------------------------------------------------------- |
+| **Data location** | `~/.config/manicode/projects/**/chats/**/chat-messages.json`         |
+| **Override**      | Set `TOKENLEAK_CODEBUFF_DIR` environment variable                    |
+| **Provider name** | `codebuff`                                                           |
+| **Aliases**       | `manicode`                                                           |
+
+### Droid
+
+Reads Factory Droid session settings files and uses sibling JSONL session text to recover a model name when Droid only records a provider lock.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.factory/sessions/*.settings.json`             |
+| **Override**      | Set `TOKENLEAK_DROID_DIR` environment variable    |
+| **Provider name** | `droid`                                           |
+| **Aliases**       | `factory`                                         |
+
 ### Qwen
 
 Reads Qwen CLI project JSONL logs. Assistant records with `usageMetadata` are parsed for prompt, candidate, thought, and cached-content tokens.
@@ -613,7 +693,51 @@ Reads VS Code extension task logs from `ui_messages.json` and uses sibling `api_
 | **Kilo data**     | `~/.config/Code/User/globalStorage/kilocode.kilo-code/tasks/**/ui_messages.json`                 |
 | **Override**      | Set `TOKENLEAK_ROO_CODE_DIR` or `TOKENLEAK_KILO_CODE_DIR` environment variable                   |
 | **Provider names** | `roo-code`, `kilo-code`                                                                          |
-| **Aliases**       | `roo`, `roocode`, `kilo`, `kilocode`                                                             |
+| **Aliases**       | `roo`, `roocode`, `kilocode`                                                                      |
+
+### Kimi CLI
+
+Reads Kimi CLI wire-protocol JSONL files. `StatusUpdate` messages provide input, output, and cache token counts.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.kimi/sessions/**/wire.jsonl`                  |
+| **Override**      | Set `TOKENLEAK_KIMI_DIR` environment variable     |
+| **Provider name** | `kimi`                                            |
+| **Aliases**       | `kimi-cli`                                        |
+
+### Kilo CLI
+
+Reads Kilo CLI SQLite usage rows from the local Kilo data directory. This is separate from the VS Code Kilo Code extension provider (`kilo-code`).
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.local/share/kilo/kilo.db`                     |
+| **Override**      | Set `TOKENLEAK_KILO_DIR` environment variable     |
+| **Provider name** | `kilo`                                            |
+| **Aliases**       | `kilo-cli`                                        |
+
+### Mux
+
+Reads Mux session usage JSON files and preserves provider-reported per-model cost totals when present.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.mux/sessions/**/session-usage.json`           |
+| **Override**      | Set `TOKENLEAK_MUX_DIR` environment variable      |
+| **Provider name** | `mux`                                             |
+| **Aliases**       | None                                              |
+
+### Crush
+
+Reads project-level Crush SQLite databases discovered from the Crush project registry. Crush exposes reliable session-level cost even when token breakdown is unavailable, so Tokenleak preserves cost without fabricating tokens.
+
+|                   |                                                                          |
+| ----------------- | ------------------------------------------------------------------------ |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/crush/projects.json` project registry  |
+| **Override**      | Set `TOKENLEAK_CRUSH_DIR` environment variable                           |
+| **Provider name** | `crush`                                                                  |
+| **Aliases**       | None                                                                     |
 
 ### OpenClaw
 
@@ -628,14 +752,80 @@ Reads OpenClaw agent transcripts and optional `sessions.json` indexes. Model-cha
 
 ### Hermes
 
-Reads aggregated Hermes Agent session rows from the local SQLite state database.
+Reads aggregated Hermes Agent session rows from the local SQLite state database. The parser accepts schema variants where optional cost or cache columns are absent, as long as `id`, `model`, `started_at`, and at least one token or cost signal are present.
 
 |                   |                                                   |
 | ----------------- | ------------------------------------------------- |
 | **Data location** | `${HERMES_HOME:-~/.hermes}/state.db`              |
 | **Override**      | Set `HERMES_HOME` or `TOKENLEAK_HERMES_DIR`       |
 | **Provider name** | `hermes`                                          |
+| **Aliases**       | `hermes-agent`                                    |
+
+### Goose
+
+Reads Goose session totals from the local `sessions.db` SQLite database. Tokenleak scans the XDG path by default; use the override for macOS Application Support or legacy Block/goose locations.
+
+|                   |                                                                 |
+| ----------------- | --------------------------------------------------------------- |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db`   |
+| **Override**      | Set `TOKENLEAK_GOOSE_DIR` or `GOOSE_PATH_ROOT`                  |
+| **Provider name** | `goose`                                                         |
+| **Aliases**       | None                                                            |
+
+### Antigravity
+
+Reads normalized Antigravity JSONL cache files. Tokenleak does not currently connect to the local Antigravity language-server RPC or create this cache; place compatible JSONL artifacts in the cache directory first.
+
+|                   |                                                                    |
+| ----------------- | ------------------------------------------------------------------ |
+| **Data location** | `~/.config/tokenleak/antigravity-cache/sessions/*.jsonl`           |
+| **Override**      | Set `TOKENLEAK_ANTIGRAVITY_DIR` environment variable               |
+| **Provider name** | `antigravity`                                                      |
+| **Aliases**       | None                                                               |
+
+### Zed Agent
+
+Reads hosted Zed Agent rows from Zed's `threads.db`. External ACP agent rows are ignored to avoid double-counting usage that belongs to another provider.
+
+|                   |                                                                             |
+| ----------------- | --------------------------------------------------------------------------- |
+| **Data location** | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db`                   |
+| **Override**      | Set `TOKENLEAK_ZED_DIR` environment variable                                |
+| **Provider name** | `zed`                                                                       |
+| **Aliases**       | `zed-agent`                                                                 |
+
+### Kiro
+
+Reads Kiro CLI session JSON files with explicit turn token metadata. SQLite import can be enabled by pointing the override at a compatible local data source.
+
+|                   |                                                   |
+| ----------------- | ------------------------------------------------- |
+| **Data location** | `~/.kiro/sessions/cli/*.json`                     |
+| **Override**      | Set `TOKENLEAK_KIRO_DIR` environment variable     |
+| **Provider name** | `kiro`                                            |
 | **Aliases**       | None                                              |
+
+### Trae
+
+Reads cached Trae usage API JSON files. Tokenleak does not currently authenticate with Trae or fetch this cache; export or sync compatible JSON first, then point Tokenleak at the cache.
+
+|                   |                                                            |
+| ----------------- | ---------------------------------------------------------- |
+| **Data location** | `~/.config/tokenleak/trae-cache/sessions/*.json`           |
+| **Override**      | Set `TOKENLEAK_TRAE_DIR` environment variable              |
+| **Provider name** | `trae`                                                     |
+| **Aliases**       | None                                                       |
+
+### Synthetic
+
+Reads Octofriend/Synthetic SQLite token rows when available. Synthetic is also kept as an explicit provider filter so it does not duplicate unrelated provider usage during normal all-provider scans.
+
+|                   |                                                       |
+| ----------------- | ----------------------------------------------------- |
+| **Data location** | `~/.local/share/octofriend/sqlite.db`                 |
+| **Override**      | Set `TOKENLEAK_SYNTHETIC_DIR` environment variable    |
+| **Provider name** | `synthetic`                                           |
+| **Aliases**       | `octofriend`                                          |
 
 ### OpenCode
 
@@ -813,12 +1003,25 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_GEMINI_DIR` | `~/.gemini/tmp` | Gemini CLI temp/session directory |
 | `TOKENLEAK_COPILOT_OTEL_DIR` | `~/.copilot/otel` | GitHub Copilot OTEL JSONL directory |
 | `TOKENLEAK_AMP_DIR` | `${XDG_DATA_HOME:-~/.local/share}/amp/threads` | Amp thread directory |
+| `TOKENLEAK_CODEBUFF_DIR` | `~/.config/manicode` | Codebuff/Manicode project chat root |
+| `TOKENLEAK_DROID_DIR` | `~/.factory/sessions` | Droid session settings directory |
 | `TOKENLEAK_QWEN_DIR` | `~/.qwen/projects` | Qwen project log directory |
 | `TOKENLEAK_ROO_CODE_DIR` | VS Code Roo Code task storage | Roo Code task-log directory |
 | `TOKENLEAK_KILO_CODE_DIR` | VS Code Kilo Code task storage | Kilo Code task-log directory |
+| `TOKENLEAK_KIMI_DIR` | `~/.kimi` | Kimi CLI root directory |
+| `TOKENLEAK_KILO_DIR` | `~/.local/share/kilo/kilo.db` | Kilo CLI SQLite database path |
+| `TOKENLEAK_MUX_DIR` | `~/.mux/sessions` | Mux session usage directory |
+| `TOKENLEAK_CRUSH_DIR` | Crush project registry discovery | Crush data directory or `crush.db` path |
 | `TOKENLEAK_OPENCLAW_DIR` | `~/.openclaw/agents` | OpenClaw agent transcript directory |
 | `TOKENLEAK_HERMES_DIR` | `~/.hermes` | Hermes directory containing `state.db` |
 | `HERMES_HOME` | `~/.hermes` | Hermes home directory |
+| `TOKENLEAK_GOOSE_DIR` | `${XDG_DATA_HOME:-~/.local/share}/goose/sessions/sessions.db` | Goose SQLite database path |
+| `GOOSE_PATH_ROOT` | unset | Goose root directory override |
+| `TOKENLEAK_ANTIGRAVITY_DIR` | `~/.config/tokenleak/antigravity-cache/sessions` | Antigravity normalized JSONL cache directory |
+| `TOKENLEAK_ZED_DIR` | `${XDG_DATA_HOME:-~/.local/share}/zed/threads/threads.db` | Zed Agent SQLite database path |
+| `TOKENLEAK_KIRO_DIR` | `~/.kiro/sessions/cli` | Kiro CLI session JSON directory |
+| `TOKENLEAK_TRAE_DIR` | `~/.config/tokenleak/trae-cache/sessions` | Trae cached usage JSON directory |
+| `TOKENLEAK_SYNTHETIC_DIR` | `~/.local/share/octofriend/sqlite.db` | Synthetic/Octofriend SQLite database path |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | Pi coding agent directory (sessions live under `sessions/`) |
 
 ## What Tokenleak tracks
@@ -848,6 +1051,18 @@ It then computes:
 - **Attribution clusters** — repo/directory-oriented groupings of sessions into investigations or feature work
 - **Explain and focus reports** — narrative daily diagnostics and deep-work session rankings
 
+
+### Model identity, Fast mode, and cost accuracy
+
+Codex history includes both `sessions` and `archived_sessions` under `CODEX_HOME` (normally `~/.codex`). Explicit turn model metadata takes precedence over session metadata; agent instruction prose is never used to guess the model. Repeated cumulative notifications and mirrored response usage records are reconciled before date filtering.
+
+Fast mode is recorded separately from the base model. Reports retain service-tier breakdowns and show Fast where the log or a recognized model alias supplies that information. A response's actual tier takes precedence over the requested tier. Older logs often omit it; these remain labeled **tier unknown**, rather than inheriting your current Fast setting. The model browser includes the full inventory; top-model summaries retain their ten-model limit.
+
+Costs are **API-equivalent estimates**, not ChatGPT subscription charges or a reconstruction of past invoices. Known Fast tiers use verified API Fast rates, not subscription credit multipliers. Missing historical tier metadata uses the standard API rate as an estimate. GPT-5.6 estimates include cache writes and the published long-context threshold. Rates are current catalog estimates, not a date-versioned price history. Sources: [OpenAI pricing](https://developers.openai.com/api/docs/pricing), [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode), and [Codex speed and credits](https://learn.chatgpt.com/docs/agent-configuration/speed).
+
+Unknown model/tier prices display **Unknown**; partially priced totals carry `+`. Provider-reported zero costs remain `$0.00`. The verified catalog deliberately does not invent prices for research-preview models such as Codex-Spark. Cursor `auto` or legacy Composer records without a reported cost also remain unpriced when no applicable rate can be verified. Refreshing the remote pricing cache updates known models; adding a newly verified model requires a catalog update.
+
+Cursor aliases such as `claude-4.5-opus-high-thinking` map to their canonical model for estimation, while reported costs take precedence. If the export endpoint redirects to sign-in, Tokenleak preserves the cached CSV and requests `tokenleak cursor login`. Only successful, schema-validated CSV responses replace the cache.
 
 ## MCP Server
 

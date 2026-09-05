@@ -94,3 +94,20 @@ Final checks: **1,012 tests passed, 1 skipped, 0 failed**; all ten workspace
 build/type-check tasks passed. Targeted lint passed for the new and changed
 performance modules. Full-repository lint remains blocked by 25 pre-existing
 unused-variable/import errors elsewhere, including old lines in CLI files.
+
+## Review fixes and integration
+
+Merged the current main branch, preserving its archived Codex sessions, delayed
+usage reconciliation, Fast tier identity, prompt IDs and latest-message Claude
+deduplication. Provider cache namespaces were bumped to v2 so earlier snapshots
+cannot bypass the updated parsers.
+
+Cached records and warning payloads are now validated before reuse. Invalid
+payloads trigger source reparsing and snapshot replacement. Automatic Cursor
+sync captures its credential fingerprint before the request and only memoizes
+the result if the credentials remain unchanged at completion.
+
+Post-integration validation: **1,179 tests passed, 1 skipped, 0 failed**, and all
+ten workspace build/type-check tasks passed. Both original review reproductions
+now retain correct behavior, with regression coverage for repeated invalid-cache
+loads and credential replacement during a pending request.

@@ -1,3 +1,4 @@
+import { formatCostWithCompleteness } from '@tokenleak/core';
 import { aggregate } from '@tokenleak/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, PROJECT_COLORS } from '../colors';
@@ -13,27 +14,23 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
-
 function getLastActiveDate(output: TokenleakOutput, providerName: string): string | null {
   const provider = output.providers.find((entry) => entry.provider === providerName);
-  const activeDays = provider?.daily.filter((entry) => entry.totalTokens > 0) ?? [];
+  const activeDays = provider?.daily.filter((entry) => (entry.totalTokens > 0 || entry.cost > 0)) ?? [];
   return activeDays.at(-1)?.date ?? null;
 }
 
 export function renderProviderView(output: TokenleakOutput, width: number, noColor: boolean): string {
   const rows = output.providers
     .map((provider) => {
-      const stats = aggregate(provider.daily, output.dateRange.until);
+      const stats = aggregate(provider.daily, output.dateRange.until, output.dateRange);
       return {
         provider,
         stats,
         lastActiveDate: getLastActiveDate(output, provider.provider),
       };
     })
-    .filter((entry) => entry.stats.totalTokens > 0)
+    .filter((entry) => (entry.stats.totalTokens > 0 || entry.stats.totalCost > 0))
     .sort((left, right) => right.stats.totalTokens - left.stats.totalTokens);
 
   if (rows.length === 0) {
@@ -60,7 +57,7 @@ export function renderProviderView(output: TokenleakOutput, width: number, noCol
       dim(TRACK_CHAR.repeat(Math.max(0, barWidth - fillLen)), noColor);
     const shareStr = `${(share * 100).toFixed(0)}%`.padStart(shareWidth);
     const tokenStr = formatTokens(entry.stats.totalTokens).padStart(valueWidth);
-    const costStr = formatCost(entry.stats.totalCost).padStart(costWidth);
+    const costStr = formatCostWithCompleteness(entry.stats.totalCost, entry.stats.costCompleteness).padStart(costWidth);
     const dateStr = (entry.lastActiveDate ?? '-').padStart(dateWidth);
     const name = entry.provider.displayName.length > nameWidth
       ? `${entry.provider.displayName.slice(0, nameWidth - 1)}…`

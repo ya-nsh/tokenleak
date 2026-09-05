@@ -1,5 +1,7 @@
 import type {
   AdvisorReport,
+  AgentBehaviorDiffReport,
+  AgentWasteReport,
   FocusReport,
   ExplainReport,
   CompareOutput,
@@ -9,6 +11,7 @@ import type {
   NutritionReport,
   Receipt,
   ReceiptCategory,
+  RoutingSimulationReport,
 } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
@@ -24,7 +27,10 @@ export type ViewMode =
   | 'wrapped'
   | 'replay'
   | 'nutrition'
-  | 'receipts';
+  | 'receipts'
+  | 'simulator'
+  | 'waste'
+  | 'behavior';
 export type SortMode = 'cost' | 'tokens';
 export type ReceiptsSortMode = 'cost' | 'qty' | 'alpha';
 export type CursorSetupField = 'label' | 'token';
@@ -94,6 +100,9 @@ export interface AppState {
   receiptsExpandedLineIndex: number | null;
   receiptsSortMode: ReceiptsSortMode;
   receiptsCategoryFilter: ReceiptCategory | null;
+  simulatorScrollOffset: number;
+  wasteScrollOffset: number;
+  behaviorScrollOffset: number;
 
   // lazy caches (null = not yet computed, cleared on refresh)
   cachedAdvisorReport: AdvisorReport | null;
@@ -105,6 +114,9 @@ export interface AppState {
   cachedWasteReport: WasteReport | null;
   cachedNutritionReport: NutritionReport | null;
   cachedReceipt: Receipt | null;
+  cachedRoutingSimulationReport: RoutingSimulationReport | null;
+  cachedAgentWasteReport: AgentWasteReport | null;
+  cachedBehaviorDiffReport: AgentBehaviorDiffReport | null;
 }
 
 export const WINDOW_LABELS = ['1D', '7D', '30D', '90D', 'ALL'] as const;
@@ -156,6 +168,9 @@ export function createInitialState(): AppState {
     receiptsExpandedLineIndex: null,
     receiptsSortMode: 'cost',
     receiptsCategoryFilter: null,
+    simulatorScrollOffset: 0,
+    wasteScrollOffset: 0,
+    behaviorScrollOffset: 0,
     cachedAdvisorReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
@@ -165,5 +180,8 @@ export function createInitialState(): AppState {
     cachedWasteReport: null,
     cachedNutritionReport: null,
     cachedReceipt: null,
+    cachedRoutingSimulationReport: null,
+    cachedAgentWasteReport: null,
+    cachedBehaviorDiffReport: null,
   };
 }

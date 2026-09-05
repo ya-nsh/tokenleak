@@ -66,7 +66,8 @@ function providerModelEntries(output: TokenleakOutput): CommonsProviderModelEntr
         };
         current.tokens += model.totalTokens;
         current.cost += model.cost;
-        current.inputTokens += model.inputTokens;
+        // Fresh input includes cache creation misses.
+        current.inputTokens += model.inputTokens + model.cacheWriteTokens;
         current.cacheReadTokens += model.cacheReadTokens;
         current.events += 1;
         byModel.set(model.model, current);

@@ -8,8 +8,11 @@ import {
   SCHEMA_VERSION,
   aggregate,
   analyzeEfficiency,
+  buildAgentBehaviorDiffReport,
+  buildAgentWasteReport,
   buildCommonsExport,
   buildCommonsPromptExport,
+  buildRoutingSimulationReport,
   buildNutritionReport,
   collectGitOutcomeSignals,
   buildExplainReport,
@@ -22,12 +25,16 @@ import {
   getTodayLocal,
 } from '@tokenleak/core';
 import type {
+  AgentBehaviorDiffReport,
+  AgentWasteReport,
+  BehaviorCohortSelector,
   DateRange,
   FocusReport,
   NutritionReport,
   ProviderWarning,
   RenderOptions,
   ReplayReport,
+  RoutingSimulationReport,
   TokenleakOutput,
   ProviderData,
 } from '@tokenleak/core';
@@ -39,11 +46,23 @@ import {
   GeminiProvider,
   CopilotProvider,
   AmpProvider,
+  CodebuffProvider,
+  DroidProvider,
   QwenProvider,
   RooCodeProvider,
   KiloCodeProvider,
+  KimiProvider,
+  KiloProvider,
+  MuxProvider,
+  CrushProvider,
   OpenClawProvider,
   HermesProvider,
+  GooseProvider,
+  AntigravityProvider,
+  ZedProvider,
+  KiroProvider,
+  TraeProvider,
+  SyntheticProvider,
   OpenCodeProvider,
   PiProvider,
   MODEL_PRICING,
@@ -72,7 +91,7 @@ import {
 import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
-import { loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
+import { buildDefaultOptimization, loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
 import { computeDateRange } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
 import {
@@ -133,16 +152,34 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'copilot-otel': 'copilot',
   amp: 'amp',
   'sourcegraph-amp': 'amp',
+  codebuff: 'codebuff',
+  manicode: 'codebuff',
+  droid: 'droid',
+  factory: 'droid',
   qwen: 'qwen',
   'roo-code': 'roo-code',
   roo: 'roo-code',
   roocode: 'roo-code',
   'kilo-code': 'kilo-code',
-  kilo: 'kilo-code',
   kilocode: 'kilo-code',
+  kimi: 'kimi',
+  'kimi-cli': 'kimi',
+  kilo: 'kilo',
+  'kilo-cli': 'kilo',
+  mux: 'mux',
+  crush: 'crush',
   openclaw: 'openclaw',
   'open-claw': 'openclaw',
   hermes: 'hermes',
+  'hermes-agent': 'hermes',
+  goose: 'goose',
+  antigravity: 'antigravity',
+  zed: 'zed',
+  'zed-agent': 'zed',
+  kiro: 'kiro',
+  trae: 'trae',
+  synthetic: 'synthetic',
+  octofriend: 'synthetic',
 };
 const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   'claude-code': ['anthropic', 'claude', 'claudecode'],
@@ -153,10 +190,18 @@ const PROVIDER_ALIAS_GROUPS: Record<string, string[]> = {
   gemini: ['google'],
   copilot: ['github-copilot', 'copilot-otel'],
   amp: ['sourcegraph-amp'],
+  codebuff: ['manicode'],
+  droid: ['factory'],
   'roo-code': ['roo', 'roocode'],
-  'kilo-code': ['kilo', 'kilocode'],
+  'kilo-code': ['kilocode'],
+  kimi: ['kimi-cli'],
+  kilo: ['kilo-cli'],
   openclaw: ['open-claw'],
+  hermes: ['hermes-agent'],
+  zed: ['zed-agent'],
+  synthetic: ['octofriend'],
 };
+const EXPLICIT_ONLY_PROVIDERS = new Set(['synthetic']);
 
 interface ProviderFilterConfig {
   provider?: string;
@@ -219,6 +264,10 @@ function providerMatchesFilter(provider: IProvider, requested: Set<string>): boo
   return candidates.some((candidate) => requested.has(candidate));
 }
 
+function isExplicitOnlyProvider(provider: IProvider): boolean {
+  return EXPLICIT_ONLY_PROVIDERS.has(provider.name);
+}
+
 function buildHelpText(): string {
   return [
     `tokenleak ${VERSION}`,
@@ -233,6 +282,9 @@ function buildHelpText(): string {
     '  tokenleak nutrition [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
+    '  tokenleak simulate-routing [flags]',
+    '  tokenleak waste [flags]',
+    '  tokenleak behavior-diff [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
@@ -242,6 +294,9 @@ function buildHelpText(): string {
     '  nutrition              Estimate token cost per local Git outcome signal',
     "  replay [date]          Replay a day's session timeline (defaults to today)",
     '  receipts               Itemized receipt of spend by prompt behavior',
+    '  simulate-routing       Estimate savings from model routing changes',
+    '  waste                  Detect agent waste signals with evidence',
+    '  behavior-diff          Compare agent/model/project behavior cohorts',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -299,6 +354,9 @@ function buildHelpText(): string {
     '  tokenleak replay',
     '  tokenleak replay 2026-03-10 --format json',
     '  tokenleak replay 2026-03-10 --interactive',
+    '  tokenleak simulate-routing --days 30',
+    '  tokenleak waste --severity high',
+    '  tokenleak behavior-diff --provider claude-code,codex --days 30',
     '',
     'Version:',
     `  CLI ${VERSION}`,
@@ -408,6 +466,72 @@ function buildNutritionHelpText(): string {
     'Examples:',
     '  tokenleak nutrition --days 30',
     '  tokenleak nutrition --format json --output nutrition.json',
+    '',
+  ].join('\n');
+}
+
+function buildSimulateRoutingHelpText(): string {
+  return [
+    `tokenleak simulate-routing ${VERSION}`,
+    'Simulate cost impact from routing historical events to cheaper models.',
+    '',
+    'Usage:',
+    '  tokenleak simulate-routing [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --strategy <name>   conservative, aggressive, or manual',
+    '      --no-color          Disable ANSI colors',
+    '',
+  ].join('\n');
+}
+
+function buildWasteHelpText(): string {
+  return [
+    `tokenleak waste ${VERSION}`,
+    'Detect deterministic agent waste signals with evidence and recipes.',
+    '',
+    'Usage:',
+    '  tokenleak waste [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --severity <level>  all, high, medium, or low',
+    '      --no-color          Disable ANSI colors',
+    '',
+  ].join('\n');
+}
+
+function buildBehaviorDiffHelpText(): string {
+  return [
+    `tokenleak behavior-diff ${VERSION}`,
+    'Compare two agent/model/project/provider cohorts.',
+    '',
+    'Usage:',
+    '  tokenleak behavior-diff --provider claude-code,codex [flags]',
+    '  tokenleak behavior-diff --model claude-opus-4,claude-sonnet-4 [flags]',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file',
+    '      --provider <a,b>    Compare two providers',
+    '      --model <a,b>       Compare two models',
+    '      --project <a,b>     Compare two project ids',
+    '      --repo <a,b>        Compare two repo roots',
+    '      --no-color          Disable ANSI colors',
     '',
   ].join('\n');
 }
@@ -590,11 +714,23 @@ function registerBuiltInProviders(registry: ProviderRegistry): void {
   registry.register(new GeminiProvider());
   registry.register(new CopilotProvider());
   registry.register(new AmpProvider());
+  registry.register(new CodebuffProvider());
+  registry.register(new DroidProvider());
   registry.register(new QwenProvider());
   registry.register(new RooCodeProvider());
   registry.register(new KiloCodeProvider());
+  registry.register(new KimiProvider());
+  registry.register(new KiloProvider());
+  registry.register(new MuxProvider());
+  registry.register(new CrushProvider());
   registry.register(new OpenClawProvider());
   registry.register(new HermesProvider());
+  registry.register(new GooseProvider());
+  registry.register(new AntigravityProvider());
+  registry.register(new ZedProvider());
+  registry.register(new KiroProvider());
+  registry.register(new TraeProvider());
+  registry.register(new SyntheticProvider());
   registry.register(new PiProvider());
   registry.register(new OpenCodeProvider());
 }
@@ -662,6 +798,10 @@ async function selectAvailableProviders(
 
   const registry = createRegistry();
   let available = await registry.getAvailable();
+
+  if (!requestedProviders.has('synthetic')) {
+    available = available.filter((provider) => !isExplicitOnlyProvider(provider));
+  }
 
   if (!config.allProviders && requestedProviders.size > 0) {
     if (
@@ -1165,6 +1305,19 @@ const PROVIDER_COLORS: Record<string, number> = {
   'claude-code': 179, // amber
   codex: 71, // green
   cursor: 78, // spring green
+  codebuff: 33,
+  droid: 208,
+  kimi: 244,
+  kilo: 214,
+  mux: 205,
+  crush: 196,
+  goose: 37,
+  antigravity: 99,
+  zed: 38,
+  kiro: 63,
+  trae: 44,
+  synthetic: 42,
+  hermes: 35,
   pi: 73, // cyan/teal
   'open-code': 68, // indigo/steel blue
 };
@@ -1438,6 +1591,136 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
   return lines.join('\n');
 }
 
+function renderRoutingSimulationReport(report: RoutingSimulationReport, width: number, noColor: boolean): string {
+  const termWidth = Math.max(80, width || 80);
+  const lines = [
+    bold('Tokenleak Routing Simulator', noColor),
+    report.method,
+    '',
+    `Range: ${report.dateRange.since} to ${report.dateRange.until}  Strategy: ${report.strategy}`,
+    `Current: $${report.currentCost.toFixed(4)}  Simulated: $${report.simulatedCost.toFixed(4)}  Savings: $${report.estimatedSavings.toFixed(4)} (${(report.estimatedSavingsPercent * 100).toFixed(1)}%)`,
+    `Affected: ${report.affectedEvents.toLocaleString('en-US')} events / ${report.affectedTokens.toLocaleString('en-US')} tokens`,
+    '',
+  ];
+
+  const positive = report.candidates.filter((candidate) => (candidate.savings ?? 0) > 0).slice(0, 12);
+  if (positive.length === 0) {
+    lines.push('No positive routing candidates found.');
+  } else {
+    const headers = ['Rule', 'From', 'To', 'Tokens', 'Savings', 'Conf'];
+    const widths = [22, 18, 18, 12, 10, 8];
+    const totalWidth = widths.reduce((sum, value) => sum + value, 0) + widths.length + 1;
+    widths[0] = Math.max(12, widths[0]! - Math.max(0, totalWidth - termWidth));
+    const row = (cells: string[]) =>
+      `|${cells.map((cell, index) => ` ${truncateCell(cell, widths[index]! - 2).padEnd(widths[index]! - 2)} `).join('|')}|`;
+    lines.push(row(headers));
+    lines.push(`|${widths.map((colWidth) => '-'.repeat(colWidth)).join('|')}|`);
+    for (const candidate of positive) {
+      lines.push(row([
+        candidate.ruleId,
+        candidate.fromModel,
+        candidate.toModel,
+        candidate.tokens.toLocaleString('en-US'),
+        `$${(candidate.savings ?? 0).toFixed(4)}`,
+        candidate.confidence,
+      ]));
+    }
+  }
+
+  if (report.warnings.length > 0) {
+    lines.push('', dim(`Warnings: ${report.warnings.slice(0, 3).join(' | ')}`, noColor));
+  }
+  return lines.join('\n');
+}
+
+function renderAgentWasteReport(
+  report: AgentWasteReport,
+  width: number,
+  noColor: boolean,
+  severity: string = 'all',
+): string {
+  const termWidth = Math.max(80, width || 80);
+  const visible = report.signals.filter((signal) => severity === 'all' || signal.severity === severity);
+  const lines = [
+    bold('Tokenleak Agent Waste', noColor),
+    report.method,
+    '',
+    `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
+    `Signals: ${report.summary.totalSignals}  High: ${report.summary.highSeverity}  Estimated savings: ${formatNullableCost(report.summary.estimatedSavings)}`,
+    `Analyzed: ${report.summary.analyzedEvents.toLocaleString('en-US')} events / ${report.summary.analyzedSessions.toLocaleString('en-US')} sessions`,
+    '',
+  ];
+
+  if (visible.length === 0) {
+    lines.push('No waste signals matched the selected filter.');
+  } else {
+    const headers = ['Severity', 'Kind', 'Title', 'Savings', 'Confidence'];
+    const widths = [10, 22, 34, 10, 12];
+    const totalWidth = widths.reduce((sum, value) => sum + value, 0) + widths.length + 1;
+    widths[2] = Math.max(14, widths[2]! - Math.max(0, totalWidth - termWidth));
+    const row = (cells: string[]) =>
+      `|${cells.map((cell, index) => ` ${truncateCell(cell, widths[index]! - 2).padEnd(widths[index]! - 2)} `).join('|')}|`;
+    lines.push(row(headers));
+    lines.push(`|${widths.map((colWidth) => '-'.repeat(colWidth)).join('|')}|`);
+    for (const signal of visible.slice(0, 12)) {
+      lines.push(row([
+        signal.severity,
+        signal.kind,
+        signal.title,
+        formatNullableCost(signal.estimatedSavings),
+        signal.confidence,
+      ]));
+      lines.push(dim(`  ${truncateCell(signal.evidence.reason, termWidth - 4)}`, noColor));
+    }
+  }
+
+  if (report.warnings.length > 0) {
+    lines.push('', dim(`Warnings: ${report.warnings.join(' | ')}`, noColor));
+  }
+  return lines.join('\n');
+}
+
+function renderAgentBehaviorDiffReport(report: AgentBehaviorDiffReport, width: number, noColor: boolean): string {
+  const termWidth = Math.max(80, width || 80);
+  const lines = [
+    bold('Tokenleak Agent Behavior Diff', noColor),
+    report.method,
+    '',
+    `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
+    `${report.baseline.selector.label}  vs  ${report.comparison.selector.label}`,
+    '',
+  ];
+  const rows = [
+    ['Events', report.baseline.metrics.events, report.comparison.metrics.events, report.deltas.events],
+    ['Sessions', report.baseline.metrics.sessions, report.comparison.metrics.sessions, report.deltas.sessions],
+    ['Tokens', report.baseline.metrics.tokens, report.comparison.metrics.tokens, report.deltas.tokens],
+    ['Cost', report.baseline.metrics.cost, report.comparison.metrics.cost, report.deltas.cost],
+    ['Input/Output', report.baseline.metrics.inputPerOutput, report.comparison.metrics.inputPerOutput, report.deltas.inputPerOutput],
+    ['Output/$', report.baseline.metrics.outputPerDollar, report.comparison.metrics.outputPerDollar, report.deltas.outputPerDollar],
+    ['Cache hit', report.baseline.metrics.cacheHitRate, report.comparison.metrics.cacheHitRate, report.deltas.cacheHitRate],
+    ['Waste signals', report.baseline.metrics.wasteSignals, report.comparison.metrics.wasteSignals, report.deltas.wasteSignals],
+  ] as const;
+  const widths = [18, 16, 16, 16];
+  const row = (cells: string[]) =>
+    `|${cells.map((cell, index) => ` ${truncateCell(cell, widths[index]! - 2).padEnd(widths[index]! - 2)} `).join('|')}|`;
+  lines.push(row(['Metric', 'Baseline', 'Compare', 'Delta']));
+  lines.push(`|${widths.map((colWidth) => '-'.repeat(colWidth)).join('|')}|`);
+  for (const [label, base, comp, delta] of rows) {
+    const format = label === 'Cost'
+      ? (value: number | null) => formatNullableCost(value)
+      : (value: number | null) => formatNullableNumber(value, label.includes('/') || label === 'Cache hit' ? 2 : 0);
+    lines.push(row([label, format(base), format(comp), format(delta)]));
+  }
+  lines.push('', bold('Takeaways', noColor));
+  for (const takeaway of report.takeaways) {
+    lines.push(`- ${truncateCell(takeaway, termWidth - 2)}`);
+  }
+  if (report.warnings.length > 0) {
+    lines.push('', dim(`Warnings: ${report.warnings.join(' | ')}`, noColor));
+  }
+  return lines.join('\n');
+}
+
 async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const format = resolveTerminalJsonFormat('nutrition', cliArgs);
@@ -1485,6 +1768,227 @@ async function runNutrition(cliArgs: Record<string, unknown>): Promise<void> {
   } else {
     process.stdout.write(`${rendered}\n`);
   }
+}
+
+async function loadOptimizationInput(config: ReturnType<typeof resolveConfig>): Promise<{
+  dateRange: DateRange;
+  providers: ProviderData[];
+}> {
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+  const { providerDataList } = await loadProviderDataForRange(config, dateRange);
+  emitProviderWarnings(providerDataList, 'Warning');
+  return { dateRange, providers: providerDataList };
+}
+
+async function writeReportOutput(rendered: string, output: string | null): Promise<void> {
+  if (output) {
+    writeFileSync(output, rendered);
+  } else {
+    process.stdout.write(`${rendered}\n`);
+  }
+}
+
+async function runSimulateRouting(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveTerminalJsonFormat('simulate-routing', cliArgs);
+  const strategy = typeof cliArgs['strategy'] === 'string' ? cliArgs['strategy'] : 'conservative';
+  const { dateRange, providers } = await loadOptimizationInput(config);
+  const events = providers.flatMap((provider) => provider.events ?? []);
+  const report = buildRoutingSimulationReport(events, dateRange, MODEL_PRICING, { strategy });
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderRoutingSimulationReport(report, config.width, config.noColor);
+  await writeReportOutput(rendered, config.output);
+}
+
+async function runWaste(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveTerminalJsonFormat('waste', cliArgs);
+  const severity = typeof cliArgs['severity'] === 'string' ? cliArgs['severity'] : 'all';
+  if (!['all', 'high', 'medium', 'low'].includes(severity)) {
+    throw new TokenleakError('tokenleak waste --severity must be all, high, medium, or low');
+  }
+  const { dateRange, providers } = await loadOptimizationInput(config);
+  const events = providers.flatMap((provider) => provider.events ?? []);
+  const report = buildAgentWasteReport(providers, events, dateRange);
+  const rendered = format === 'json'
+    ? JSON.stringify(
+        severity === 'all'
+          ? report
+          : { ...report, signals: report.signals.filter((signal) => signal.severity === severity) },
+        null,
+        2,
+      )
+    : renderAgentWasteReport(report, config.width, config.noColor, severity);
+  await writeReportOutput(rendered, config.output);
+}
+
+function splitPair(value: unknown, flag: string): [string, string] | null {
+  if (typeof value !== 'string') return null;
+  const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
+  if (parts.length !== 2) {
+    throw new TokenleakError(`tokenleak behavior-diff ${flag} expects exactly two comma-separated values`);
+  }
+  return [parts[0]!, parts[1]!];
+}
+
+function resolveBehaviorSelectors(cliArgs: Record<string, unknown>): [BehaviorCohortSelector, BehaviorCohortSelector] {
+  const providerPair = splitPair(cliArgs['provider'], '--provider');
+  if (providerPair) {
+    return [
+      { label: providerPair[0], dimension: 'provider', provider: normalizeProviderToken(providerPair[0]) },
+      { label: providerPair[1], dimension: 'provider', provider: normalizeProviderToken(providerPair[1]) },
+    ];
+  }
+  const modelPair = splitPair(cliArgs['model'], '--model');
+  if (modelPair) {
+    return [
+      { label: modelPair[0], dimension: 'model', model: modelPair[0] },
+      { label: modelPair[1], dimension: 'model', model: modelPair[1] },
+    ];
+  }
+  const projectPair = splitPair(cliArgs['project'], '--project');
+  if (projectPair) {
+    return [
+      { label: projectPair[0], dimension: 'project', projectId: projectPair[0] },
+      { label: projectPair[1], dimension: 'project', projectId: projectPair[1] },
+    ];
+  }
+  const repoPair = splitPair(cliArgs['repo'], '--repo');
+  if (repoPair) {
+    return [
+      { label: repoPair[0], dimension: 'repo', repoRoot: repoPair[0] },
+      { label: repoPair[1], dimension: 'repo', repoRoot: repoPair[1] },
+    ];
+  }
+
+  throw new TokenleakError(
+    'tokenleak behavior-diff needs one selector pair: --provider a,b, --model a,b, --project a,b, or --repo a,b',
+  );
+}
+
+function parseOptimizationArgs(argv: string[]): Record<string, unknown> {
+  const cliArgs: Record<string, unknown> = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    const next = () => {
+      const value = argv[++i];
+      if (!value) throw new TokenleakError(`Missing value for ${arg}`);
+      return value;
+    };
+
+    switch (arg) {
+      case '--help':
+      case '-h':
+        cliArgs['help'] = true;
+        break;
+      case '--version':
+      case '-v':
+        cliArgs['version'] = true;
+        break;
+      case '--format':
+      case '-f':
+        cliArgs['format'] = next();
+        break;
+      case '--since':
+      case '-s':
+        cliArgs['since'] = next();
+        break;
+      case '--until':
+      case '-u':
+        cliArgs['until'] = next();
+        break;
+      case '--days':
+      case '-d':
+        cliArgs['days'] = Number(next());
+        break;
+      case '--output':
+      case '-o':
+        cliArgs['output'] = next();
+        break;
+      case '--width':
+      case '-w':
+        cliArgs['width'] = Number(next());
+        break;
+      case '--provider':
+      case '-p':
+        cliArgs['provider'] = next();
+        break;
+      case '--model':
+        cliArgs['model'] = next();
+        break;
+      case '--project':
+        cliArgs['project'] = next();
+        break;
+      case '--repo':
+        cliArgs['repo'] = next();
+        break;
+      case '--strategy':
+        cliArgs['strategy'] = next();
+        break;
+      case '--severity':
+        cliArgs['severity'] = next();
+        break;
+      case '--claude':
+        cliArgs['claude'] = true;
+        break;
+      case '--codex':
+        cliArgs['codex'] = true;
+        break;
+      case '--cursor':
+        cliArgs['cursor'] = true;
+        break;
+      case '--pi':
+        cliArgs['pi'] = true;
+        break;
+      case '--openCode':
+      case '--open-code':
+        cliArgs['openCode'] = true;
+        break;
+      case '--allProviders':
+      case '--all-providers':
+        cliArgs['allProviders'] = true;
+        break;
+      case '--listProviders':
+      case '--list-providers':
+        cliArgs['listProviders'] = true;
+        break;
+      case '--noColor':
+      case '--no-color':
+        cliArgs['noColor'] = true;
+        break;
+      default:
+        throw new TokenleakError(`Unknown optimization flag "${arg}"`);
+    }
+  }
+  return cliArgs;
+}
+
+async function runBehaviorDiff(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig({
+    ...cliArgs,
+    provider: undefined,
+  });
+  const format = resolveTerminalJsonFormat('behavior-diff', cliArgs);
+  const selectors = resolveBehaviorSelectors(cliArgs);
+  const dateRange = computeDateRange({
+    since: config.since,
+    until: config.until,
+    days: config.days,
+  });
+  const available = await selectAvailableProviders({ ...config, provider: undefined });
+  const { providerDataList } = await loadProviderDataForRange({ ...config, provider: undefined }, dateRange, available);
+  emitProviderWarnings(providerDataList, 'Warning');
+  const events = providerDataList.flatMap((provider) => provider.events ?? []);
+  const report = buildAgentBehaviorDiffReport(events, dateRange, selectors[0], selectors[1]);
+  const rendered = format === 'json'
+    ? JSON.stringify(report, null, 2)
+    : renderAgentBehaviorDiffReport(report, config.width, config.noColor);
+  await writeReportOutput(rendered, config.output);
 }
 
 export async function runFocus(cliArgs: Record<string, unknown>): Promise<void> {
@@ -1661,7 +2165,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
 
   // Merge and aggregate
   const mergedDaily = mergeProviderData(providerDataList);
-  const stats = aggregate(mergedDaily, dateRange.until);
+  const stats = aggregate(mergedDaily, dateRange.until, dateRange);
 
   // Force --more when --advisor is used (needs event data)
   const needsMore =
@@ -1762,6 +2266,8 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       output: config.output,
       more: config.more,
     };
+    const events = providerDataList.flatMap((provider) => provider.events ?? []);
+    output.optimization = buildDefaultOptimization(providerDataList, events, dateRange);
     const { port } = await startLiveServer(output, renderOptions);
     // Keep process alive until interrupted
     await new Promise<void>((resolve) => {
@@ -3365,11 +3871,58 @@ if (isDirectExecution) {
     process.exit(0);
   }
   if (argv[0] === 'waste') {
-    handleError(
-      new TokenleakError(
-        'tokenleak waste is not a standalone command. Open the TUI and use the Advisor view for Waste Patterns.',
-      ),
-    );
+    try {
+      const cliArgs = parseOptimizationArgs(argv.slice(1));
+      if (cliArgs['help']) {
+        process.stdout.write(buildWasteHelpText());
+        process.exit(0);
+      }
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+      await initPricing();
+      await runWaste(cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+  if (argv[0] === 'simulate-routing') {
+    try {
+      const cliArgs = parseOptimizationArgs(argv.slice(1));
+      if (cliArgs['help']) {
+        process.stdout.write(buildSimulateRoutingHelpText());
+        process.exit(0);
+      }
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+      await initPricing();
+      await runSimulateRouting(cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
+  }
+  if (argv[0] === 'behavior-diff') {
+    try {
+      const cliArgs = parseOptimizationArgs(argv.slice(1));
+      if (cliArgs['help']) {
+        process.stdout.write(buildBehaviorDiffHelpText());
+        process.exit(0);
+      }
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+      await initPricing();
+      await runBehaviorDiff(cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
   }
   if (argv[0] === 'nutrition') {
     const nutritionArgv = argv.slice(1);

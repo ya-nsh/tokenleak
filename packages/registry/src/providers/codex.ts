@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { homedir } from 'node:os';
 import type {
   DateRange,
@@ -11,9 +11,11 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
+import { collectFiles } from './local-usage';
 import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
-import { UsageFileCache } from '../parsers/usage-cache';
-import { normalizeModelName } from '../models/normalizer';
+import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
+import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
+import { mergeServiceTiers } from '@tokenleak/core';
 import { isInRange, mapWithConcurrency } from '../utils';
 import {
   addUnknownPricingWarnings,
@@ -42,11 +44,6 @@ const CODEX_COLORS: ProviderColors = {
   gradient: ['#10a37f', '#4ade80'],
 };
 
-const DEFAULT_SESSIONS_DIR = join(
-  process.env['CODEX_HOME'] ?? join(homedir(), '.codex'),
-  'sessions',
-);
-
 interface CodexUsageRecord {
   date: string;
   timestamp: string;
@@ -56,19 +53,37 @@ interface CodexUsageRecord {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   prompt?: string;
+  promptId?: string;
   sessionId?: string;
   projectId?: string;
+  turnId?: string;
+  responseId?: string;
+  source?: 'record' | 'notification';
+  serviceTier?: string;
+  serviceTierSource?: UsageEvent['serviceTierSource'];
+  counterAdvanced?: boolean;
+  cumulativeOnly?: boolean;
 }
 
 interface SessionContext {
   model: string;
+  hasTurnModel?: boolean;
+  hasTurnTier?: boolean;
+  sessionId?: string;
+  turnId?: string;
+  serviceTier?: string;
+  sessionServiceTier?: string;
   projectId?: string;
   previousTotals: {
     inputTokens: number;
     outputTokens: number;
     cachedInputTokens: number;
+    cacheWriteTokens: number;
   } | null;
   lastUserPrompt?: string;
+  lastUserPromptId?: string;
+  promptSequence?: number;
+  promptSource?: string;
 }
 
 const MAX_PROMPT_CHARS = 2_000;
@@ -100,9 +115,9 @@ function parseResponseEvent(record: unknown): CodexResponseEvent | null {
   const usage = obj['usage'] as Record<string, unknown>;
 
   if (
-    typeof usage['input_tokens'] !== 'number' ||
-    typeof usage['output_tokens'] !== 'number' ||
-    typeof usage['total_tokens'] !== 'number'
+    typeof usage['input_tokens'] !== 'number' || !Number.isFinite(usage['input_tokens']) || usage['input_tokens'] < 0 ||
+    typeof usage['output_tokens'] !== 'number' || !Number.isFinite(usage['output_tokens']) || usage['output_tokens'] < 0 ||
+    typeof usage['total_tokens'] !== 'number' || !Number.isFinite(usage['total_tokens']) || usage['total_tokens'] < 0
   ) {
     return null;
   }
@@ -156,22 +171,7 @@ function incrementWarningCount(
 }
 
 function collectJsonlFiles(dir: string): string[] {
-  if (!existsSync(dir)) {
-    return [];
-  }
-
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      files.push(...collectJsonlFiles(fullPath));
-    } else if (entry.endsWith('.jsonl')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
+  return collectFiles(dir, (_path, name) => name.endsWith('.jsonl'));
 }
 
 function inferModelFromContext(record: unknown): string | null {
@@ -197,17 +197,8 @@ function inferModelFromContext(record: unknown): string | null {
     }
   }
 
-  const instructions = meta['base_instructions'];
-  if (typeof instructions === 'object' && instructions !== null) {
-    const text = (instructions as Record<string, unknown>)['text'];
-    if (typeof text === 'string') {
-      const match = /based on ([A-Za-z0-9.-]+)/i.exec(text);
-      if (match?.[1]) {
-        return match[1].toLowerCase();
-      }
-    }
-  }
-
+  // Instructions describe the agent, not the model serving a particular turn.
+  // In particular, "based on GPT-5." must never replace explicit turn metadata.
   return null;
 }
 
@@ -326,9 +317,7 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     return null;
   }
 
-  const parseUsage = (
-    usage: unknown,
-  ): { inputTokens: number; outputTokens: number; cachedInputTokens: number } | null => {
+  const parseUsage = (usage: unknown): SessionContext['previousTotals'] => {
     if (typeof usage !== 'object' || usage === null) {
       return null;
     }
@@ -338,42 +327,65 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     const outputTokens = usageObj['output_tokens'];
     const cachedInputTokens = usageObj['cached_input_tokens'];
 
-    if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') {
+    if (
+      typeof inputTokens !== 'number' || !Number.isFinite(inputTokens) || inputTokens < 0 ||
+      typeof outputTokens !== 'number' || !Number.isFinite(outputTokens) || outputTokens < 0
+    ) {
       return null;
     }
 
     return {
       inputTokens,
       outputTokens,
-      cachedInputTokens: typeof cachedInputTokens === 'number' ? cachedInputTokens : 0,
+      cachedInputTokens: typeof cachedInputTokens === 'number' && Number.isFinite(cachedInputTokens)
+        ? Math.max(0, cachedInputTokens) : 0,
+      cacheWriteTokens: typeof usageObj['cache_write_input_tokens'] === 'number' &&
+        Number.isFinite(usageObj['cache_write_input_tokens'])
+        ? Math.max(0, usageObj['cache_write_input_tokens']) : 0,
     };
   };
 
   let usage = parseUsage(lastUsage);
+  const hasLastUsage = usage !== null;
+  const cumulative = parseUsage(totalUsage);
+  const previous = context.previousTotals;
+  if (cumulative) {
+    context.previousTotals = cumulative;
+    // token_count is also emitted for status/rate-limit updates. A repeated
+    // cumulative counter is not a new model response, even if last usage is set.
+    if (previous && cumulative.inputTokens === previous.inputTokens &&
+      cumulative.outputTokens === previous.outputTokens &&
+      cumulative.cachedInputTokens === previous.cachedInputTokens &&
+      cumulative.cacheWriteTokens === previous.cacheWriteTokens) {
+      return null;
+    }
+  }
 
   if (!usage) {
-    const cumulative = parseUsage(totalUsage);
     if (!cumulative) {
       return null;
     }
 
-    const previous = context.previousTotals ?? {
+    // Resumed sessions/compaction may restart the counter. Model switches do not.
+    const baseline = previous && cumulative.inputTokens >= previous.inputTokens &&
+      cumulative.outputTokens >= previous.outputTokens ? previous : {
       inputTokens: 0,
       outputTokens: 0,
       cachedInputTokens: 0,
+      cacheWriteTokens: 0,
     };
     usage = {
-      inputTokens: Math.max(0, cumulative.inputTokens - previous.inputTokens),
-      outputTokens: Math.max(0, cumulative.outputTokens - previous.outputTokens),
-      cachedInputTokens: Math.max(0, cumulative.cachedInputTokens - previous.cachedInputTokens),
+      inputTokens: Math.max(0, cumulative.inputTokens - baseline.inputTokens),
+      outputTokens: Math.max(0, cumulative.outputTokens - baseline.outputTokens),
+      cachedInputTokens: Math.max(0, cumulative.cachedInputTokens - baseline.cachedInputTokens),
+      cacheWriteTokens: Math.max(0, cumulative.cacheWriteTokens - baseline.cacheWriteTokens),
     };
-    context.previousTotals = cumulative;
-  } else if (parseUsage(totalUsage)) {
-    context.previousTotals = parseUsage(totalUsage);
   }
 
   const cacheReadTokens = Math.min(usage.cachedInputTokens, usage.inputTokens);
-  const inputTokens = Math.max(0, usage.inputTokens - cacheReadTokens);
+  const cacheWriteTokens = Math.min(usage.cacheWriteTokens, usage.inputTokens - cacheReadTokens);
+  const inputTokens = Math.max(0, usage.inputTokens - cacheReadTokens - cacheWriteTokens);
+  if (usage.inputTokens + usage.outputTokens === 0) return null;
 
   return {
     date,
@@ -382,12 +394,48 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     inputTokens,
     outputTokens: usage.outputTokens,
     cacheReadTokens,
-    cacheWriteTokens: 0,
+    cacheWriteTokens,
     prompt: context.lastUserPrompt,
+    promptId: context.lastUserPromptId,
+    counterAdvanced: cumulative !== null,
+    cumulativeOnly: cumulative !== null && !hasLastUsage,
   };
 }
 
 function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageRecord | null {
+  const obj = typeof record === 'object' && record !== null ? record as Record<string, unknown> : null;
+  const payload = obj?.['payload'];
+  const meta = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+  if (obj?.['type'] === 'session_meta' && meta && 'service_tier' in meta) {
+    context.sessionServiceTier = normalizeServiceTier(meta['service_tier']);
+    if (!context.hasTurnTier) context.serviceTier = context.sessionServiceTier;
+  }
+  if (obj?.['type'] === 'turn_context') {
+    context.turnId = typeof meta?.['turn_id'] === 'string' ? meta['turn_id'] : undefined;
+    context.hasTurnTier = normalizeServiceTier(meta?.['service_tier']) !== undefined;
+    // Missing metadata on the next turn must not inherit a previous Fast setting.
+    context.serviceTier = normalizeServiceTier(meta?.['service_tier']) ?? context.sessionServiceTier;
+  }
+  if (obj?.['type'] === 'token_usage_record' && meta) {
+    // New response-scoped records coexist with token_count status notifications.
+    // Reuse token validation/cache accounting without changing the legacy counter.
+    const usage = parseTokenCountUsage({ type: 'event_msg', timestamp: obj['timestamp'],
+      payload: { type: 'token_count', info: { last_token_usage: meta['usage'] } } }, context);
+    if (!usage) return null;
+    const recordedTier = normalizeServiceTier(meta['service_tier']);
+    return { ...usage, source: 'record',
+      serviceTier: recordedTier ?? context.serviceTier,
+      serviceTierSource: recordedTier ? 'response' : context.serviceTier ? 'request' : undefined,
+      model: typeof meta['model'] === 'string' && meta['model'].trim() ? meta['model'].trim() : context.model,
+      turnId: typeof meta['turn_id'] === 'string' ? meta['turn_id'] : context.turnId,
+      responseId: typeof meta['response_id'] === 'string' ? meta['response_id'] : undefined };
+  }
+  if (typeof record === 'object' && record !== null && 'type' in record && record.type === 'session_meta') {
+    const payload = (record as Record<string, unknown>)['payload'];
+    if (typeof payload === 'object' && payload !== null && 'id' in payload && typeof payload.id === 'string') {
+      context.sessionId = payload.id;
+    }
+  }
   const inferredProjectId = inferProjectIdFromContext(record);
   if (inferredProjectId) {
     context.projectId = inferredProjectId;
@@ -395,22 +443,28 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
 
   const inferredModel = inferModelFromContext(record);
   if (inferredModel) {
-    if (context.model !== inferredModel) {
+    if (obj?.['type'] === 'turn_context' || !context.hasTurnModel) {
       context.model = inferredModel;
-      context.previousTotals = null;
     }
+    if (obj?.['type'] === 'turn_context') context.hasTurnModel = true;
     return null;
   }
 
   const userPrompt = extractUserPrompt(record);
   if (userPrompt) {
     context.lastUserPrompt = userPrompt;
+    context.promptSequence = (context.promptSequence ?? 0) + 1;
+    // The sequence is local to this file, even when several files share a session ID.
+    context.lastUserPromptId = JSON.stringify([context.promptSource, context.promptSequence]);
     return null;
   }
 
   const tokenCountUsage = parseTokenCountUsage(record, context);
   if (tokenCountUsage) {
-    return tokenCountUsage;
+    const recordedTier = normalizeServiceTier(meta?.['service_tier']);
+    return { ...tokenCountUsage, source: 'notification', turnId: context.turnId,
+      serviceTier: recordedTier ?? context.serviceTier,
+      serviceTierSource: recordedTier ? 'response' : context.serviceTier ? 'request' : undefined };
   }
 
   const legacyEvent = parseResponseEvent(record);
@@ -427,12 +481,147 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
     date,
     timestamp: legacyEvent.timestamp,
     model: compactModelDateSuffix(legacyEvent.model),
+    serviceTier: normalizeServiceTier(obj?.['service_tier']) ?? context.serviceTier,
+    serviceTierSource: normalizeServiceTier(obj?.['service_tier']) ? 'response' : context.serviceTier ? 'request' : undefined,
     inputTokens: legacyEvent.usage.input_tokens,
     outputTokens: legacyEvent.usage.output_tokens,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     prompt: context.lastUserPrompt,
+    promptId: context.lastUserPromptId,
   };
+}
+
+interface UsageCandidate {
+  event: UsageEvent;
+  source?: CodexUsageRecord['source'];
+  coveredRecords?: UsageCandidate[];
+  counterAdvanced?: boolean;
+  keys?: string[];
+  adjusted?: boolean;
+}
+
+function usageKey(event: UsageEvent): string {
+  return event.responseId ? JSON.stringify([event.sessionId, event.responseId]) :
+    JSON.stringify([event.sessionId, event.timestamp, event.model,
+      event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
+}
+
+function reconcileUsageRecords(candidates: UsageCandidate[]): UsageCandidate[] {
+  const responses = new Set<string>();
+  const unique = candidates.filter(({ event, source }) => {
+    if (source !== 'record' || !event.responseId) return true;
+    const key = usageKey(event);
+    if (responses.has(key)) return false;
+    responses.add(key);
+    return true;
+  });
+  const mirrors = new Map<string, { records: UsageCandidate[]; cursor: number }>();
+  const keyFor = (event: UsageEvent) => JSON.stringify([event.sessionId, event.turnId, event.inputTokens,
+    event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens]);
+  for (const candidate of unique) {
+    const { event, source } = candidate;
+    candidate.keys = [usageKey(event)];
+    if (source !== 'record' || !event.turnId) continue;
+    const key = keyFor(event);
+    const matches = mirrors.get(key) ?? { records: [], cursor: 0 };
+    matches.records.push(candidate);
+    mirrors.set(key, matches);
+  }
+  for (const matches of mirrors.values()) {
+    matches.records.sort((a, b) => Date.parse(a.event.timestamp) - Date.parse(b.event.timestamp));
+  }
+  const removed = new Set<UsageCandidate>();
+  const matchedRecords = new Set<UsageCandidate>();
+  for (const candidate of unique) {
+    const { event, source } = candidate;
+    if (source !== 'notification' || !event.turnId) continue;
+    const matches = mirrors.get(keyFor(event));
+    if (!matches) continue;
+    const timestamp = Date.parse(event.timestamp);
+    // A mirrored notification can be delayed by tool processing. Pair at most
+    // once, within the same turn and one minute; never deduplicate equal-size
+    // responses within a single source or unrelated turns.
+    while (matches.cursor < matches.records.length &&
+      Date.parse(matches.records[matches.cursor]!.event.timestamp) < timestamp - 60_000) {
+      matches.cursor++;
+    }
+    const match = matches.records[matches.cursor];
+    if (match && Math.abs(Date.parse(match.event.timestamp) - timestamp) <= 60_000) {
+      matches.cursor++;
+      removed.add(candidate);
+      matchedRecords.add(match);
+      // Retain the notification identity for older active/archive copies.
+      match.keys!.push(...candidate.keys!);
+    }
+  }
+
+  // Response records can be written after their cumulative notification. Use
+  // event time to place delayed responses into the first counter boundary
+  // that covers them; do not borrow responses from a later request or reset.
+  const assigned = new Map<UsageCandidate, UsageCandidate>();
+  for (const boundary of unique) {
+    for (const record of boundary.coveredRecords ?? []) assigned.set(record, boundary);
+  }
+  const boundaries = new Map<string | undefined, UsageCandidate[]>();
+  for (const candidate of unique) {
+    if (!candidate.counterAdvanced || !Number.isFinite(Date.parse(candidate.event.timestamp))) continue;
+    const list = boundaries.get(candidate.event.sessionId) ?? [];
+    list.push(candidate);
+    boundaries.set(candidate.event.sessionId, list);
+  }
+  for (const list of boundaries.values()) {
+    list.sort((a, b) => Date.parse(a.event.timestamp) - Date.parse(b.event.timestamp));
+  }
+  for (const candidate of unique) {
+    if (candidate.source !== 'record' || matchedRecords.has(candidate)) continue;
+    const timestamp = Date.parse(candidate.event.timestamp);
+    if (!Number.isFinite(timestamp)) continue;
+    const list = boundaries.get(candidate.event.sessionId) ?? [];
+    let low = 0;
+    let high = list.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (Date.parse(list[middle]!.event.timestamp) < timestamp) low = middle + 1;
+      else high = middle;
+    }
+    const boundary = list[low];
+    const previous = assigned.get(candidate);
+    // Equal timestamps cannot disambiguate counters; retain file-order coverage.
+    if (previous && (!boundary || Date.parse(boundary.event.timestamp) >= Date.parse(previous.event.timestamp))) continue;
+    if (boundary?.coveredRecords) {
+      if (previous?.coveredRecords) {
+        previous.coveredRecords = previous.coveredRecords.filter((record) => record !== candidate);
+      }
+      boundary.coveredRecords.push(candidate);
+    }
+  }
+
+  const uniqueRecords = new Set(unique.filter((candidate) => candidate.source === 'record'));
+  for (const candidate of unique) {
+    if (removed.has(candidate) || !candidate.coveredRecords?.length) continue;
+    // A cumulative-only delta covers responses since the preceding counter.
+    // Records mirrored by another notification have already been accounted for.
+    const covered = candidate.coveredRecords.filter((record) =>
+      uniqueRecords.has(record) && !matchedRecords.has(record));
+    const fields = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const;
+    const remaining = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    for (const field of fields) {
+      remaining[field] = candidate.event[field] - covered.reduce((sum, record) => sum + record.event[field], 0);
+    }
+    // A counter reset can exclude earlier records; don't subtract incompatible coverage.
+    if (!covered.length || fields.some((field) => remaining[field] < 0)) continue;
+    const totalTokens = fields.reduce((sum, field) => sum + remaining[field], 0);
+    if (totalTokens === 0) {
+      covered[0]!.keys!.push(...candidate.keys!);
+      removed.add(candidate);
+    } else {
+      candidate.event = { ...candidate.event, ...remaining, totalTokens,
+        ...resolveUsageCost({ model: candidate.event.model, serviceTier: candidate.event.serviceTier, ...remaining }) };
+      candidate.adjusted = true;
+    }
+  }
+  return unique.filter((candidate) => !removed.has(candidate));
 }
 
 /**
@@ -450,14 +639,18 @@ export class CodexProvider implements IProvider {
   readonly colors: ProviderColors = CODEX_COLORS;
 
   private readonly sessionsDir: string;
+  private readonly archivedSessionsDir: string | undefined;
 
-  constructor(baseDir?: string) {
-    this.sessionsDir = baseDir ?? DEFAULT_SESSIONS_DIR;
+  constructor(baseDir?: string, archivedDir?: string) {
+    const codexHome = process.env['CODEX_HOME'] ?? join(homedir(), '.codex');
+    this.sessionsDir = baseDir ?? join(codexHome, 'sessions');
+    // A custom directory stays isolated unless its archive is explicitly supplied.
+    this.archivedSessionsDir = archivedDir ?? (baseDir ? undefined : join(codexHome, 'archived_sessions'));
   }
 
   async isAvailable(): Promise<boolean> {
     try {
-      return existsSync(this.sessionsDir);
+      return existsSync(this.sessionsDir) || Boolean(this.archivedSessionsDir && existsSync(this.archivedSessionsDir));
     } catch {
       return false;
     }
@@ -465,13 +658,16 @@ export class CodexProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
-    const files = collectJsonlFiles(this.sessionsDir);
+    const files = [...collectJsonlFiles(this.sessionsDir),
+      ...(this.archivedSessionsDir ? collectJsonlFiles(this.archivedSessionsDir) : [])];
     const warnings = new Map<string, ProviderWarning>();
-    const cache = new UsageFileCache<CodexUsageRecord>('codex-v1', this.sessionsDir);
+    const cache = new UsageFileCache<CodexUsageRecord>('codex-v2', this.sessionsDir, isCachedUsageRecord);
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
-      const fileEvents: UsageEvent[] = [];
+      const candidates: UsageCandidate[] = [];
+      let pendingRecords: UsageCandidate[] = [];
       const context: SessionContext = {
-        model: 'gpt-5',
+        model: 'unknown',
+        promptSource: relative(this.sessionsDir, file).split(sep).join('/'),
         projectId: undefined,
         previousTotals: null,
         lastUserPrompt: undefined,
@@ -488,19 +684,17 @@ export class CodexProvider implements IProvider {
           })) {
             const usage = parseUsageRecord(record, context);
             if (!usage) continue;
-            usage.sessionId = relativeFile;
+            usage.sessionId = context.sessionId ?? basename(relativeFile);
             usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
             records.push(usage);
           }
           return { records, warnings: fileWarnings };
         });
-        for (const warning of parsed.warnings) {
-          incrementWarningCount(warnings, warning.kind, warning.file);
-        }
+        for (const warning of parsed.warnings) incrementWarningCount(warnings, warning.kind, warning.file);
         for (const usage of parsed.records) {
-          if (!isInRange(usage.date, range)) continue;
-
-          const normalizedModel = normalizeModelName(compactModelDateSuffix(usage.model));
+          const identity = resolveModelIdentity(compactModelDateSuffix(usage.model));
+          const normalizedModel = identity.model;
+          const serviceTier = usage.serviceTier ?? identity.serviceTier ?? 'unknown';
           const inputTokens = usage.inputTokens;
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
@@ -511,8 +705,9 @@ export class CodexProvider implements IProvider {
             outputTokens,
             cacheReadTokens,
             cacheWriteTokens,
+            serviceTier,
           });
-          fileEvents.push({
+          const candidate: UsageCandidate = { source: usage.source, counterAdvanced: usage.counterAdvanced, event: {
             provider: this.name,
             timestamp: usage.timestamp,
             date: usage.date,
@@ -528,19 +723,44 @@ export class CodexProvider implements IProvider {
             pricedTokens: cost.pricedTokens,
             unpricedTokens: cost.unpricedTokens,
             sessionId: usage.sessionId,
+            turnId: usage.turnId,
+            responseId: usage.responseId,
+            serviceTier,
+            serviceTierSource: usage.serviceTierSource ?? (identity.serviceTier ? 'model-name' : undefined),
             projectId: usage.projectId,
             prompt: usage.prompt,
-          });
+            promptId: usage.promptId,
+          } };
+          if (usage.source === 'record') pendingRecords.push(candidate);
+          if (usage.counterAdvanced) {
+            if (usage.cumulativeOnly) candidate.coveredRecords = pendingRecords;
+            pendingRecords = [];
+          }
+          candidates.push(candidate);
         }
       } catch {
         // Skip files that fail to parse
         incrementWarningCount(warnings, 'read', file);
         return [];
       }
-      return fileEvents;
+      return reconcileUsageRecords(candidates);
     });
     await cache.save();
-    const events = eventsByFile.flat();
+    // Moving a session into the archive must not count overlapping copies twice.
+    // Include timestamp and session identity: equal token counts alone are not duplicates.
+    const all = eventsByFile.flatMap((entries, fileIndex) => entries.map((candidate) => ({ candidate, fileIndex })));
+    const rank = ({ candidate }: typeof all[number]) => candidate.source === 'record' ? 0 : candidate.adjusted ? 1 : 2;
+    const seen = new Map<string, number>();
+    const selected = new Set<UsageCandidate>();
+    // Prefer response metadata and reconciled deltas regardless of which copy is active.
+    for (const { candidate, fileIndex } of [...all].sort((a, b) => rank(a) - rank(b))) {
+      const keys = candidate.keys!;
+      const previousFile = keys.map((key) => seen.get(key)).find((owner) => owner !== undefined && owner !== fileIndex);
+      for (const key of keys) seen.set(key, previousFile ?? fileIndex);
+      if (previousFile === undefined) selected.add(candidate);
+    }
+    const events = all.filter(({ candidate }) => selected.has(candidate))
+      .map(({ candidate }) => candidate.event).filter((event) => isInRange(event.date, range));
     addUnknownPricingWarnings(warnings, events);
 
     for (const event of events) {
@@ -573,6 +793,8 @@ export class CodexProvider implements IProvider {
       breakdown.cost += event.cost;
       breakdown.pricedTokens = (breakdown.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
       breakdown.unpricedTokens = (breakdown.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
+      breakdown.serviceTiers = mergeServiceTiers(breakdown.serviceTiers, [{ tier: event.serviceTier ?? 'unknown',
+        tokens: event.totalTokens, cost: event.cost, unpricedTokens: event.unpricedTokens ?? 0 }]);
       breakdown.costSource =
         (breakdown.unpricedTokens ?? 0) >= breakdown.totalTokens ? 'unpriced' : breakdown.costSource;
       if (!breakdown.pricing) {

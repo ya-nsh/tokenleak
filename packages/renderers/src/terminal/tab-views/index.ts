@@ -10,3 +10,6 @@ export { renderSessionView } from './session-view';
 export { renderModelView } from './model-view';
 export { renderTokenView } from './token-view';
 export { renderCwdView } from './cwd-view';
+export { renderRoutingSimulatorView } from './routing-simulator-view';
+export { renderAgentWasteView } from './agent-waste-view';
+export { renderAgentBehaviorDiffView } from './agent-behavior-diff-view';

@@ -1,4 +1,5 @@
 import { VERSION } from '@tokenleak/core';
+import { parseCursorHeader } from './parsers/cursor-csv';
 import {
   chmodSync,
   existsSync,
@@ -18,6 +19,7 @@ import { basename, dirname, join } from 'node:path';
 const CURSOR_USAGE_CSV_ENDPOINT =
   'https://cursor.com/api/dashboard/export-usage-events-csv?strategy=tokens';
 const CURSOR_USAGE_SUMMARY_ENDPOINT = 'https://cursor.com/api/usage-summary';
+const DEFAULT_CURSOR_FETCH_TIMEOUT_MS = 10_000;
 
 export type CursorFailureReason =
   | 'auth'
@@ -92,6 +94,70 @@ export interface CursorSetupStatus {
   activeAccountLabel?: string;
 }
 
+export type CursorNetworkFailureKind =
+  | 'dns'
+  | 'timeout'
+  | 'proxy'
+  | 'tls'
+  | 'http_auth'
+  | 'api'
+  | 'parse'
+  | 'redirect'
+  | 'unknown';
+
+export interface CursorNetworkClassification {
+  kind: CursorNetworkFailureKind;
+  message: string;
+  hint?: string;
+}
+
+export interface CursorNetworkSettings {
+  timeoutMs: number;
+  proxy?: string;
+  proxySource?: string;
+  proxyDisplay?: string;
+  noProxyMatched: boolean;
+  caFile?: string;
+  caFileError?: string;
+  tls?: {
+    ca?: string;
+    rejectUnauthorized?: boolean;
+  };
+}
+
+export interface CursorDiagnosticCheck {
+  name: string;
+  ok: boolean;
+  message: string;
+  status?: number;
+  kind?: CursorNetworkFailureKind;
+  hint?: string;
+}
+
+export interface CursorDiagnosticResult {
+  network: {
+    timeoutMs: number;
+    proxy?: string;
+    proxySource?: string;
+    noProxyMatched: boolean;
+    caFile?: string;
+    tlsVerification: 'enabled' | 'disabled';
+  };
+  checks: CursorDiagnosticCheck[];
+}
+
+interface CursorNetworkOverrides {
+  insecureSkipTlsVerify?: boolean;
+}
+
+type CursorFetchInit = RequestInit & {
+  proxy?: string;
+  tls?: {
+    ca?: string;
+    rejectUnauthorized?: boolean;
+  };
+};
+
 function getCursorRootDir(): string {
   return process.env['TOKENLEAK_CURSOR_DIR'] ?? join(homedir(), '.config', 'tokenleak');
 }
@@ -102,6 +168,261 @@ export function getCursorCredentialsPath(): string {
 
 export function getCursorCacheDir(): string {
   return join(getCursorRootDir(), 'cursor-cache');
+}
+
+function envValue(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function parseCursorTimeoutMs(): number {
+  const raw = envValue('TOKENLEAK_CURSOR_TIMEOUT_MS');
+  if (!raw) {
+    return DEFAULT_CURSOR_FETCH_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_CURSOR_FETCH_TIMEOUT_MS;
+}
+
+function splitNoProxyHostPort(entry: string): { host: string; port?: string } {
+  const trimmed = entry.trim().toLowerCase();
+  if (!trimmed) {
+    return { host: '' };
+  }
+
+  if (trimmed.startsWith('[')) {
+    const end = trimmed.indexOf(']');
+    if (end >= 0) {
+      const host = trimmed.slice(1, end);
+      const port = trimmed.slice(end + 1).replace(/^:/, '') || undefined;
+      return { host, port };
+    }
+  }
+
+  const colonIndex = trimmed.lastIndexOf(':');
+  if (colonIndex > 0 && trimmed.indexOf(':') === colonIndex) {
+    return {
+      host: trimmed.slice(0, colonIndex),
+      port: trimmed.slice(colonIndex + 1) || undefined,
+    };
+  }
+
+  return { host: trimmed };
+}
+
+function noProxyMatches(url: string, noProxy?: string): boolean {
+  if (!noProxy?.trim()) {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  for (const entry of noProxy.split(',')) {
+    const { host: entryHost, port: entryPort } = splitNoProxyHostPort(entry);
+    if (!entryHost) {
+      continue;
+    }
+
+    if (entryHost === '*') {
+      return true;
+    }
+
+    if (entryPort && entryPort !== port) {
+      continue;
+    }
+
+    if (entryHost.startsWith('*.')) {
+      const suffix = entryHost.slice(1);
+      if (host.endsWith(suffix)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (entryHost.startsWith('.')) {
+      const bare = entryHost.slice(1);
+      if (host === bare || host.endsWith(entryHost)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (host === entryHost || host.endsWith(`.${entryHost}`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getProxyCandidate(): { proxy?: string; source?: string } {
+  for (const name of [
+    'TOKENLEAK_CURSOR_PROXY',
+    'HTTPS_PROXY',
+    'https_proxy',
+    'HTTP_PROXY',
+    'http_proxy',
+  ]) {
+    const proxy = envValue(name);
+    if (proxy) {
+      return { proxy, source: name };
+    }
+  }
+
+  return {};
+}
+
+function redactProxy(proxy: string): string {
+  try {
+    const parsed = new URL(proxy);
+    if (parsed.username || parsed.password) {
+      parsed.username = '***';
+      parsed.password = parsed.password ? '***' : '';
+    }
+    const redacted = parsed.toString();
+    return parsed.pathname === '/' && !proxy.endsWith('/') ? redacted.slice(0, -1) : redacted;
+  } catch {
+    return proxy.replace(/\/\/([^:@/\s]+):([^@/\s]+)@/, '//***:***@');
+  }
+}
+
+export function resolveCursorNetworkSettings(
+  url: string,
+  overrides: CursorNetworkOverrides = {},
+): CursorNetworkSettings {
+  const noProxy = envValue('NO_PROXY') ?? envValue('no_proxy');
+  const noProxyMatched = noProxyMatches(url, noProxy);
+  const candidate = noProxyMatched ? {} : getProxyCandidate();
+  const caFile = envValue('TOKENLEAK_CURSOR_CA_FILE');
+  const tls: CursorNetworkSettings['tls'] = {};
+  let caFileError: string | undefined;
+
+  if (caFile) {
+    try {
+      tls.ca = readFileSync(caFile, 'utf8');
+    } catch (error: unknown) {
+      caFileError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  if (overrides.insecureSkipTlsVerify) {
+    tls.rejectUnauthorized = false;
+  }
+
+  return {
+    timeoutMs: parseCursorTimeoutMs(),
+    proxy: candidate.proxy,
+    proxySource: candidate.source,
+    proxyDisplay: candidate.proxy ? redactProxy(candidate.proxy) : undefined,
+    noProxyMatched,
+    caFile,
+    caFileError,
+    tls: Object.keys(tls).length > 0 ? tls : undefined,
+  };
+}
+
+export function classifyCursorNetworkError(error: unknown): CursorNetworkClassification {
+  const message = error instanceof Error ? error.message : String(error);
+  const name = error instanceof Error ? error.name : '';
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : '';
+  const haystack = `${name} ${code} ${message}`.toLowerCase();
+
+  if (
+    haystack.includes('enotfound') ||
+    haystack.includes('eai_again') ||
+    haystack.includes('getaddrinfo') ||
+    haystack.includes('dns')
+  ) {
+    return {
+      kind: 'dns',
+      message,
+      hint: 'Check DNS/VPN routing for cursor.com and run `tokenleak cursor doctor`.',
+    };
+  }
+
+  if (
+    haystack.includes('proxy') ||
+    haystack.includes('tunnel') ||
+    haystack.includes('connect aborted') ||
+    haystack.includes('407')
+  ) {
+    return {
+      kind: 'proxy',
+      message,
+      hint: 'Set TOKENLEAK_CURSOR_PROXY or your HTTPS_PROXY/HTTP_PROXY value, then run `tokenleak cursor doctor`.',
+    };
+  }
+
+  if (name === 'AbortError' || haystack.includes('abort') || haystack.includes('timeout')) {
+    return {
+      kind: 'timeout',
+      message,
+      hint: 'Try increasing TOKENLEAK_CURSOR_TIMEOUT_MS and run `tokenleak cursor doctor`.',
+    };
+  }
+
+  if (
+    haystack.includes('certificate') ||
+    haystack.includes('cert_') ||
+    haystack.includes('self signed') ||
+    haystack.includes('unable_to_verify') ||
+    haystack.includes('unable to verify') ||
+    haystack.includes('tls') ||
+    haystack.includes('ssl')
+  ) {
+    return {
+      kind: 'tls',
+      message,
+      hint: 'Export your company root CA as PEM and set TOKENLEAK_CURSOR_CA_FILE, then run `tokenleak cursor doctor`.',
+    };
+  }
+
+  return {
+    kind: 'unknown',
+    message,
+    hint: 'Run `tokenleak cursor doctor` to collect network diagnostics.',
+  };
+}
+
+function formatNetworkError(error: unknown): string {
+  const classification = classifyCursorNetworkError(error);
+  const prefix = classification.kind === 'unknown'
+    ? 'Failed to connect'
+    : `Failed to connect (${classification.kind})`;
+  return `${prefix}: ${classification.message}. ${classification.hint}`;
+}
+
+function buildFetchInit(
+  url: string,
+  init: RequestInit,
+  overrides: CursorNetworkOverrides = {},
+): { init: CursorFetchInit; settings: CursorNetworkSettings } {
+  const settings = resolveCursorNetworkSettings(url, overrides);
+  if (settings.caFileError) {
+    throw new CursorAuthError(
+      `Failed to read TOKENLEAK_CURSOR_CA_FILE (${settings.caFile}): ${settings.caFileError}. Check the file path or export the company root CA as a readable PEM file.`,
+      'network',
+    );
+  }
+
+  const fetchInit: CursorFetchInit = { ...init };
+  if (settings.proxy) {
+    fetchInit.proxy = settings.proxy;
+  }
+  if (settings.tls) {
+    fetchInit.tls = settings.tls;
+  }
+  return { init: fetchInit, settings };
 }
 
 function ensureDir(dirPath: string, mode?: number): void {
@@ -125,25 +446,22 @@ function atomicWriteFile(path: string, contents: string, mode?: number): void {
   renameSync(tempPath, path);
 }
 
-const CURSOR_FETCH_TIMEOUT_MS = 10_000;
-
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  overrides: CursorNetworkOverrides = {},
+): Promise<Response> {
+  const { init: fetchInit, settings } = buildFetchInit(url, init, overrides);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CURSOR_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), settings.timeoutMs);
 
   try {
     return await fetch(url, {
-      ...init,
+      ...fetchInit,
       signal: controller.signal,
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new CursorAuthError(
-        `Failed to connect: request timed out after ${CURSOR_FETCH_TIMEOUT_MS}ms`,
-        'network',
-      );
-    }
-    throw error;
+    throw new CursorAuthError(formatNetworkError(error), 'network');
   } finally {
     clearTimeout(timeout);
   }
@@ -516,7 +834,9 @@ export async function validateCursorSession(sessionToken: string): Promise<Valid
   } catch (error: unknown) {
     return {
       valid: false,
-      error: `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+      error: error instanceof CursorAuthError
+        ? error.message
+        : formatNetworkError(error),
       reason: 'network',
     };
   }
@@ -564,6 +884,17 @@ export async function validateCursorSession(sessionToken: string): Promise<Valid
   }
 }
 
+function isCursorAuthResponse(response: Response): boolean {
+  if (response.status === 401 || response.status === 403) return true;
+  try {
+    const url = new URL(response.url);
+    return url.hostname === 'authenticator.cursor.sh' ||
+      ((url.hostname === 'cursor.com' || url.hostname === 'www.cursor.com') && /^\/(?:login|signin|sign-in)(?:\/|$)/.test(url.pathname));
+  } catch {
+    return false;
+  }
+}
+
 async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
   let response: Response;
   try {
@@ -574,13 +905,10 @@ async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
     if (error instanceof CursorAuthError) {
       throw error;
     }
-    throw new CursorAuthError(
-      `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
-      'network',
-    );
+    throw new CursorAuthError(formatNetworkError(error), 'network');
   }
 
-  if (response.status === 401 || response.status === 403) {
+  if (isCursorAuthResponse(response)) {
     throw new CursorAuthError(
       "Cursor session expired. Please run 'tokenleak cursor login' to re-authenticate.",
       'auth',
@@ -591,12 +919,228 @@ async function fetchCursorUsageCsv(sessionToken: string): Promise<string> {
     throw new CursorAuthError(`Cursor API returned status ${response.status}`, 'api');
   }
 
-  const text = await response.text();
-  if (!text.startsWith('Date,')) {
+  const text = (await response.text()).replace(/^\uFEFF/, '').trimStart();
+  if (!parseCursorHeader(text.split(/\r?\n/, 1)[0] ?? '')) {
     throw new CursorAuthError('Invalid response from Cursor API - expected CSV format', 'parse');
   }
 
   return text;
+}
+
+async function runDiagnosticFetch(
+  name: string,
+  url: string,
+  init: RequestInit,
+  evaluate: (response: Response) => Promise<CursorDiagnosticCheck>,
+  overrides: CursorNetworkOverrides,
+): Promise<CursorDiagnosticCheck> {
+  try {
+    const response = await fetchWithTimeout(url, init, overrides);
+    return await evaluate(response);
+  } catch (error: unknown) {
+    const classification = error instanceof CursorAuthError
+      ? classifyCursorNetworkError(error.message)
+      : classifyCursorNetworkError(error);
+    return {
+      name,
+      ok: false,
+      message: classification.message,
+      kind: classification.kind,
+      hint: classification.hint,
+    };
+  }
+}
+
+export async function diagnoseCursorConnection(options: {
+  credentials?: Pick<CursorCredentials, 'sessionToken'> | null;
+  includeToken?: boolean;
+  insecureSkipTlsVerify?: boolean;
+} = {}): Promise<CursorDiagnosticResult> {
+  const overrides = { insecureSkipTlsVerify: options.insecureSkipTlsVerify };
+  const settings = resolveCursorNetworkSettings(CURSOR_USAGE_SUMMARY_ENDPOINT, overrides);
+  const checks: CursorDiagnosticCheck[] = [];
+  const network = {
+    timeoutMs: settings.timeoutMs,
+    proxy: settings.proxyDisplay,
+    proxySource: settings.proxySource,
+    noProxyMatched: settings.noProxyMatched,
+    caFile: settings.caFile,
+    tlsVerification: options.insecureSkipTlsVerify ? 'disabled' as const : 'enabled' as const,
+  };
+
+  if (settings.caFileError) {
+    return {
+      network,
+      checks: [{
+        name: 'ca-file',
+        ok: false,
+        message: `Could not read TOKENLEAK_CURSOR_CA_FILE (${settings.caFile}): ${settings.caFileError}`,
+        kind: 'tls',
+        hint: 'Check that TOKENLEAK_CURSOR_CA_FILE points to a readable PEM file, or unset it and rerun `tokenleak cursor doctor`.',
+      }],
+    };
+  }
+
+  checks.push(await runDiagnosticFetch(
+    'usage-summary-baseline',
+    CURSOR_USAGE_SUMMARY_ENDPOINT,
+    {
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+    },
+    async (response) => {
+      const ok = response.status === 401 || response.status === 403;
+      return {
+        name: 'usage-summary-baseline',
+        ok,
+        status: response.status,
+        message: ok
+          ? `Cursor usage summary is reachable (${response.status} unauthenticated response expected).`
+          : `Unexpected usage summary status ${response.status}.`,
+        kind: ok ? undefined : (response.status === 407 ? 'http_auth' : 'api'),
+        hint: ok ? undefined : 'Run `tokenleak cursor doctor --with-token` after confirming VPN/proxy settings.',
+      };
+    },
+    overrides,
+  ));
+
+  checks.push(await runDiagnosticFetch(
+    'usage-csv-baseline',
+    CURSOR_USAGE_CSV_ENDPOINT,
+    {
+      headers: { Accept: '*/*' },
+      redirect: 'manual',
+    },
+    async (response) => {
+      const ok = response.status === 307 || response.status === 401 || response.status === 403;
+      return {
+        name: 'usage-csv-baseline',
+        ok,
+        status: response.status,
+        message: ok
+          ? `Cursor CSV endpoint is reachable (${response.status} unauthenticated response expected).`
+          : `Unexpected Cursor CSV status ${response.status}.`,
+        kind: ok ? undefined : (response.status === 407 ? 'http_auth' : 'api'),
+        hint: ok ? undefined : 'Confirm the VPN allows cursor.com and api.workos.com.',
+      };
+    },
+    overrides,
+  ));
+
+  if (options.includeToken) {
+    const credentials = options.credentials;
+    if (!credentials?.sessionToken) {
+      checks.push({
+        name: 'token',
+        ok: false,
+        message: 'No saved Cursor token was available for token checks.',
+        kind: 'unknown',
+        hint: "Run 'tokenleak cursor login --name <label>' or pass --name for a saved account.",
+      });
+    } else {
+      checks.push(await runDiagnosticFetch(
+        'usage-summary-token',
+        CURSOR_USAGE_SUMMARY_ENDPOINT,
+        {
+          headers: buildCursorHeaders(credentials.sessionToken),
+        },
+        async (response) => {
+          if (isCursorAuthResponse(response)) {
+            return {
+              name: 'usage-summary-token',
+              ok: false,
+              status: response.status,
+              message: 'Saved Cursor token was rejected.',
+              kind: 'http_auth',
+              hint: "Copy a fresh WorkosCursorSessionToken and run 'tokenleak cursor login' again.",
+            };
+          }
+          if (!response.ok) {
+            return {
+              name: 'usage-summary-token',
+              ok: false,
+              status: response.status,
+              message: `Cursor usage summary returned status ${response.status}.`,
+              kind: response.status === 407 ? 'http_auth' : 'api',
+              hint: 'Run token-free doctor checks to separate network and auth failures.',
+            };
+          }
+          try {
+            const payload = await response.json() as Record<string, unknown>;
+            const valid = typeof payload['billingCycleStart'] === 'string'
+              && typeof payload['billingCycleEnd'] === 'string';
+            return {
+              name: 'usage-summary-token',
+              ok: valid,
+              status: response.status,
+              message: valid
+                ? 'Saved Cursor token can read the usage summary.'
+                : 'Usage summary response did not match the expected JSON shape.',
+              kind: valid ? undefined : 'parse',
+              hint: valid ? undefined : 'Cursor may have changed the usage summary response format.',
+            };
+          } catch (error: unknown) {
+            return {
+              name: 'usage-summary-token',
+              ok: false,
+              status: response.status,
+              message: `Failed to parse usage summary JSON: ${error instanceof Error ? error.message : String(error)}`,
+              kind: 'parse',
+            };
+          }
+        },
+        overrides,
+      ));
+
+      checks.push(await runDiagnosticFetch(
+        'usage-csv-token',
+        CURSOR_USAGE_CSV_ENDPOINT,
+        {
+          headers: buildCursorHeaders(credentials.sessionToken),
+        },
+        async (response) => {
+          if (isCursorAuthResponse(response)) {
+            return {
+              name: 'usage-csv-token',
+              ok: false,
+              status: response.status,
+              message: 'Saved Cursor token was rejected by the CSV endpoint.',
+              kind: 'http_auth',
+              hint: "Copy a fresh WorkosCursorSessionToken and run 'tokenleak cursor login' again.",
+            };
+          }
+          if (!response.ok) {
+            return {
+              name: 'usage-csv-token',
+              ok: false,
+              status: response.status,
+              message: `Cursor CSV endpoint returned status ${response.status}.`,
+              kind: response.status === 407 ? 'http_auth' : 'api',
+            };
+          }
+
+          const text = await response.text();
+          const ok = Boolean(parseCursorHeader(text.trimStart().split(/\r?\n/, 1)[0] ?? ''));
+          return {
+            name: 'usage-csv-token',
+            ok,
+            status: response.status,
+            message: ok
+              ? 'Saved Cursor token can read the usage CSV.'
+              : 'Cursor CSV response did not start with the expected header.',
+            kind: ok ? undefined : 'parse',
+            hint: ok ? undefined : 'The response may be an HTML login page or a changed API format.',
+          };
+        },
+        overrides,
+      ));
+    }
+  }
+
+  return {
+    network,
+    checks,
+  };
 }
 
 export async function syncCursorCache(): Promise<SyncCursorResult> {
@@ -670,6 +1214,14 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
   };
 }
 
+function cursorCredentialFingerprint(): string | null {
+  try {
+    return createHash('sha256').update(readFileSync(getCursorCredentialsPath())).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 // Avoid repeated network waits on automatic CLI runs, including failed syncs.
 // Explicit Cursor selection and explicit TUI refresh continue to sync immediately.
 function automaticSyncCacheKey(): string | null {
@@ -741,10 +1293,12 @@ export async function shouldSyncCursorForRun(config: {
     }
   }
 
+  const credentialsBeforeSync = cursorCredentialFingerprint();
   const result = await syncCursorCache();
   try {
     const key = automaticSyncCacheKey();
-    if (key && interval > 0) {
+    if (key && interval > 0 && credentialsBeforeSync !== null &&
+        credentialsBeforeSync === cursorCredentialFingerprint()) {
       atomicWriteFile(memoPath, JSON.stringify({ key, completedAt: Date.now(), error: result.error }),
         process.platform === 'win32' ? undefined : 0o600);
     }

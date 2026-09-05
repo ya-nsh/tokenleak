@@ -80,6 +80,18 @@ const PROVIDER_COLORS: Record<string, { dark: string; light: string }> = {
   codex:         { dark: '#3a5070', light: '#4a6a90' },
   google:        { dark: '#6a2535', light: '#8a3548' },
   cursor:        { dark: '#7c5cbf', light: '#6a4aaa' },
+  codebuff:      { dark: '#2563eb', light: '#1d4ed8' },
+  droid:         { dark: '#f97316', light: '#c2410c' },
+  kimi:          { dark: '#9ca3af', light: '#374151' },
+  kilo:          { dark: '#f59e0b', light: '#b45309' },
+  mux:           { dark: '#ec4899', light: '#be185d' },
+  crush:         { dark: '#ef4444', light: '#b91c1c' },
+  goose:         { dark: '#0f766e', light: '#0f766e' },
+  antigravity:   { dark: '#7c3aed', light: '#6d28d9' },
+  zed:           { dark: '#0891b2', light: '#0e7490' },
+  kiro:          { dark: '#6366f1', light: '#4f46e5' },
+  trae:          { dark: '#06b6d4', light: '#0891b2' },
+  synthetic:     { dark: '#10b981', light: '#047857' },
   pi:            { dark: '#5a4a70', light: '#706088' },
 };
 
@@ -256,7 +268,7 @@ export function renderWrappedSinglePageSvg(
 
   const bigStats = [
     { label: 'TOTAL TOKENS', value: formatNumber(stats.totalTokens), unit: 'TOKENS', gold: false },
-    { label: 'TOTAL COST', value: formatCost(stats.totalCost), unit: 'USD', gold: true },
+    { label: 'TOTAL COST', value: formatCost(stats.totalCost, stats.costCompleteness), unit: 'USD', gold: true },
     { label: 'ACTIVE DAYS', value: `${stats.activeDays}`, unit: `OF ${stats.totalDays}`, gold: false },
     { label: 'AVG / DAY', value: formatNumber(stats.averageDailyTokens), unit: 'TOKENS', gold: false },
   ];
@@ -642,12 +654,10 @@ export function renderWrappedSinglePageSvg(
   parts.push(txt(c3x, c3y, 'PROJECTED / MONTH', {
     fill: C.muted, size: 9, weight: 400, family: MONO, spacing: 2,
   }));
-  parts.push(txt(c3x, c3y + 28, formatCost(projectedCost), {
+  parts.push(txt(c3x, c3y + 28, formatCost(projectedCost, stats.costCompleteness), {
     fill: C.ivory, size: 30, weight: 800, family: DISPLAY, spacing: -1,
   }));
-  const avgDailyCostStr = stats.averageDailyCost >= 1
-    ? `$${stats.averageDailyCost.toFixed(2)}`
-    : `$${stats.averageDailyCost.toFixed(4)}`;
+  const avgDailyCostStr = formatCost(stats.averageDailyCost, stats.costCompleteness);
   parts.push(txt(c3x, c3y + 44, `${avgDailyCostStr} avg/day`, {
     fill: C.muted, size: 11, weight: 400, family: MONO, spacing: 0.5,
   }));

@@ -13,6 +13,188 @@ const EMPTY_DIR = join(import.meta.dir, '..', '__fixtures__', 'codex-empty');
 const FULL_RANGE: DateRange = { since: '2025-06-01', until: '2025-06-30' };
 const CURRENT_RANGE: DateRange = { since: '2026-03-12', until: '2026-03-12' };
 
+function turn(model: string) {
+  return { timestamp: '2026-03-12T10:00:00Z', type: 'turn_context', payload: { model } };
+}
+
+function tokens(input: number, output: number, options: { last?: boolean; timestamp?: string; cached?: number } = {}) {
+  const usage = { input_tokens: input, output_tokens: output, cached_input_tokens: options.cached ?? 0 };
+  return { timestamp: options.timestamp ?? '2026-03-12T10:01:00Z', type: 'event_msg', payload: {
+    type: 'token_count', info: { total_token_usage: usage,
+      ...(options.last === false ? {} : { last_token_usage: usage }) },
+  } };
+}
+
+async function loadRecords(records: unknown[]) {
+  const dir = mkdtempSync(join(tmpdir(), 'tokenleak-codex-regression-'));
+  try {
+    writeFileSync(join(dir, 'session.jsonl'), records.map((r) => JSON.stringify(r)).join('\n'));
+    return await new CodexProvider(dir).load(CURRENT_RANGE);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('Codex accounting regressions', () => {
+  it('does not let stale session-level model metadata overwrite the current turn', async () => {
+    const data = await loadRecords([turn('gpt-5.5'),
+      { type: 'session_meta', payload: { model: 'gpt-5.4' } }, tokens(1000, 100)]);
+    expect(data.events?.[0]?.model).toBe('gpt-5.5');
+  });
+
+  it('uses a recorded session tier as the default, with turn metadata taking precedence', async () => {
+    const data = await loadRecords([
+      { type: 'session_meta', payload: { service_tier: 'fast' } }, turn('gpt-5.5'), tokens(1000, 100),
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'default' } }, tokens(2000, 200, { last: false }),
+    ]);
+    expect(data.events?.map((e) => e.serviceTier)).toEqual(['fast', 'default']);
+  });
+
+  it('keeps Fast mode distinct from the base model and clears missing tier metadata', async () => {
+    const data = await loadRecords([
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'fast' } }, tokens(1000, 100),
+      turn('gpt-5.5'), tokens(2000, 200, { last: false }),
+    ]);
+    expect(data.events?.map((e) => e.model)).toEqual(['gpt-5.5', 'gpt-5.5']);
+    expect(data.events?.map((e) => e.serviceTier)).toEqual(['fast', 'unknown']);
+    expect(data.events?.map((e) => e.cost)).toEqual([0.02, 0.008]);
+    expect(data.daily[0]?.models[0]?.serviceTiers?.map((t) => t.tier)).toEqual(['fast', 'unknown']);
+  });
+
+  it('uses the actual response tier ahead of the requested Fast setting', async () => {
+    const data = await loadRecords([
+      { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'fast' } },
+      { timestamp: '2026-03-12T10:01:00Z', type: 'token_usage_record', payload: {
+        response_id: 'downgraded', service_tier: 'default', usage: { input_tokens: 1000, output_tokens: 100 } } },
+    ]);
+    expect(data.events?.[0]).toMatchObject({ serviceTier: 'default', serviceTierSource: 'response', cost: 0.008 });
+  });
+
+  it('recognizes a Fast alias while retaining the canonical model', async () => {
+    const data = await loadRecords([turn('gpt-5.4-fast'), tokens(1000, 100)]);
+    expect(data.events?.[0]).toMatchObject({ model: 'gpt-5.4', serviceTier: 'fast', cost: 0.008 });
+  });
+
+  const modern = (id: string, input = 1000, timestamp = '2026-03-12T10:01:00Z') => ({
+    type: 'token_usage_record', timestamp, payload: { turn_id: 'turn-1', response_id: id,
+      usage: { input_tokens: input, output_tokens: 100, cached_input_tokens: 200, cache_write_input_tokens: 100 } },
+  });
+  const modernTurn = { ...turn('gpt-5.4'), payload: { model: 'gpt-5.4', turn_id: 'turn-1' } };
+
+  it('reads response-scoped usage and partitions cache reads/writes without inflating totals', async () => {
+    const data = await loadRecords([modernTurn, modern('r1')]);
+    expect(data.events?.[0]).toMatchObject({ totalTokens: 1100, inputTokens: 700,
+      cacheReadTokens: 200, cacheWriteTokens: 100, outputTokens: 100, responseId: 'r1', turnId: 'turn-1' });
+  });
+
+  it.each([false, true])('counts mirrored legacy and modern records once (modern first: %s)', async (modernFirst) => {
+    const record = modern('r1');
+    const notification = tokens(1000, 100, { cached: 200 });
+    Object.assign(notification.payload.info.last_token_usage!, { cache_write_input_tokens: 100 });
+    const pair = modernFirst ? [record, notification] : [notification, record];
+    const data = await loadRecords([modernTurn, ...pair]);
+    expect(data.totalTokens).toBe(1100);
+    expect(data.events).toHaveLength(1);
+    expect(data.events?.[0]?.responseId).toBe('r1');
+  });
+
+  it('deduplicates response IDs but keeps distinct responses with identical token counts', async () => {
+    const data = await loadRecords([modernTurn, modern('r1'), modern('r1'), modern('r2')]);
+    expect(data.totalTokens).toBe(2200);
+    expect(data.events).toHaveLength(2);
+  });
+
+  it('does not discard legacy-only usage when a turn has partial modern coverage', async () => {
+    const data = await loadRecords([modernTurn, modern('r1'), tokens(500, 50)]);
+    expect(data.totalTokens).toBe(1650);
+  });
+
+  it('reconciles across the range boundary before assigning dates', async () => {
+    const record = modern('r1', 1000, '2026-03-11T23:59:59Z');
+    const notification = tokens(1000, 100, { cached: 200, timestamp: '2026-03-12T00:00:01Z' });
+    Object.assign(notification.payload.info.last_token_usage!, { cache_write_input_tokens: 100 });
+    const data = await loadRecords([modernTurn, record, notification]);
+    expect(data.totalTokens).toBe(0);
+  });
+
+  it('does not replace an explicit model with agent instruction prose on resume', async () => {
+    const data = await loadRecords([turn('gpt-5.5'), tokens(1000, 100),
+      { type: 'session_meta', payload: { base_instructions: { text: 'You are Codex, based on GPT-5.' } } },
+      tokens(2000, 200, { last: false })]);
+    expect(data.totalTokens).toBe(2200);
+    expect(data.daily[0]?.models.map((m) => m.model)).toEqual(['gpt-5.5']);
+  });
+
+  it('leaves missing model identity unknown and unpriced', async () => {
+    const data = await loadRecords([tokens(1000, 100)]);
+    expect(data.events?.[0]).toMatchObject({ model: 'unknown', costSource: 'unpriced', totalTokens: 1100 });
+  });
+
+  it('does not count repeated cumulative notifications as new responses', async () => {
+    const data = await loadRecords([turn('gpt-5.4'), tokens(1000, 100),
+      tokens(1000, 100, { timestamp: '2026-03-12T10:02:00Z' })]);
+    expect(data.totalTokens).toBe(1100);
+    expect(data.events).toHaveLength(1);
+  });
+
+  it('keeps a session-wide baseline across a model switch', async () => {
+    const data = await loadRecords([turn('gpt-5.4'), tokens(1000, 100, { last: false }),
+      turn('gpt-5.5'), tokens(2000, 200, { last: false })]);
+    expect(data.totalTokens).toBe(2200);
+    expect(data.events?.map((e) => e.totalTokens)).toEqual([1100, 1100]);
+    expect(data.events?.map((e) => e.model)).toEqual(['gpt-5.4', 'gpt-5.5']);
+  });
+
+  it('handles a counter reset without dropping the new usage', async () => {
+    const data = await loadRecords([turn('gpt-5.4'), tokens(1000, 100, { last: false }),
+      tokens(200, 20, { last: false })]);
+    expect(data.totalTokens).toBe(1320);
+  });
+
+  it('preserves baseline updates before the requested date range', async () => {
+    const data = await loadRecords([turn('gpt-5.4'),
+      tokens(1000, 100, { last: false, timestamp: '2026-03-11T10:01:00Z' }),
+      tokens(2000, 200, { last: false })]);
+    expect(data.totalTokens).toBe(1100);
+  });
+
+  it('retains equal per-response usage when the cumulative counter advances', async () => {
+    const second = tokens(2000, 200);
+    second.payload.info.last_token_usage = { input_tokens: 1000, output_tokens: 100, cached_input_tokens: 0 };
+    const data = await loadRecords([turn('gpt-5.4'), tokens(1000, 100), second]);
+    expect(data.totalTokens).toBe(2200);
+    expect(data.events).toHaveLength(2);
+  });
+
+  it('ignores invalid negative token usage and empty notifications', async () => {
+    const data = await loadRecords([turn('gpt-5.4'), tokens(-10, -1), tokens(0, 0), tokens(100, 10)]);
+    expect(data.totalTokens).toBe(110);
+    expect(data.events).toHaveLength(1);
+  });
+
+  it('includes archives and deduplicates overlapping copies by session identity', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenleak-codex-archive-'));
+    try {
+      const active = join(root, 'sessions');
+      const archive = join(root, 'archived_sessions');
+      mkdirSync(active); mkdirSync(archive);
+      const shared = [{ type: 'session_meta', payload: { id: 'same-session' } }, turn('gpt-5.4'), tokens(1000, 100)];
+      const serialize = (records: unknown[]) => records.map((r) => JSON.stringify(r)).join('\n');
+      writeFileSync(join(active, 'original.jsonl'), serialize(shared));
+      writeFileSync(join(archive, 'renamed.jsonl'), serialize([...shared,
+        tokens(2000, 200, { last: false, timestamp: '2026-03-12T10:02:00Z' })]));
+      writeFileSync(join(archive, 'other.jsonl'), serialize([
+        { type: 'session_meta', payload: { id: 'other-session' } }, turn('gpt-5.4'), tokens(1000, 100)]));
+      const data = await new CodexProvider(active, archive).load(CURRENT_RANGE);
+      expect(data.totalTokens).toBe(3300);
+      expect(data.events).toHaveLength(3);
+      expect(await new CodexProvider(join(root, 'missing'), archive).isAvailable()).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('CodexProvider', () => {
   // -- metadata -----------------------------------------------------------
 

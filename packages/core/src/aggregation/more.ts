@@ -116,7 +116,7 @@ function buildCacheEconomics(providers: ProviderData[]): MoreStats['cacheEconomi
     }
   }
 
-  const readCoverage = readTokens + inputTokens > 0 ? readTokens / (readTokens + inputTokens) : 0;
+  const readCoverage = readTokens + inputTokens + writeTokens > 0 ? readTokens / (readTokens + inputTokens + writeTokens) : 0;
   return {
     readTokens,
     writeTokens,
@@ -193,15 +193,30 @@ function buildCacheRoi(
   for (const provider of providers) {
     const providerAccumulator = byProvider.get(provider.displayName) ?? createCacheRoiAccumulator();
     byProvider.set(provider.displayName, providerAccumulator);
+    const eventGroups = new Map<string, UsageEvent[]>();
+    for (const event of provider.events ?? []) {
+      const key = JSON.stringify([event.date, event.model]);
+      const group = eventGroups.get(key) ?? [];
+      group.push(event);
+      eventGroups.set(key, group);
+    }
 
     for (const day of provider.daily) {
       for (const model of day.models) {
-        addCacheRoiUsage(summary, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
-        addCacheRoiUsage(providerAccumulator, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
-
         const modelAccumulator = byModel.get(model.model) ?? createCacheRoiAccumulator();
         byModel.set(model.model, modelAccumulator);
-        addCacheRoiUsage(modelAccumulator, model.cacheReadTokens, model.cacheWriteTokens, model.pricing);
+        const group = eventGroups.get(JSON.stringify([day.date, model.model])) ?? [];
+        // Full event coverage preserves each request's tier and context price.
+        // Older providers may only expose daily totals or partial event history.
+        const complete = group.length > 0 &&
+          group.reduce((sum, event) => sum + event.totalTokens, 0) === model.totalTokens &&
+          group.reduce((sum, event) => sum + event.cacheReadTokens, 0) === model.cacheReadTokens &&
+          group.reduce((sum, event) => sum + event.cacheWriteTokens, 0) === model.cacheWriteTokens;
+        for (const usage of complete ? group : [model]) {
+          addCacheRoiUsage(summary, usage.cacheReadTokens, usage.cacheWriteTokens, usage.pricing);
+          addCacheRoiUsage(providerAccumulator, usage.cacheReadTokens, usage.cacheWriteTokens, usage.pricing);
+          addCacheRoiUsage(modelAccumulator, usage.cacheReadTokens, usage.cacheWriteTokens, usage.pricing);
+        }
       }
     }
   }
@@ -426,8 +441,8 @@ function buildModelEfficiency(events: UsageEvent[]): NonNullable<MoreStats['mode
       outputInputRatio: model.outputTokens / model.inputTokens,
       outputPerDollar: model.outputTokens / model.cost,
       cacheCoverage:
-        model.inputTokens + model.cacheReadTokens > 0
-          ? model.cacheReadTokens / (model.inputTokens + model.cacheReadTokens)
+        model.inputTokens + model.cacheReadTokens + model.cacheWriteTokens > 0
+          ? model.cacheReadTokens / (model.inputTokens + model.cacheReadTokens + model.cacheWriteTokens)
           : 0,
       costPer1MTotal: model.totalTokens > 0 ? (model.cost / model.totalTokens) * 1_000_000 : 0,
     });

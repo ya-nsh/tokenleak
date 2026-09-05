@@ -1,5 +1,6 @@
 import type { DailyUsage, ModelBreakdown, ProviderData } from '../types';
 import { compareDateStrings } from '../date-utils';
+import { completeServiceTiers, mergeServiceTiers } from '../service-tiers';
 
 /**
  * Merge model breakdowns by model name, accumulating token counts and cost.
@@ -18,6 +19,9 @@ function mergeModelArrays(existing: ModelBreakdown[], incoming: ModelBreakdown[]
       const incomingUnpriced = m.unpricedTokens ?? 0;
       const prevPriced = prev.pricedTokens ?? Math.max(0, prev.totalTokens - prevUnpriced);
       const incomingPriced = m.pricedTokens ?? Math.max(0, m.totalTokens - incomingUnpriced);
+      if (prev.serviceTiers || m.serviceTiers) {
+        prev.serviceTiers = mergeServiceTiers(completeServiceTiers(prev), completeServiceTiers(m));
+      }
       prev.inputTokens += m.inputTokens;
       prev.outputTokens += m.outputTokens;
       prev.cacheReadTokens += m.cacheReadTokens;

@@ -46,6 +46,15 @@ describe('renderTerminalCardSvg', () => {
     expect(svg).toContain('DAYS');
   });
 
+  it('renders an inclusive single-day date range', () => {
+    const svg = renderTerminalCardSvg(
+      createOutput({ dateRange: { since: '2026-03-11', until: '2026-03-11' } }),
+      options,
+    );
+
+    expect(svg).toContain('1 DAYS');
+  });
+
   it('contains heatmap cells (rect elements)', () => {
     const svg = renderTerminalCardSvg(output, options);
     const rectCount = (svg.match(/<rect /g) ?? []).length;

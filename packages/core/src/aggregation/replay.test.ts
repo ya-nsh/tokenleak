@@ -139,8 +139,8 @@ describe('buildReplayReport', () => {
 
     const trend = report.flowBlocks[0].cacheHitRateTrend;
     expect(trend).toHaveLength(3);
-    expect(trend[0]).toBeCloseTo(0.1);
-    expect(trend[1]).toBeCloseTo(0.5);
+    expect(trend[0]).toBeCloseTo(100 / 1100);
+    expect(trend[1]).toBeCloseTo(500 / 1100);
     expect(trend[2]).toBe(0);
   });
 

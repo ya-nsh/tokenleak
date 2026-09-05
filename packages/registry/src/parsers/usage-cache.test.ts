@@ -37,7 +37,16 @@ afterEach(() => {
   restore('TOKENLEAK_MAX_JSONL_RECORD_BYTES', originalLimit);
   rmSync(dir, { recursive: true, force: true });
 });
-const create = (version = 'test-v1') => new UsageFileCache<{ text: string }>(version, dir);
+const create = (version = 'test-v1') =>
+  new UsageFileCache<{ text: string }>(
+    version,
+    dir,
+    (value) =>
+      value !== null &&
+      typeof value === 'object' &&
+      'text' in value &&
+      typeof value.text === 'string',
+  );
 const parse = async () => {
   calls++;
   return {

@@ -29,7 +29,11 @@ export class UsageFileCache<T> {
   private readonly path: string;
   private readonly disabled: boolean;
 
-  constructor(namespace: string, root: string) {
+  constructor(
+    namespace: string,
+    root: string,
+    private readonly validateRecord: (value: unknown) => boolean,
+  ) {
     this.disabled = process.env['TOKENLEAK_USAGE_CACHE'] === '0';
     this.directory =
       process.env['TOKENLEAK_USAGE_CACHE_DIR'] ?? join(homedir(), '.cache', 'tokenleak', 'usage');
@@ -62,7 +66,17 @@ export class UsageFileCache<T> {
     if (
       cached?.stamp === before &&
       Array.isArray(cached.records) &&
-      Array.isArray(cached.warnings)
+      cached.records.every(this.validateRecord) &&
+      Array.isArray(cached.warnings) &&
+      cached.warnings.every(
+        (warning) =>
+          warning !== null &&
+          typeof warning === 'object' &&
+          (warning.kind === 'parse' || warning.kind === 'oversize') &&
+          warning.file === file &&
+          Number.isInteger(warning.line) &&
+          warning.line > 0,
+      )
     ) {
       this.current[file] = cached;
       return { records: cached.records, warnings: cached.warnings };
@@ -95,4 +109,43 @@ export class UsageFileCache<T> {
       await rm(temporary, { force: true }).catch(() => {});
     }
   }
+}
+
+/** Validate the unpriced record schema shared by the transcript providers. */
+export function isCachedUsageRecord(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!['date', 'timestamp', 'model'].every((key) => typeof record[key] === 'string')) return false;
+  if (
+    !['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'].every(
+      (key) => typeof record[key] === 'number' && Number.isFinite(record[key]),
+    )
+  )
+    return false;
+  if (
+    ![
+      'prompt',
+      'promptId',
+      'sessionId',
+      'projectId',
+      'messageId',
+      'turnId',
+      'responseId',
+      'serviceTier',
+      'serviceTierSource',
+    ].every((key) => record[key] === undefined || typeof record[key] === 'string')
+  )
+    return false;
+  if (
+    !['counterAdvanced', 'cumulativeOnly'].every(
+      (key) => record[key] === undefined || typeof record[key] === 'boolean',
+    )
+  )
+    return false;
+  if (record['serviceTierSource'] !== undefined && !['response', 'request', 'model-name'].includes(record['serviceTierSource'] as string)) return false;
+  return (
+    record['source'] === undefined ||
+    record['source'] === 'record' ||
+    record['source'] === 'notification'
+  );
 }

@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "bundle": "bun scripts/build-npm.ts",
+    "verify:package": "bun scripts/verify-package.ts",
     "prepublish": "bun run build && bun run bundle && bun scripts/prepare-publish.ts",
     "publish:npm": "bun run prepublish && cd dist && npm publish"
   },
