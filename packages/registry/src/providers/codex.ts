@@ -11,7 +11,8 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
-import { splitJsonlRecords } from '../parsers/jsonl-splitter';
+import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
+import { UsageFileCache } from '../parsers/usage-cache';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
 import {
@@ -466,6 +467,7 @@ export class CodexProvider implements IProvider {
     const dailyMap = new Map<string, Map<string, ModelBreakdown>>();
     const files = collectJsonlFiles(this.sessionsDir);
     const warnings = new Map<string, ProviderWarning>();
+    const cache = new UsageFileCache<CodexUsageRecord>('codex-v1', this.sessionsDir);
     const eventsByFile = await mapWithConcurrency(files, 8, async (file) => {
       const fileEvents: UsageEvent[] = [];
       const context: SessionContext = {
@@ -478,20 +480,25 @@ export class CodexProvider implements IProvider {
       const projectDir = relative(this.sessionsDir, dirname(file)).split(sep).join('/');
 
       try {
-        for await (const record of splitJsonlRecords(file, {
-          onWarning: ({ kind, file: warningFile }) => incrementWarningCount(warnings, kind, warningFile),
-        })) {
-          const usage = parseUsageRecord(record, context);
-          if (!usage) {
-            continue;
+        const parsed = await cache.read(file, async () => {
+          const records: CodexUsageRecord[] = [];
+          const fileWarnings: JsonlRecordWarning[] = [];
+          for await (const record of splitJsonlRecords(file, {
+            onWarning: (warning) => fileWarnings.push(warning),
+          })) {
+            const usage = parseUsageRecord(record, context);
+            if (!usage) continue;
+            usage.sessionId = relativeFile;
+            usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
+            records.push(usage);
           }
-
-          if (!isInRange(usage.date, range)) {
-            continue;
-          }
-
-          usage.sessionId = relativeFile;
-          usage.projectId = context.projectId ?? (projectDir === '.' ? undefined : projectDir);
+          return { records, warnings: fileWarnings };
+        });
+        for (const warning of parsed.warnings) {
+          incrementWarningCount(warnings, warning.kind, warning.file);
+        }
+        for (const usage of parsed.records) {
+          if (!isInRange(usage.date, range)) continue;
 
           const normalizedModel = normalizeModelName(compactModelDateSuffix(usage.model));
           const inputTokens = usage.inputTokens;
@@ -532,6 +539,7 @@ export class CodexProvider implements IProvider {
       }
       return fileEvents;
     });
+    await cache.save();
     const events = eventsByFile.flat();
     addUnknownPricingWarnings(warnings, events);
 

@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
   rmSync,
   unlinkSync,
   writeFileSync,
@@ -669,6 +670,29 @@ export async function syncCursorCache(): Promise<SyncCursorResult> {
   };
 }
 
+// Avoid repeated network waits on automatic CLI runs, including failed syncs.
+// Explicit Cursor selection and explicit TUI refresh continue to sync immediately.
+function automaticSyncCacheKey(): string | null {
+  try {
+    const credentials = readFileSync(getCursorCredentialsPath(), 'utf8');
+    const store = loadCursorCredentialsStore();
+    if (!store || !existsSync(join(getCursorCacheDir(), 'usage.csv'))) return null;
+    const files = Object.keys(store.accounts).map((id) => {
+      const file = join(getCursorCacheDir(), id === store.activeAccountId
+        ? 'usage.csv' : `usage.${sanitizeAccountIdForFilename(id)}.csv`);
+      try {
+        const stat = statSync(file, { bigint: true });
+        return `${id}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+      } catch {
+        return `${id}:missing`;
+      }
+    });
+    return createHash('sha256').update(JSON.stringify([credentials, files])).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 export async function shouldSyncCursorForRun(config: {
   provider?: string;
   cursor: boolean;
@@ -700,7 +724,33 @@ export async function shouldSyncCursorForRun(config: {
     return { attempted: false };
   }
 
+  const configuredInterval = Number(process.env['TOKENLEAK_CURSOR_SYNC_INTERVAL_MS'] ?? 60_000);
+  const interval = Number.isFinite(configuredInterval) && configuredInterval >= 0 ? configuredInterval : 60_000;
+  const memoPath = join(getCursorCacheDir(), 'automatic-sync.json');
+  if (!requestedCursor && interval > 0) {
+    try {
+      const memo = JSON.parse(readFileSync(memoPath, 'utf8'));
+      const age = Date.now() - memo.completedAt;
+      const key = automaticSyncCacheKey();
+      if (key && memo.key === key && age >= 0 && age < interval &&
+          (memo.error === undefined || typeof memo.error === 'string')) {
+        return { attempted: false, error: memo.error };
+      }
+    } catch {
+      // No reusable sync result; retry normally.
+    }
+  }
+
   const result = await syncCursorCache();
+  try {
+    const key = automaticSyncCacheKey();
+    if (key && interval > 0) {
+      atomicWriteFile(memoPath, JSON.stringify({ key, completedAt: Date.now(), error: result.error }),
+        process.platform === 'win32' ? undefined : 0o600);
+    }
+  } catch {
+    // Best effort: failures here must not affect usage or authentication.
+  }
   return {
     attempted: true,
     error: result.error,

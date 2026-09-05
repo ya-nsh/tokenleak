@@ -6,3 +6,6 @@ dist/
 .env.*
 coverage/
 .DS_Store
+
+# Local performance profiles and private usage snapshots
+.perf/
