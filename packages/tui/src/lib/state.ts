@@ -1,4 +1,5 @@
 import type {
+  QuotaSnapshot,
   AdvisorReport,
   AgentBehaviorDiffReport,
   AgentWasteReport,
@@ -17,6 +18,7 @@ import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
 
 export type ViewMode =
+  | 'quotas'
   | 'overview'
   | 'matrix'
   | 'advisor'
@@ -43,6 +45,10 @@ export interface ViewTaskState {
 }
 
 export interface AppState {
+  quotaSnapshot: QuotaSnapshot | null;
+  quotasLoading: boolean;
+  quotasError: string | null;
+  quotasScrollOffset: number;
   selectedWindowIndex: number; // 0=1D, 1=7D, 2=30D, 3=90D, 4=ALL
   selectedView: ViewMode;
   isLoading: boolean;
@@ -125,6 +131,10 @@ export const DEFAULT_WINDOW_INDEX = 1;
 
 export function createInitialState(): AppState {
   return {
+    quotaSnapshot: null,
+    quotasLoading: false,
+    quotasError: null,
+    quotasScrollOffset: 0,
     selectedWindowIndex: DEFAULT_WINDOW_INDEX,
     selectedView: 'overview',
     isLoading: true,

@@ -68,6 +68,7 @@ export function createHelpPanel() {
       Box(
         { flexDirection: 'column', flexGrow: 1 },
         ...helpSection('VIEWS', [
+          ['U', 'Subscription quotas (account-wide)'],
           ['1', 'Overview'],
           ['2', 'Matrix'],
           ['3', 'Advisor'],

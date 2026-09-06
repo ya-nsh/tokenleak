@@ -18,6 +18,7 @@ export type ViewSwitchCallback = (mode: ViewMode) => void;
 
 const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
   { key: '1', label: 'Overview', mode: 'overview' },
+  { key: 'U', label: 'Quotas', mode: 'quotas' },
   { key: '2', label: 'Matrix', mode: 'matrix' },
   { key: '3', label: 'Advisor', mode: 'advisor' },
   { key: '4', label: 'Focus', mode: 'focus' },
@@ -123,13 +124,13 @@ export function buildHeader(
     },
     Box(
       { flexDirection: 'row' },
-      ...tabParts,
+      ...(state.selectedView === 'quotas' ? [Text({ content: ' LIVE ', fg: COLORS.cyan })] : tabParts),
       Text({ content: ' ', fg: COLORS.dimWhite }),
       ...viewParts,
     ),
     Box(
       { flexDirection: 'row', gap: 2 },
-      Text({ content: windowCost, fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: state.selectedView === 'quotas' ? 'Account capacity' : windowCost, fg: COLORS.amber, attributes: BOLD }),
       Text({ content: formatCompactTime(), fg: COLORS.green }),
     ),
   );

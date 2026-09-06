@@ -166,3 +166,4 @@ export {
 
 export { analyzeEfficiency, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
 export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';
+export type { QuotaProvider, QuotaWindow, ProviderQuota, QuotaSnapshot } from './quotas';

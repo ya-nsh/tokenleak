@@ -31,6 +31,10 @@ export function buildReplayCtaChip(state: AppState) {
 }
 
 export function buildStatusBar(state: AppState) {
+  if (state.selectedView === 'quotas' && !state.showHelp && !state.showCursorSetup) {
+    return Box({ flexDirection: 'row', width: '100%', height: 1, paddingLeft: 1 },
+      Text({ content: `${state.quotasLoading ? 'Checking quotas...  ' : ''}←→:view  j/k:scroll  r:refresh  ?:keys  q:quit`, fg: COLORS.cyan }));
+  }
   if (state.isLoading) {
     return Box(
       {
