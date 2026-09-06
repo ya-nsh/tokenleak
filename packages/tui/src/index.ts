@@ -1,5 +1,5 @@
 import { refreshQuotas, startQuotaPolling } from './lib/quotas.js';
-import { createQuotasPanel } from './panels/quotas.js';
+import { createQuotasPanel, quotaPanelHeight } from './panels/quotas.js';
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
@@ -87,7 +87,7 @@ import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS 
 import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, SIMULATOR_VISIBLE_ROWS } from './panels/simulator.js';
 import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, WASTE_VISIBLE_ROWS } from './panels/waste.js';
 import { createBehaviorPanel } from './panels/behavior.js';
-import { buildCursorBanner, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
+import { buildCursorBanner, getCursorBannerText, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
 const CURSOR_SETUP_TOKEN_INPUT_ID = 'cursor-setup-token-input';
@@ -267,7 +267,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   const hasWindowData = Boolean(state.data?.windows[state.selectedWindowIndex]);
 
   if (state.selectedView === 'quotas') {
-    return createQuotasPanel(state, renderer.width, renderer.height);
+    return createQuotasPanel(
+      state, renderer.width, quotaPanelHeight(renderer.height, getCursorBannerText(state) !== null),
+    );
   }
 
   if (!state.data && state.loadError) {

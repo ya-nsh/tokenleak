@@ -398,3 +398,15 @@ test('Codex and Copilot credentials go only to their fixed HTTPS endpoints', asy
     'https://api.github.com/copilot_internal/user',
   ]);
 });
+
+test('explicit default Claude config still reads the default Keychain account', async () => {
+  const result = await discoverQuotaCredential(
+    'claude',
+    io({
+      platform: 'darwin',
+      env: { CLAUDE_CONFIG_DIR: '/fixture/.claude' },
+      command: async () => '{"claudeAiOauth":{"accessToken":"default-token"}}',
+    }),
+  );
+  expect(result).toEqual({ token: 'default-token' });
+});

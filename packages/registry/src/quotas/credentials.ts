@@ -69,7 +69,7 @@ export async function discoverQuotaCredential(
   );
   if (!document && io.platform === 'darwin') {
     const service = provider === 'claude' ? 'Claude Code-credentials' : 'Codex Auth';
-    if (provider === 'claude' && override) return null;
+    if (provider === 'claude' && base !== resolve(join(io.home, '.claude'))) return null;
     const args = ['find-generic-password', '-s', service];
     if (provider === 'codex') {
       const canonical = await io.canonical(base).catch(() => base);

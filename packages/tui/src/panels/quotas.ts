@@ -3,6 +3,11 @@ import { quotaLines } from '@tokenleak/renderers';
 import type { AppState } from '../lib/state';
 import { COLORS, BOLD } from '../lib/theme';
 
+/** Content height after the global header, footer and optional Cursor banner. */
+export function quotaPanelHeight(terminalHeight: number, hasCursorBanner: boolean): number {
+  return Math.max(0, terminalHeight - 2 - Number(hasCursorBanner));
+}
+
 /** Account capacity view; remains usable when no historical logs exist. */
 export function createQuotasPanel(state: AppState, width = 80, height = 20) {
   const lines = state.quotaSnapshot
@@ -23,7 +28,7 @@ export function createQuotasPanel(state: AppState, width = 80, height = 20) {
       result.push(line.slice(start, start + contentWidth));
     return result;
   });
-  const visible = Math.max(1, height - 4);
+  const visible = Math.max(0, height - 3);
   const offset = Math.min(state.quotasScrollOffset, Math.max(0, wrapped.length - visible));
   state.quotasScrollOffset = offset;
   return Box(
@@ -39,6 +44,8 @@ export function createQuotasPanel(state: AppState, width = 80, height = 20) {
     ...wrapped.slice(offset, offset + visible).map((content) =>
       Text({
         content,
+        height: 1,
+        flexShrink: 0,
         fg:
           content.includes('STALE') ||
           content.includes('unavailable') ||
@@ -49,7 +56,13 @@ export function createQuotasPanel(state: AppState, width = 80, height = 20) {
       }),
     ),
     Text({
-      content: ` Lines ${offset + 1}–${Math.min(offset + visible, wrapped.length)} / ${wrapped.length} · j/k scroll · r refresh`,
+      content:
+        ` Lines ${offset + 1}–${Math.min(offset + visible, wrapped.length)} / ${wrapped.length} · j/k scroll · r refresh`.slice(
+          0,
+          contentWidth,
+        ),
+      height: 1,
+      flexShrink: 0,
       fg: COLORS.cyan,
     }),
   );
