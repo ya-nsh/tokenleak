@@ -408,7 +408,12 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
       }
       context.inheritedTotal = null;
     }
-    if (usage && usage.inputTokens + usage.outputTokens === 0) return null;
+    if (usage && usage.inputTokens + usage.outputTokens === 0) {
+      // A status update still establishes a baseline for cumulative-only usage.
+      // Do not mark it seen: a later notification may carry the real request.
+      context.previousTotals = cumulative;
+      return null;
+    }
     const reset =
       previous &&
       usage &&
@@ -424,7 +429,15 @@ function parseTokenCountUsage(record: unknown, context: SessionContext): CodexUs
     if (context.seenTotals.has(snapshot)) return null;
     context.seenTotals.add(snapshot);
     context.previousTotals = cumulative;
-    cumulativeIdentity = JSON.stringify(['counter', context.sessionId, context.epoch, cumulative]);
+    // File-local epochs cannot identify resets in independently resumed files.
+    // Require the same turn (or timestamp when no turn is recorded) as well.
+    cumulativeIdentity = JSON.stringify([
+      'counter',
+      context.sessionId,
+      context.turnId ?? timestamp,
+      context.epoch,
+      cumulative,
+    ]);
   }
   if (context.replaying) return null;
 
@@ -559,8 +572,10 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
       normalizeServiceTier(meta?.['service_tier']) ?? context.sessionServiceTier;
   }
   if (obj?.['type'] === 'token_usage_record' && meta) {
+    const ownedResponse =
+      typeof context.ownerId === 'string' && meta['thread_id'] === context.ownerId;
     if (
-      context.replaying ||
+      (context.replaying && !ownedResponse) ||
       (typeof meta['thread_id'] === 'string' &&
         context.ownerId &&
         meta['thread_id'] !== context.ownerId)
@@ -574,7 +589,9 @@ function parseUsageRecord(record: unknown, context: SessionContext): CodexUsageR
         timestamp: obj['timestamp'],
         payload: { type: 'token_count', info: { last_token_usage: meta['usage'] } },
       },
-      context,
+      // Explicit ownership is stronger evidence than a missing turn_context.
+      // Keep the replay gate intact for subsequent inherited notifications.
+      ownedResponse && context.replaying ? { ...context, replaying: false } : context,
     );
     if (!usage) return null;
     const recordedTier = normalizeServiceTier(meta['service_tier']);
@@ -685,6 +702,7 @@ function usageKey(event: UsageEvent): string {
     ? JSON.stringify([event.sessionId, event.responseId])
     : JSON.stringify([
         event.sessionId,
+        event.turnId,
         event.timestamp,
         event.model,
         event.inputTokens,
@@ -879,7 +897,7 @@ export class CodexProvider implements IProvider {
     ];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<CodexUsageRecord>(
-      'codex-v3',
+      'codex-v4',
       this.sessionsDir,
       isCachedUsageRecord,
     );
@@ -989,16 +1007,27 @@ export class CodexProvider implements IProvider {
     );
     const rank = ({ candidate }: (typeof all)[number]) =>
       candidate.source === 'record' ? 0 : candidate.adjusted ? 1 : 2;
-    const seen = new Map<string, number>();
+    const seen = new Map<string, { fileIndex: number; responseId?: string }>();
     const selected = new Set<UsageCandidate>();
     // Prefer response metadata and reconciled deltas regardless of which copy is active.
     for (const { candidate, fileIndex } of [...all].sort((a, b) => rank(a) - rank(b))) {
       const keys = candidate.keys!;
-      const previousFile = keys
+      const previous = keys
         .map((key) => seen.get(key))
-        .find((owner) => owner !== undefined && owner !== fileIndex);
-      for (const key of keys) seen.set(key, previousFile ?? fileIndex);
-      if (previousFile === undefined) selected.add(candidate);
+        .find(
+          (owner) =>
+            owner !== undefined &&
+            owner.fileIndex !== fileIndex &&
+            // Notification mirrors must never collapse distinct response IDs.
+            !(
+              candidate.event.responseId &&
+              owner.responseId &&
+              candidate.event.responseId !== owner.responseId
+            ),
+        );
+      for (const key of keys)
+        seen.set(key, previous ?? { fileIndex, responseId: candidate.event.responseId });
+      if (previous === undefined) selected.add(candidate);
     }
     const events = all
       .filter(({ candidate }) => selected.has(candidate))

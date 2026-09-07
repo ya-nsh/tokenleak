@@ -370,3 +370,104 @@ describe('Cursor independent CSV token buckets', () => {
       expect(data.totalTokens).toBe(20223);
     }));
 });
+
+describe('Review accounting regressions', () => {
+  function response(threadId: string, turnId: string, responseId: string, timestamp = stamp) {
+    return {
+      type: 'token_usage_record',
+      timestamp,
+      payload: {
+        thread_id: threadId,
+        turn_id: turnId,
+        response_id: responseId,
+        model: 'gpt-5.4',
+        usage: totals(100),
+      },
+    };
+  }
+
+  for (const sameTurn of [false, true]) {
+    it(`preserves distinct response IDs across counter collisions (same turn=${sameTurn})`, () =>
+      fixture(async (dir) => {
+        const secondTurn = sameTurn ? 'first' : 'second';
+        const first = [
+          meta('s'),
+          turn('gpt-5.4', 'first'),
+          response('s', 'first', 'r1'),
+          count(totals(100)),
+        ];
+        const second = [
+          meta('s'),
+          turn('gpt-5.4', secondTurn),
+          response('s', secondTurn, 'r2'),
+          count(totals(100)),
+        ];
+        jsonl(dir, 'old.jsonl', first);
+        jsonl(dir, 'resumed.jsonl', second);
+        jsonl(dir, 'archive/copy.jsonl', first);
+        const data = await new CodexProvider(dir).load(range);
+        expect(data.totalTokens).toBe(220);
+        expect(data.events?.map((e) => e.responseId).sort()).toEqual(['r1', 'r2']);
+      }));
+  }
+
+  it('does not collapse notification-only resets on different turns', () =>
+    fixture(async (dir) => {
+      for (const id of ['first', 'second']) {
+        jsonl(dir, `${id}.jsonl`, [meta('s'), turn('gpt-5.4', id), count(totals(100))]);
+      }
+      expect((await new CodexProvider(dir).load(range)).totalTokens).toBe(220);
+    }));
+
+  it('requires timestamp evidence for cross-file counters without turn IDs', () =>
+    fixture(async (dir) => {
+      jsonl(dir, 'a.jsonl', [meta('s'), count(totals(100))]);
+      jsonl(dir, 'b.jsonl', [meta('s'), count(totals(100), totals(100), '2026-03-13T10:00:00Z')]);
+      jsonl(dir, 'copy.jsonl', [meta('s'), count(totals(100))]);
+      expect((await new CodexProvider(dir).load(range)).totalTokens).toBe(220);
+    }));
+
+  for (const copiedParent of [false, true]) {
+    it(`accepts child-owned ledger without clearing parent replay (parent metadata=${copiedParent})`, () =>
+      fixture(async (dir) => {
+        const parent = '019ce000-0000-7000-8000-000000000000';
+        const child = '019ce001-0000-7000-8000-000000000000';
+        const parentTurn = '019ce000-0001-7000-8000-000000000000';
+        const childTurn = '019ce001-0001-7000-8000-000000000000';
+        jsonl(dir, 'child.jsonl', [
+          {
+            type: 'session_meta',
+            timestamp: stamp,
+            payload: {
+              id: child,
+              source: { subagent: { thread_spawn: { parent_thread_id: parent } } },
+            },
+          },
+          ...(copiedParent ? [meta(parent), turn('gpt-5.4', parentTurn)] : []),
+          response(parent, parentTurn, 'parent-response'),
+          response(child, childTurn, 'child-response'),
+          response(child, childTurn, 'child-response'),
+          count(totals(1000, 100)),
+        ]);
+        const data = await new CodexProvider(dir).load(range);
+        expect(data.totalTokens).toBe(110);
+        expect(data.events).toHaveLength(1);
+        expect(data.events?.[0]?.responseId).toBe('child-response');
+      }));
+  }
+
+  it('keeps an empty status baseline for subsequent cumulative-only increments', () =>
+    fixture(async (dir) => {
+      jsonl(dir, 's.jsonl', [
+        meta('s'),
+        turn(),
+        count(totals(100), totals(0, 0)),
+        count(totals(200, 20), null, '2026-03-13T10:00:00Z'),
+      ]);
+      const provider = new CodexProvider(dir);
+      expect((await provider.load(range)).totalTokens).toBe(110);
+      expect((await provider.load({ since: '2026-03-13', until: '2026-03-13' })).totalTokens).toBe(
+        110,
+      );
+    }));
+});

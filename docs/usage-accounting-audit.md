@@ -50,14 +50,18 @@ audited logs. Source-level global deduplication reconciled the entire difference
 Notification counters retain request increments, suppress repeated snapshots, and
 keep their baseline across model changes. Reset epochs allow genuinely new usage
 with counters seen in a previous epoch. A response ledger and its notification
-mirror count once; a response without a notification still counts.
+mirror count once; a response without a notification still counts. Empty status
+updates retain the cumulative baseline without consuming a request identity.
 
 Forked transcripts can embed parent history with rewritten timestamps. Parent
 replay is excluded until a child-local turn is established. UUIDv7 time prefixes
 and task-start evidence identify the boundary; inherited cumulative snapshots
 remain suppressed after that boundary. Response records explicitly belonging to
-another thread are not charged to the child. Active/archive overlap retains
-response identity and stable counter identity. Unrelated files without upstream
+another thread are not charged to the child. Explicitly child-owned response
+records are retained even when a partial log lacks child turn context; this does
+not open the replay gate for inherited notifications. Active/archive overlap retains
+response identity and counter identity scoped to its turn (or timestamp when
+turn metadata is absent). Counter collisions never override distinct response IDs. Unrelated files without upstream
 session IDs retain their distinct paths.
 
 Model attribution reads explicit model metadata, including `model_info.slug` and
@@ -125,7 +129,10 @@ Regression coverage includes global and cross-file deduplication, decreasing
 streaming snapshots, distinct equal-size requests, archive overlap, resumed
 counters, resets, UTC date boundaries, response-only usage, forked history with
 and without embedded parent metadata, JSON/SQLite migration, and Cursor bucket
-semantics. Cold and warm snapshot reads must be byte-identical; aggregate, daily,
+semantics. Seven additional regression cases cover review findings: distinct response IDs
+with colliding counters, notification-only resets across turns, missing turn IDs,
+child-owned ledgers with and without copied parent metadata, and empty status
+baselines. These fixes ship in v2.2.1. Cold and warm snapshot reads must be byte-identical; aggregate, daily,
 model, and event token sums must agree.
 
 Run repository checks:
