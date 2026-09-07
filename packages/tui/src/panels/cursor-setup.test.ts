@@ -202,6 +202,7 @@ describe('createCursorSetupPanel', () => {
     });
     const state = createInitialState();
     let cancelCount = 0;
+    let resolveCancel: (() => void) | undefined;
 
     try {
       const { panel, tokenInput } = createCursorSetupPanel(state, renderer, {
@@ -217,6 +218,7 @@ describe('createCursorSetupPanel', () => {
         onSubmit: () => {},
         onCancel: () => {
           cancelCount += 1;
+          resolveCancel?.();
         },
       });
 
@@ -224,8 +226,18 @@ describe('createCursorSetupPanel', () => {
       tokenInput.focus();
       await renderOnce();
 
-      mockInput.pressEscape();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // Escape parsing is debounced. Observe the callback instead of racing a
+      // fixed 20 ms delay against the terminal parser on slower CI runners.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          resolveCancel = resolve;
+          timeout = setTimeout(() => reject(new Error('Escape did not cancel setup')), 1_000);
+          mockInput.pressEscape();
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       await renderOnce();
 
       expect(cancelCount).toBe(1);
