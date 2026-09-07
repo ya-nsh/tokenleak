@@ -69,6 +69,7 @@ interface CurrentJsonMessage {
   tokens?: {
     input?: number;
     output?: number;
+    reasoning?: number;
     cache?: {
       read?: number;
       write?: number;
@@ -77,6 +78,7 @@ interface CurrentJsonMessage {
 }
 
 interface UsageRecord {
+  messageId?: string;
   date: string;
   timestamp: string;
   model: string;
@@ -158,10 +160,7 @@ function toIsoTimestamp(createdAt: string | number): string | null {
 
 function toUsageEvent(record: UsageRecord): UsageEvent {
   const totalTokens =
-    record.inputTokens +
-    record.outputTokens +
-    record.cacheReadTokens +
-    record.cacheWriteTokens;
+    record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens;
   const cost = resolveUsageCost({
     model: normalizeModelName(record.model),
     inputTokens: record.inputTokens,
@@ -210,7 +209,8 @@ function buildProviderData(records: UsageRecord[], warnings: ProviderWarning[] =
       existing.cacheWriteTokens += event.cacheWriteTokens;
       existing.totalTokens += event.totalTokens;
       existing.cost += event.cost;
-      existing.pricedTokens = (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
+      existing.pricedTokens =
+        (existing.pricedTokens ?? 0) + (event.pricedTokens ?? event.totalTokens);
       existing.unpricedTokens = (existing.unpricedTokens ?? 0) + (event.unpricedTokens ?? 0);
       existing.costSource =
         (existing.unpricedTokens ?? 0) >= existing.totalTokens ? 'unpriced' : existing.costSource;
@@ -375,104 +375,150 @@ function loadFromLegacyJson(
   return records;
 }
 
+function nonNegative(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function parseCurrentMessage(message: CurrentJsonMessage, sessionId: string): UsageRecord | null {
+  if (!message || message.role !== 'assistant' || typeof message.modelID !== 'string') return null;
+  const created = message.time?.created;
+  if (typeof created !== 'string' && typeof created !== 'number') return null;
+  const timestamp = toIsoTimestamp(created);
+  if (!timestamp) return null;
+  const inputTokens = nonNegative(message.tokens?.input);
+  // OpenCode output excludes the separately reported reasoning bucket.
+  const outputTokens = nonNegative(message.tokens?.output) + nonNegative(message.tokens?.reasoning);
+  const cacheReadTokens = nonNegative(message.tokens?.cache?.read);
+  const cacheWriteTokens = nonNegative(message.tokens?.cache?.write);
+  if (
+    inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens === 0 &&
+    !(typeof message.cost === 'number' && message.cost > 0)
+  )
+    return null;
+  const completed = message.time?.completed;
+  const completedMs =
+    typeof completed === 'number' || typeof completed === 'string'
+      ? toTimestampMillis(completed)
+      : null;
+  return {
+    messageId: typeof message.id === 'string' && message.id ? message.id : undefined,
+    date: timestamp.slice(0, 10),
+    timestamp,
+    model: message.modelID,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    explicitCost: typeof message.cost === 'number' ? message.cost : undefined,
+    sessionId: message.sessionID || sessionId,
+    durationMs:
+      completedMs !== null && completedMs > Date.parse(timestamp)
+        ? completedMs - Date.parse(timestamp)
+        : undefined,
+  };
+}
+
 function loadFromCurrentStorage(
   baseDir: string,
-  range: DateRange,
   warnings: Map<string, ProviderWarning>,
 ): UsageRecord[] {
-  const messagesRoot = join(baseDir, 'storage', 'message');
-  if (!existsSync(messagesRoot)) {
-    return [];
-  }
-
-  const recordsById = new Map<string, UsageRecord>();
-  const recordsWithoutId: UsageRecord[] = [];
-
-  for (const sessionDir of readdirSync(messagesRoot)) {
-    const sessionPath = join(messagesRoot, sessionDir);
-
-    let messageFiles: string[];
+  const root = join(baseDir, 'storage', 'message');
+  if (!existsSync(root)) return [];
+  const records: UsageRecord[] = [];
+  for (const session of readdirSync(root).sort()) {
+    const dir = join(root, session);
+    let files: string[];
     try {
-      messageFiles = readdirSync(sessionPath).filter((file) => file.endsWith('.json'));
+      files = readdirSync(dir)
+        .filter((f) => f.endsWith('.json'))
+        .sort();
     } catch {
-      incrementProviderWarning(warnings, 'read', sessionPath);
+      incrementProviderWarning(warnings, 'read', dir);
       continue;
     }
-
-    for (const file of messageFiles) {
+    for (const file of files) {
+      const path = join(dir, file);
       try {
-        const content = readFileSync(join(sessionPath, file), 'utf-8');
-        const message = JSON.parse(content) as CurrentJsonMessage;
-
-        if (message.role !== 'assistant') {
-          continue;
-        }
-
-        const model = message.modelID;
-        const createdAt = message.time?.created;
-        if (
-          typeof model !== 'string' ||
-          (typeof createdAt !== 'string' && typeof createdAt !== 'number')
-        ) {
-          continue;
-        }
-
-        const date = extractDate(createdAt);
-        const timestamp = toIsoTimestamp(createdAt);
-        if (!date || !timestamp || !isInRange(date, range)) {
-          continue;
-        }
-
-        const inputTokens = typeof message.tokens?.input === 'number' ? message.tokens.input : 0;
-        const outputTokens = typeof message.tokens?.output === 'number' ? message.tokens.output : 0;
-        const cacheReadTokens =
-          typeof message.tokens?.cache?.read === 'number' ? message.tokens.cache.read : 0;
-        const cacheWriteTokens =
-          typeof message.tokens?.cache?.write === 'number' ? message.tokens.cache.write : 0;
-
-        const record: UsageRecord = {
-          date,
-          timestamp,
-          model,
-          inputTokens,
-          outputTokens,
-          cacheReadTokens,
-          cacheWriteTokens,
-          explicitCost: typeof message.cost === 'number' ? message.cost : undefined,
-          sessionId:
-            (typeof message.sessionID === 'string' && message.sessionID) || sessionDir,
-        };
-        const completedAt = message.time?.completed;
-        const completedMs =
-          typeof completedAt === 'string' || typeof completedAt === 'number'
-            ? toTimestampMillis(completedAt)
-            : null;
-        const createdMs = Date.parse(record.timestamp);
-        if (completedMs !== null && Number.isFinite(createdMs) && completedMs > createdMs) {
-          record.durationMs = completedMs - createdMs;
-        }
-
-        const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-        if (
-          totalTokens === 0 &&
-          !(typeof record.explicitCost === 'number' && record.explicitCost > 0)
-        ) {
-          continue;
-        }
-
-        if (typeof message.id === 'string' && message.id.length > 0) {
-          recordsById.set(message.id, record);
-        } else {
-          recordsWithoutId.push(record);
-        }
+        const message = JSON.parse(readFileSync(path, 'utf8')) as CurrentJsonMessage;
+        const record = parseCurrentMessage(message, session);
+        if (record) records.push(record);
       } catch {
-        incrementProviderWarning(warnings, 'parse', join(sessionPath, file));
-        continue;
+        incrementProviderWarning(warnings, 'parse', path);
       }
     }
   }
+  return records;
+}
 
-  return [...recordsById.values(), ...recordsWithoutId];
+function loadModernSqlite(
+  dbPath: string,
+  warnings: Map<string, ProviderWarning>,
+): UsageRecord[] | null {
+  if (!existsSync(dbPath)) return null;
+  let db: InstanceType<typeof Database> | undefined;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    if (!db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='message'").get())
+      return null;
+    const records: UsageRecord[] = [];
+    // Payload IDs survive migrations and fork copies; row IDs are a fallback.
+    for (const row of db.query('SELECT * FROM message ORDER BY id').all() as {
+      id: string;
+      session_id: string;
+      time_created?: number;
+      role?: string;
+      data: string;
+    }[]) {
+      try {
+        const message = JSON.parse(row.data) as CurrentJsonMessage;
+        if (!message || typeof message !== 'object') throw new Error('Invalid message');
+        const record = parseCurrentMessage(
+          {
+            ...message,
+            id: message.id || row.id,
+            role: message.role ?? row.role,
+            time: { ...message.time, created: message.time?.created ?? row.time_created },
+          },
+          row.session_id,
+        );
+        if (record) records.push(record);
+      } catch {
+        incrementProviderWarning(warnings, 'parse', dbPath);
+      }
+    }
+    return records;
+  } catch {
+    incrementProviderWarning(warnings, 'read', dbPath);
+    return [];
+  } finally {
+    db?.close();
+  }
+}
+
+function mergeCurrentRecords(records: UsageRecord[]): UsageRecord[] {
+  const unique = new Map<string, UsageRecord>();
+  const anonymous: UsageRecord[] = [];
+  for (const record of records) {
+    if (!record.messageId) {
+      anonymous.push(record);
+      continue;
+    }
+    const previous = unique.get(record.messageId);
+    if (!previous) {
+      unique.set(record.messageId, record);
+      continue;
+    }
+    unique.set(record.messageId, {
+      ...(record.timestamp < previous.timestamp ? record : previous),
+      inputTokens: Math.max(previous.inputTokens, record.inputTokens),
+      outputTokens: Math.max(previous.outputTokens, record.outputTokens),
+      cacheReadTokens: Math.max(previous.cacheReadTokens, record.cacheReadTokens),
+      cacheWriteTokens: Math.max(previous.cacheWriteTokens, record.cacheWriteTokens),
+      durationMs: Math.max(previous.durationMs ?? 0, record.durationMs ?? 0) || undefined,
+      explicitCost: record.explicitCost ?? previous.explicitCost,
+    });
+  }
+  return [...unique.values(), ...anonymous];
 }
 
 export class OpenCodeProvider implements IProvider {
@@ -507,29 +553,24 @@ export class OpenCodeProvider implements IProvider {
   async load(range: DateRange): Promise<ProviderData> {
     const warnings = new Map<string, ProviderWarning>();
     const currentMessagesRoot = join(this.baseDir, 'storage', 'message');
-    if (existsSync(currentMessagesRoot)) {
-      const currentRecords = loadFromCurrentStorage(this.baseDir, range, warnings);
-      addUnknownPricingWarnings(warnings, currentRecords.map(toUsageEvent));
-      return buildProviderData(
-        currentRecords,
-        [...warnings.values()].sort(
-          (a, b) => a.file.localeCompare(b.file) || a.kind.localeCompare(b.kind),
-        ),
-      );
-    }
-
     const opencodeDbPath = join(this.baseDir, 'opencode.db');
     const sessionsDbPath = join(this.baseDir, 'sessions.db');
     const sessionsDir = join(this.baseDir, 'sessions');
-
-    let records: UsageRecord[] = [];
-
-    if (existsSync(opencodeDbPath)) {
+    const modernRecords = loadModernSqlite(opencodeDbPath, warnings);
+    let records: UsageRecord[];
+    if (modernRecords !== null || existsSync(currentMessagesRoot)) {
+      records = mergeCurrentRecords([
+        ...loadFromCurrentStorage(this.baseDir, warnings),
+        ...(modernRecords ?? []),
+      ]).filter((record) => isInRange(record.date, range));
+    } else if (existsSync(opencodeDbPath)) {
       records = loadFromSqlite(opencodeDbPath, range, warnings);
     } else if (existsSync(sessionsDbPath)) {
       records = loadFromSqlite(sessionsDbPath, range, warnings);
     } else if (existsSync(sessionsDir)) {
       records = loadFromLegacyJson(sessionsDir, range, warnings);
+    } else {
+      records = [];
     }
     addUnknownPricingWarnings(warnings, records.map(toUsageEvent));
 

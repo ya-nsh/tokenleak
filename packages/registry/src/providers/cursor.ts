@@ -204,7 +204,9 @@ function parseUsageFile(filePath: string, warnings: Map<string, ProviderWarning>
     }
 
     const inputTokens = Math.max(0, inputWithoutCacheWrite);
-    const cacheWriteTokens = Math.max(0, inputWithCacheWrite - inputWithoutCacheWrite);
+    // Cursor's two input columns are disjoint buckets. "w/ Cache Write"
+    // counts tokens written to cache, not total input including uncached input.
+    const cacheWriteTokens = Math.max(0, inputWithCacheWrite);
     const totalTokens =
       inputTokens +
       outputTokens +

@@ -1,4 +1,4 @@
-export const VERSION = '2.2.0';
+export const VERSION = '2.2.1';
 export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
 export { formatCostWithCompleteness } from './cost-completeness';
 

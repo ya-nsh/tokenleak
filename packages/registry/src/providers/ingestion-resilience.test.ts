@@ -28,12 +28,12 @@ test.each(['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_cr
   },
 );
 
-test('deduplicates Claude message snapshots before midnight filtering', async () => {
+test('keeps Claude streaming maxima on the original request day before midnight filtering', async () => {
   const root = temporary(); jsonl(root, [assistant('2026-03-12T23:59:59Z', 1), assistant('2026-03-13T00:00:01Z', 2)]);
   const provider = new ClaudeCodeProvider(root);
   expect((await provider.load(range)).totalTokens).toBe(102);
-  expect((await provider.load({ since: range.since, until: range.since })).totalTokens).toBe(0);
-  expect((await provider.load({ since: range.until, until: range.until })).totalTokens).toBe(102);
+  expect((await provider.load({ since: range.since, until: range.since })).totalTokens).toBe(102);
+  expect((await provider.load({ since: range.until, until: range.until })).totalTokens).toBe(0);
 });
 
 test('dangling links and directory cycles do not hide valid Claude or Codex sessions', async () => {

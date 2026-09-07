@@ -16,7 +16,11 @@ import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-spl
 import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
-import { addUnknownPricingWarnings, buildEventCostCompleteness, resolveUsageCost } from '../costing';
+import {
+  addUnknownPricingWarnings,
+  buildEventCostCompleteness,
+  resolveUsageCost,
+} from '../costing';
 
 const DEFAULT_CONFIG_DIR = join(homedir(), '.claude');
 
@@ -35,6 +39,7 @@ interface UsageRecord {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   messageId?: string;
+  requestId?: string;
   sessionId?: string;
   projectId?: string;
   prompt?: string;
@@ -103,16 +108,19 @@ function extractUsage(record: unknown): UsageRecord | null {
   const cacheWriteTokens =
     typeof u['cache_creation_input_tokens'] === 'number' ? u['cache_creation_input_tokens'] : 0;
   const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-  if (!Number.isFinite(totalTokens) || totalTokens === 0 ||
-    [inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens].some((value) => !Number.isFinite(value) || value < 0)) {
+  if (
+    !Number.isFinite(totalTokens) ||
+    totalTokens === 0 ||
+    [inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens].some(
+      (value) => !Number.isFinite(value) || value < 0,
+    )
+  ) {
     return null;
   }
 
-  // Extract YYYY-MM-DD from ISO timestamp
-  const date = timestamp.slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return null;
-  }
+  const millis = Date.parse(timestamp);
+  if (!Number.isFinite(millis)) return null;
+  const date = new Date(millis).toISOString().slice(0, 10);
 
   return {
     date,
@@ -123,6 +131,7 @@ function extractUsage(record: unknown): UsageRecord | null {
     cacheReadTokens,
     cacheWriteTokens,
     messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
+    requestId: typeof rec['requestId'] === 'string' ? rec['requestId'] : undefined,
     projectId: typeof rec['cwd'] === 'string' && rec['cwd'].trim() ? rec['cwd'].trim() : undefined,
   };
 }
@@ -303,10 +312,13 @@ export class ClaudeCodeProvider implements IProvider {
     const files = collectJsonlFiles(this.baseDir);
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
-    const cache = new UsageFileCache<UsageRecord>('claude-code-v2', this.baseDir, isCachedUsageRecord);
+    const cache = new UsageFileCache<UsageRecord>(
+      'claude-code-v3',
+      this.baseDir,
+      isCachedUsageRecord,
+    );
     const recordsByFile = await mapWithConcurrency(files, 8, async (file) => {
-      const latestRecordsByMessageId = new Map<string, UsageRecord>();
-      const anonymousRecords: UsageRecord[] = [];
+      const records: UsageRecord[] = [];
       const relativeFile = relative(this.baseDir, file).split(sep).join('/');
       const projectId = relative(this.baseDir, dirname(file)).split(sep).join('/');
 
@@ -338,11 +350,9 @@ export class ClaudeCodeProvider implements IProvider {
           }
           return { records, warnings: fileWarnings };
         });
-        for (const warning of parsed.warnings) incrementWarningCount(warnings, warning.kind, warning.file);
-        for (const usage of parsed.records) {
-          if (usage.messageId) latestRecordsByMessageId.set(usage.messageId, usage);
-          else anonymousRecords.push(usage);
-        }
+        for (const warning of parsed.warnings)
+          incrementWarningCount(warnings, warning.kind, warning.file);
+        records.push(...parsed.records);
       } catch {
         // Skip files that fail to parse — corrupted files shouldn't
         // prevent loading data from other files
@@ -350,10 +360,35 @@ export class ClaudeCodeProvider implements IProvider {
         return [];
       }
 
-      return [...latestRecordsByMessageId.values(), ...anonymousRecords];
+      return records;
     });
     await cache.save();
-    const allRecords = recordsByFile.flat().filter((record) => isInRange(record.date, range));
+    // A resumed/forked transcript can copy messages into another file. Merge
+    // globally before date filtering, so a copied message cannot move between days.
+    const unique = new Map<string, UsageRecord>();
+    const anonymous: UsageRecord[] = [];
+    for (const record of recordsByFile.flat()) {
+      if (!record.messageId) {
+        anonymous.push(record);
+        continue;
+      }
+      const key = JSON.stringify([record.messageId, record.requestId ?? null]);
+      const previous = unique.get(key);
+      if (!previous) {
+        unique.set(key, record);
+        continue;
+      }
+      const first =
+        Date.parse(record.timestamp) < Date.parse(previous.timestamp) ? record : previous;
+      unique.set(key, {
+        ...first,
+        inputTokens: Math.max(previous.inputTokens, record.inputTokens),
+        outputTokens: Math.max(previous.outputTokens, record.outputTokens),
+        cacheReadTokens: Math.max(previous.cacheReadTokens, record.cacheReadTokens),
+        cacheWriteTokens: Math.max(previous.cacheWriteTokens, record.cacheWriteTokens),
+      });
+    }
+    const allRecords = [...unique.values(), ...anonymous].filter((r) => isInRange(r.date, range));
 
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {

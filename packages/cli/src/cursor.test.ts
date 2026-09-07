@@ -19,8 +19,8 @@ import {
 
 const SAMPLE_CSV = [
   'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost',
-  '2026-03-10T12:34:56Z,chat,claude-sonnet-4-20250514,false,1200,1000,200,300,1700,$0.0100',
-  '2026-03-11T06:00:00Z,chat,gpt-4o-2025-01-29,false,550,500,50,100,700,$0.0024',
+  '2026-03-10T12:34:56Z,chat,claude-sonnet-4-20250514,false,200,1000,200,300,1700,$0.0100',
+  '2026-03-11T06:00:00Z,chat,gpt-4o-2025-01-29,false,50,500,50,100,700,$0.0024',
   '',
 ].join('\n');
 

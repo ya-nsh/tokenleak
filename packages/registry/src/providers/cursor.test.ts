@@ -14,8 +14,8 @@ describe('CursorProvider', () => {
     try {
       writeFileSync(join(root, 'usage.csv'), [
         'Model,Cost,Date,Output Tokens,Cache Read,Input (w/o Cache Write),Input (w/ Cache Write)',
-        'gpt-5.4-fast,,2026-03-10,100,0,1000,1000',
-        'gpt-5.4,,2026-03-10,100,0,1000,1000',
+        'gpt-5.4-fast,,2026-03-10,100,0,1000,0',
+        'gpt-5.4,,2026-03-10,100,0,1000,0',
       ].join('\n'));
       const data = await new CursorProvider(root).load(FULL_RANGE);
       expect(data.daily[0]?.models[0]?.serviceTiers).toEqual([
@@ -33,11 +33,11 @@ describe('CursorProvider', () => {
     try {
       writeFileSync(join(root, 'usage.csv'), [
         '\uFEFF"Model",Cost,Date,Output Tokens,Cache Read,Input (w/o Cache Write),Input (w/ Cache Write)',
-        'claude-4.5-opus-high,,2026-03-10,100,0,1000,1000',
-        'claude-4.5-opus-high-thinking,,2026-03-10,100,0,1000,1000',
-        'gpt-5.4-fast,,2026-03-10,100,0,1000,1000',
-        'auto,$0.00,2026-03-10,100,0,1000,1000',
-        'composer-1,$0.12,2026-03-10,100,0,1000,1000',
+        'claude-4.5-opus-high,,2026-03-10,100,0,1000,0',
+        'claude-4.5-opus-high-thinking,,2026-03-10,100,0,1000,0',
+        'gpt-5.4-fast,,2026-03-10,100,0,1000,0',
+        'auto,$0.00,2026-03-10,100,0,1000,0',
+        'composer-1,$0.12,2026-03-10,100,0,1000,0',
       ].join('\n'));
       const data = await new CursorProvider(root).load(FULL_RANGE);
       expect(data.events?.map((e) => e.model)).toEqual(['claude-opus-4-5', 'claude-opus-4-5', 'gpt-5.4', 'auto', 'composer-1']);
@@ -72,7 +72,7 @@ describe('CursorProvider', () => {
     mkdirSync(join(tempRoot, 'archive'));
     writeFileSync(
       join(tempRoot, 'archive', 'usage.archived.csv'),
-      'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost\n2026-03-10,chat,gpt-4o,false,10,10,0,5,15,$0.10\n',
+      'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost\n2026-03-10,chat,gpt-4o,false,0,10,0,5,15,$0.10\n',
     );
 
     try {
@@ -165,7 +165,7 @@ describe('CursorProvider', () => {
       join(tempRoot, 'usage.csv'),
       [
         'Date,Kind,Model,Max Mode,Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens,Cost',
-        '2026-03-10T12:34:56Z,chat,claude-sonnet-4-20250514,false,1200,1000,200,300,1700,$0.0100',
+        '2026-03-10T12:34:56Z,chat,claude-sonnet-4-20250514,false,200,1000,200,300,1700,$0.0100',
         '2026-03-11T06:00:00Z,chat,gpt-4o-2025-01-29,false,550,500',
       ].join('\n'),
     );
