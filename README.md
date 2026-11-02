@@ -1001,6 +1001,8 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_DAYS` | `90` | Default lookback period in days |
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
 | `TOKENLEAK_PRICING_FILE` | `~/.config/tokenleak/pricing.json` | User pricing overrides (see [Pricing sources](#pricing-sources)) |
+| `TOKENLEAK_CACHE_DIR` | `~/.cache/tokenleak` | Root for all caches (pricing, ingested usage, TUI snapshot) |
+| `TOKENLEAK_OFFLINE` | unset | Set to `1` to skip the LiteLLM pricing fetch and use cached or built-in rates |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
 | `CODEX_HOME` | `~/.codex` | Codex home directory |
 | `TOKENLEAK_CURSOR_DIR` | `~/.config/tokenleak` | Cursor credentials/cache root (`cursor-credentials.json`, `cursor-cache/`) |

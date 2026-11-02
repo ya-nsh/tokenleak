@@ -22,7 +22,6 @@ import type {
   WasteReport,
 } from '@tokenleak/core';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
   aggregate,
@@ -42,6 +41,7 @@ import {
   compareRanges,
   dayOfWeekBreakdown,
   getTodayLocal,
+  getTokenleakCacheDir,
   mergeProviderData,
   SCHEMA_VERSION,
   shiftDateStringLocal,
@@ -117,16 +117,8 @@ export interface LoadAllDataOptions {
   attemptCursorSync?: boolean;
 }
 
-function defaultCacheDir(): string {
-  try {
-    return join(homedir(), '.cache', 'tokenleak');
-  } catch {
-    return join(tmpdir(), 'tokenleak-cache');
-  }
-}
-
 export function getTuiDataCachePath(): string {
-  return process.env['TOKENLEAK_TUI_CACHE_PATH'] ?? join(defaultCacheDir(), TUI_CACHE_FILENAME);
+  return process.env['TOKENLEAK_TUI_CACHE_PATH'] ?? join(getTokenleakCacheDir(), TUI_CACHE_FILENAME);
 }
 
 function isCursorSetupStatus(value: unknown): value is CursorSetupStatus {

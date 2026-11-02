@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { MAX_JSONL_RECORD_BYTES } from '@tokenleak/core';
+import { MAX_JSONL_RECORD_BYTES, getTokenleakCacheDir } from '@tokenleak/core';
 import type { JsonlRecordWarning } from './jsonl-splitter';
 
 interface ParsedFile<T> {
@@ -36,7 +35,7 @@ export class UsageFileCache<T> {
   ) {
     this.disabled = process.env['TOKENLEAK_USAGE_CACHE'] === '0';
     this.directory =
-      process.env['TOKENLEAK_USAGE_CACHE_DIR'] ?? join(homedir(), '.cache', 'tokenleak', 'usage');
+      process.env['TOKENLEAK_USAGE_CACHE_DIR'] ?? join(getTokenleakCacheDir(), 'usage');
     // Parser versions and the record-size policy are part of the cache identity.
     const key = createHash('sha256')
       .update(

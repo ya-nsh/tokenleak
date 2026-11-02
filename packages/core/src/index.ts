@@ -2,6 +2,7 @@ export const VERSION = '2.2.1';
 export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
 export { formatCostWithCompleteness } from './cost-completeness';
 export { formatTokenCount, formatUsd } from './format';
+export { getTokenleakCacheDir } from './paths';
 
 export type {
   DailyUsage,
