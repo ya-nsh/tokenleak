@@ -3,8 +3,19 @@
  * within the same family.
  */
 export const DOWNGRADE_PATHS: Readonly<Record<string, string>> = {
-  // Claude 4/4.6 family
+  // Claude 5.x family
+  'claude-fable-5-1': 'claude-opus-5-5',
+  'claude-fable-5': 'claude-opus-5-5',
+  'claude-opus-5-5': 'claude-sonnet-5-5',
+  'claude-opus-5': 'claude-sonnet-5',
+  'claude-sonnet-5-5': 'claude-haiku-5-5',
+  'claude-sonnet-5': 'claude-haiku-5-5',
+
+  // Claude 4/4.6+ family
+  'claude-opus-4-8': 'claude-sonnet-5',
+  'claude-opus-4-7': 'claude-sonnet-4-6',
   'claude-opus-4-6': 'claude-sonnet-4-6',
+  'claude-sonnet-4-6': 'claude-haiku-4-5',
   'claude-opus-4': 'claude-sonnet-4',
 
   // Claude 4.5 family
@@ -17,6 +28,19 @@ export const DOWNGRADE_PATHS: Readonly<Record<string, string>> = {
 
   // Claude 3.5 family
   'claude-3.5-sonnet': 'claude-3.5-haiku',
+
+  // OpenAI GPT-6 family
+  'gpt-6.1-sol': 'gpt-6.1-terra',
+  'gpt-6-sol': 'gpt-6-luna',
+
+  // OpenAI GPT-5 family
+  'gpt-5.6-sol': 'gpt-5.6-terra',
+  'gpt-5.6-terra': 'gpt-5.6-luna',
+  'gpt-5.5': 'gpt-5-mini',
+  'gpt-5.4': 'gpt-5.4-mini',
+  'gpt-5.4-mini': 'gpt-5.4-nano',
+  'gpt-5': 'gpt-5-mini',
+  'gpt-5.1-codex': 'gpt-5.1-codex-mini',
 
   // OpenAI GPT-4o family
   'gpt-4o': 'gpt-4o-mini',

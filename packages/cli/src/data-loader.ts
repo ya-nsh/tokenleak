@@ -20,7 +20,7 @@ import type {
   UsageEvent,
 } from '@tokenleak/core';
 import type { IProvider } from '@tokenleak/registry';
-import { MODEL_PRICING } from '@tokenleak/registry';
+import { buildPricingTable } from '@tokenleak/registry';
 import { TokenleakError } from './errors.js';
 
 export interface LoadTokenleakDataOptions {
@@ -93,7 +93,7 @@ export function buildDefaultOptimization(
 ): NonNullable<TokenleakOutput['optimization']> {
   const [baseline, comparison] = defaultBehaviorSelectors(providers, events, range);
   return {
-    routingSimulation: buildRoutingSimulationReport(events, range, MODEL_PRICING),
+    routingSimulation: buildRoutingSimulationReport(events, range, buildPricingTable(events.map((event) => event.model))),
     agentWaste: buildAgentWasteReport(providers, events, range),
     behaviorDiff: buildAgentBehaviorDiffReport(events, range, baseline, comparison),
   };

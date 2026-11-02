@@ -387,6 +387,7 @@ export function analyzeEfficiency(
   );
 
   const totalProjectedMonthlyCost = Math.max(0, totalCurrentMonthlyCost - totalMonthlySavings);
+  const coverage = summarizePricingCoverage(allEvents);
 
   return {
     recommendations,
@@ -395,5 +396,49 @@ export function analyzeEfficiency(
     totalMonthlySavings,
     analyzedDays,
     analyzedEvents: allEvents.length,
+    ...coverage,
   };
+}
+
+/** How much of the analyzed usage the advisor could actually price. */
+function summarizePricingCoverage(
+  events: readonly UsageEvent[],
+): Pick<AdvisorReport, 'pricedTokenShare' | 'unpricedModels'> {
+  let totalTokens = 0;
+  let unpricedTokens = 0;
+  const unpricedByModel = new Map<string, number>();
+  for (const event of events) {
+    totalTokens += event.totalTokens;
+    const unpriced = event.unpricedTokens ?? 0;
+    if (unpriced > 0) {
+      unpricedTokens += unpriced;
+      unpricedByModel.set(event.model, (unpricedByModel.get(event.model) ?? 0) + unpriced);
+    }
+  }
+  return {
+    pricedTokenShare: totalTokens > 0 ? Math.max(0, 1 - unpricedTokens / totalTokens) : 1,
+    unpricedModels: [...unpricedByModel.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([model]) => model),
+  };
+}
+
+/** Below this priced share, "no recommendations" would be a claim the data cannot back. */
+const MIN_PRICED_SHARE_FOR_VERDICT = 0.99;
+const MAX_NAMED_UNPRICED_MODELS = 3;
+
+/**
+ * Explain why the advisor's numbers are partial, or null when coverage is
+ * good enough to trust them.
+ */
+export function describePricingGap(report: AdvisorReport): string | null {
+  if (report.pricedTokenShare >= MIN_PRICED_SHARE_FOR_VERDICT) return null;
+  const unpricedPercent = Math.round((1 - report.pricedTokenShare) * 100);
+  const named = report.unpricedModels.slice(0, MAX_NAMED_UNPRICED_MODELS);
+  const more = report.unpricedModels.length - named.length;
+  const models = named.length > 0 ? ` (${named.join(', ')}${more > 0 ? ` +${more} more` : ''})` : '';
+  return (
+    `${Math.max(1, unpricedPercent)}% of tokens have no known price${models}, so savings are understated. ` +
+    'Run `tokenleak pricing` to see sources, or add rates to ~/.config/tokenleak/pricing.json.'
+  );
 }

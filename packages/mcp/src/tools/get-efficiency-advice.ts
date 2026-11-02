@@ -5,7 +5,7 @@ import {
   mergeProviderData,
   SCHEMA_VERSION,
 } from '@tokenleak/core';
-import { MODEL_PRICING } from '@tokenleak/registry';
+import { buildPricingTable } from '@tokenleak/registry';
 import type { ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
 import { getAvailableProvidersForRequest, loadProviderData } from '../shared/provider-load.js';
@@ -54,7 +54,7 @@ export async function handleGetEfficiencyAdvice(
       more,
     };
 
-    const report = analyzeEfficiency(output, MODEL_PRICING);
+    const report = analyzeEfficiency(output, buildPricingTable(data.flatMap((p) => (p.events ?? []).map((e) => e.model))));
 
     return {
       content: [

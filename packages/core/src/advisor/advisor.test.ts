@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { analyzeEfficiency } from './advisor';
+import { analyzeEfficiency, describePricingGap } from './advisor';
 import { DOWNGRADE_PATHS } from './downgrade-paths';
 import type { AdvisorModelPricing } from './types';
 import type { TokenleakOutput, ProviderData, UsageEvent, AggregatedStats } from '../types';
@@ -463,5 +463,54 @@ describe('DOWNGRADE_PATHS', () => {
   it('maps o-series to mini variants', () => {
     expect(DOWNGRADE_PATHS['o1']).toBe('o1-mini');
     expect(DOWNGRADE_PATHS['o3']).toBe('o3-mini');
+  });
+});
+
+describe('pricing coverage', () => {
+  const analyze = analyzeEfficiency;
+  const baseEvent = {
+    provider: 'claude-code',
+    timestamp: '2026-10-01T00:00:00.000Z',
+    date: '2026-10-01',
+    inputTokens: 50,
+    outputTokens: 50,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 100,
+  };
+  function output(events: Array<Record<string, unknown>>) {
+    return {
+      schemaVersion: 1,
+      generated: '2026-10-02T00:00:00.000Z',
+      dateRange: { since: '2026-10-01', until: '2026-10-01' },
+      providers: [{ provider: 'claude-code', displayName: 'Claude Code', daily: [], totalTokens: 0, totalCost: 0, colors: { primary: '#000', secondary: '#000', gradient: ['#000', '#000'] }, events }],
+      aggregated: { totalCost: 0 },
+    } as unknown as Parameters<typeof analyze>[0];
+  }
+
+  it('reports full coverage when every token is priced', () => {
+    const report = analyze(output([{ ...baseEvent, model: 'a', cost: 1 }]), {});
+    expect(report.pricedTokenShare).toBe(1);
+    expect(report.unpricedModels).toEqual([]);
+    expect(describePricingGap(report)).toBeNull();
+  });
+
+  it('ranks unpriced models by tokens and explains the gap', () => {
+    const report = analyze(
+      output([
+        { ...baseEvent, model: 'small', cost: 0, unpricedTokens: 100 },
+        { ...baseEvent, model: 'big', totalTokens: 300, cost: 0, unpricedTokens: 300 },
+        { ...baseEvent, model: 'priced', totalTokens: 600, cost: 1 },
+      ]),
+      {},
+    );
+    expect(report.pricedTokenShare).toBeCloseTo(0.6);
+    expect(report.unpricedModels).toEqual(['big', 'small']);
+    expect(describePricingGap(report)).toContain('40% of tokens have no known price (big, small)');
+  });
+
+  it('no events means nothing is missing', () => {
+    const report = analyze(output([]), {});
+    expect(report.pricedTokenShare).toBe(1);
   });
 });

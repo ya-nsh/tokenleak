@@ -38,6 +38,8 @@ function makeReport(overrides: Partial<AdvisorReport> = {}): AdvisorReport {
     totalMonthlySavings: 70.10,
     analyzedDays: 90,
     analyzedEvents: 1247,
+    pricedTokenShare: 1,
+    unpricedModels: [],
     ...overrides,
   };
 }
@@ -83,6 +85,24 @@ describe('renderAdvisorView', () => {
     expect(result).toContain('No recommendations');
     // Should not contain Summary section
     expect(result).not.toContain('Summary');
+  });
+
+  it('does not call unpriced usage efficient', () => {
+    const report = makeReport({
+      recommendations: [],
+      totalMonthlySavings: 0,
+      pricedTokenShare: 0.2,
+      unpricedModels: ['claude-next', 'gpt-next'],
+    });
+    const result = renderAdvisorView(report, { width: 80, noColor: true });
+
+    expect(result).not.toContain('looks efficient');
+    expect(result).toContain('80% of tokens have no known price');
+    expect(result).toContain('claude-next, gpt-next');
+    expect(result).toContain('No recommendations from the priced share');
+    for (const line of result.split('\n')) {
+      expect(stripAnsi(line).length).toBeLessThanOrEqual(80);
+    }
   });
 
   it('respects width constraint -- no line exceeds width after stripping ANSI', () => {

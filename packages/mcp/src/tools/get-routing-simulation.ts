@@ -1,6 +1,6 @@
 import { buildRoutingSimulationReport, SCHEMA_VERSION } from '@tokenleak/core';
 import type { UsageEvent } from '@tokenleak/core';
-import { MODEL_PRICING, type ProviderRegistry } from '@tokenleak/registry';
+import { buildPricingTable, type ProviderRegistry } from '@tokenleak/registry';
 import { resolveRange } from '../shared/date-range.js';
 import { loadProviderData } from '../shared/provider-load.js';
 
@@ -14,7 +14,7 @@ export async function handleGetRoutingSimulation(
     const filtered = args.provider ? available.filter((p) => p.name === args.provider) : available;
     const { data, warnings } = await loadProviderData(filtered, range);
     const events: UsageEvent[] = data.flatMap((provider) => provider.events ?? []);
-    const report = buildRoutingSimulationReport(events, range, MODEL_PRICING, {
+    const report = buildRoutingSimulationReport(events, range, buildPricingTable(events.map((event) => event.model)), {
       strategy: args.strategy ?? 'conservative',
     });
 

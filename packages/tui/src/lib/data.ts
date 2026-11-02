@@ -72,7 +72,7 @@ import {
   TraeProvider,
   OpenCodeProvider,
   PiProvider,
-  MODEL_PRICING,
+  buildPricingTable,
   resolveCursorSetupStatus,
   type CursorSetupStatus,
 } from '@tokenleak/registry';
@@ -463,7 +463,7 @@ export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
     aggregated: windowStats,
   };
 
-  const report = analyzeEfficiency(output, MODEL_PRICING);
+  const report = analyzeEfficiency(output, buildPricingTable(scoped.events.map((event) => event.model)));
   state.cachedAdvisorReport = report;
   return report;
 }
@@ -512,7 +512,7 @@ export function ensureRoutingSimulationReport(state: AppState): RoutingSimulatio
   const scoped = getScopedWindowData(state);
   if (!scoped) return null;
 
-  const report = buildRoutingSimulationReport(scoped.events, scoped.windowRange, MODEL_PRICING, {
+  const report = buildRoutingSimulationReport(scoped.events, scoped.windowRange, buildPricingTable(scoped.events.map((event) => event.model)), {
     strategy: 'conservative',
   });
   state.cachedRoutingSimulationReport = report;
