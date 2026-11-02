@@ -98,7 +98,7 @@ describe('buildFocusReport', () => {
     expect(topSession?.scoreBreakdown.duration).toBeGreaterThan(0);
     expect(topSession?.rationale).toContain('2-day project streak');
     expect(lowSignalSession?.sessionId).toBe('session-d');
-    expect(lowSignalSession?.rationale).toContain('single-event session with no duration signal');
+    expect(lowSignalSession?.rationale).toContain('single burst with no measurable active time');
   });
 
   it('returns an empty report when no events are available', () => {
@@ -142,7 +142,79 @@ describe('buildFocusReport', () => {
     for (const entry of report.entries) {
       expect(entry.scoreBreakdown.duration).toBe(0);
       expect(entry.scoreBreakdown.density).toBe(0);
-      expect(entry.rationale).toContain('single-event session with no duration signal');
+      expect(entry.rationale).toContain('single burst with no measurable active time');
     }
+  });
+
+  it('scores active time, not a session left open for days', () => {
+    const at = (iso: string, sessionId: string, totalTokens = 1_000): UsageEvent => ({
+      provider: 'claude-code',
+      timestamp: iso,
+      date: iso.slice(0, 10),
+      model: 'claude-opus-5-5',
+      inputTokens: totalTokens / 2,
+      outputTokens: totalTokens / 2,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens,
+      cost: 0,
+      sessionId,
+    });
+    const resumed = [
+      at('2026-03-01T09:00:00.000Z', 'resumed'),
+      at('2026-03-01T09:20:00.000Z', 'resumed'),
+      at('2026-03-04T09:00:00.000Z', 'resumed'),
+      at('2026-03-04T09:20:00.000Z', 'resumed'),
+    ];
+    const focused = Array.from({ length: 13 }, (_, i) =>
+      at(new Date(Date.parse('2026-03-05T09:00:00.000Z') + i * 15 * 60_000).toISOString(), 'focused'),
+    );
+    const report = buildFocusReport([...resumed, ...focused]);
+    const byId = new Map(report.entries.map((entry) => [entry.sessionId, entry]));
+
+    // 3 days of span, 40 minutes of work.
+    expect(byId.get('resumed')!.durationMs).toBe(40 * 60_000);
+    expect(byId.get('resumed')!.spanMs).toBe(3 * 24 * 3_600_000 + 20 * 60_000);
+    // 3 hours of steady 15-minute turns.
+    expect(byId.get('focused')!.durationMs).toBe(3 * 3_600_000);
+    expect(report.entries[0]!.sessionId).toBe('focused');
+  });
+
+  it('does not score density for sessions under ten active minutes', () => {
+    const quick = (iso: string): UsageEvent => ({
+      provider: 'claude-code',
+      timestamp: iso,
+      date: '2026-03-06',
+      model: 'claude-opus-5-5',
+      inputTokens: 50_000_000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 50_000_000,
+      cost: 0,
+      sessionId: 'quick',
+    });
+    const report = buildFocusReport([quick('2026-03-06T09:00:00.000Z'), quick('2026-03-06T09:01:00.000Z')]);
+    expect(report.entries[0]!.tokensPerHour).toBe(0);
+    expect(report.entries[0]!.rationale).toContain('too short for a density signal');
+  });
+});
+
+describe('activeDurationMs', () => {
+  const { activeDurationMs, FOCUS_IDLE_GAP_MS } = require('./focus') as typeof import('./focus');
+
+  it('sums gaps up to the idle threshold and skips longer breaks', () => {
+    expect(activeDurationMs(['2026-01-01T10:00:00Z', '2026-01-01T10:30:00Z', '2026-01-01T12:00:00Z'])).toBe(
+      FOCUS_IDLE_GAP_MS,
+    );
+  });
+
+  it('ignores order and invalid timestamps', () => {
+    expect(activeDurationMs(['2026-01-01T10:10:00Z', 'nope', '2026-01-01T10:00:00Z'])).toBe(10 * 60_000);
+  });
+
+  it('a single event has no active time', () => {
+    expect(activeDurationMs(['2026-01-01T10:00:00Z'])).toBe(0);
+    expect(activeDurationMs([])).toBe(0);
   });
 });
