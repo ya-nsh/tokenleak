@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { basename, dirname } from 'node:path';
 import type { DateRange, NutritionOutcomeSignal, UsageEvent } from '../types';
 
 async function runGitCommand(args: string[]): Promise<{ ok: boolean; stdout: string }> {
@@ -35,8 +36,21 @@ async function resolveGitRepoRoot(pathLike: string): Promise<string | null> {
     return null;
   }
 
-  const repoRoot = result.stdout.trim();
-  return repoRoot || null;
+  const toplevel = result.stdout.trim();
+  if (!toplevel) return null;
+
+  // A linked worktree (agents create these under .claude/worktrees) shares
+  // the main checkout's .git directory; credit its work to the main repo.
+  const common = await runGitCommand([
+    'git',
+    '-C',
+    pathLike,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ]);
+  const commonDir = common.ok ? common.stdout.trim() : '';
+  return commonDir && basename(commonDir) === '.git' ? dirname(commonDir) : toplevel;
 }
 
 function parseGitNumstat(output: string, repoRoot: string): NutritionOutcomeSignal {
@@ -79,11 +93,15 @@ async function loadGitOutcomeSignal(repoRoot: string, range: DateRange): Promise
     return null;
   }
 
+  // Every local branch, so commits made in agent worktrees count before they
+  // merge. No author filter: one person commits as several identities
+  // (work email, GitHub noreply, typos in user.email).
   const result = await runGitCommand([
     'git',
     '-C',
     repoRoot,
     'log',
+    '--branches',
     `--since=${range.since}T00:00:00`,
     `--until=${range.until}T23:59:59`,
     '--numstat',
