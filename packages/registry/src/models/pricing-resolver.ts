@@ -11,6 +11,7 @@ let remotePricing: Record<string, RemotePricingEntry> | null = null;
 let overridePricing: Record<string, ModelPricing> = {};
 let initialized = false;
 let backgroundRefresh: Promise<void> | null = null;
+let backgroundRefreshAbort: AbortController | null = null;
 
 /** Where this run's remote rates came from. */
 export type RemotePricingStatus =
@@ -25,11 +26,17 @@ const BACKGROUND_REFRESH_TIMEOUT_MS = 5_000;
 
 function refreshCacheInBackground(): void {
   if (backgroundRefresh) return;
-  backgroundRefresh = fetchLiteLLMPricing(BACKGROUND_REFRESH_TIMEOUT_MS)
+  backgroundRefreshAbort = new AbortController();
+  backgroundRefresh = fetchLiteLLMPricing(BACKGROUND_REFRESH_TIMEOUT_MS, backgroundRefreshAbort.signal)
     .then((data) => writePricingCache(data))
     .catch(() => {
-      // Offline or rate-limited: the stale cache keeps serving this run.
+      // Offline, rate-limited, or cancelled: the stale cache keeps serving.
     });
+}
+
+/** Stop an in-flight stale-cache refresh so a finished command can exit now. */
+export function cancelBackgroundPricingRefresh(): void {
+  backgroundRefreshAbort?.abort();
 }
 
 /**

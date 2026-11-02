@@ -131,12 +131,14 @@ export function parseLiteLLMData(
  */
 export async function fetchLiteLLMPricing(
   timeoutMs = FETCH_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<Record<string, RemotePricingEntry>> {
   if (process.env['TOKENLEAK_OFFLINE'] === '1') {
     throw new Error('LiteLLM fetch skipped: TOKENLEAK_OFFLINE=1');
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  signal?.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
     const response = await fetch(LITELLM_URL, { signal: controller.signal });

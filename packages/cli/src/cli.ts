@@ -124,7 +124,7 @@ import {
 } from '@tokenleak/core';
 import { assertKnownFlags } from './flag-validation.js';
 import { shouldStartTui } from './tui-launch.js';
-import { exitAfterFlush } from './exit.js';
+import { finishCommand } from './exit.js';
 import {
   defaultTerminalWidth,
   extractGlobalFlags,
@@ -2218,8 +2218,8 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
         resolve();
       });
     });
-    await exitAfterFlush(0);
-    return;
+    // The server has stopped; its sockets may linger, so exit explicitly.
+    process.exit(0);
   }
 
   // Render
@@ -2938,8 +2938,8 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
       process.on('SIGINT', onExit);
       process.on('SIGTERM', onExit);
     });
-    await exitAfterFlush(0);
-    return;
+    // The server has stopped; its sockets may linger, so exit explicitly.
+    process.exit(0);
   }
 
   const rendered =
@@ -3699,7 +3699,11 @@ const isDirectExecution =
     : process.argv[1] !== undefined &&
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
-if (isDirectExecution) {
+/**
+ * Parse argv and run one command. Commands return after setting the exit
+ * code instead of calling process.exit(), so piped output is never cut off.
+ */
+async function dispatchCli(): Promise<void> {
   const globals = extractGlobalFlags(process.argv.slice(2));
   if (globals.verbose) setVerbose(true);
   const normalizedArgv = normalizeCliArgv(globals.argv);
@@ -3711,7 +3715,7 @@ if (isDirectExecution) {
     } catch (error: unknown) {
       handleError(error);
     }
-    await exitAfterFlush(0);
+    return finishCommand(0);
   }
 
   if (argv[0] === 'explain') {
@@ -3720,17 +3724,17 @@ if (isDirectExecution) {
 
       if (cliArgs['help']) {
         process.stdout.write(buildExplainHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       await initPricing();
       await runExplain(date, cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3741,17 +3745,17 @@ if (isDirectExecution) {
 
       if (cliArgs['help']) {
         process.stdout.write(buildReplayHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       await initPricing();
       await runReplay(date, cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3762,12 +3766,12 @@ if (isDirectExecution) {
 
       if ((parsed.action === 'export' || parsed.action === 'prompt') && parsed.cliArgs['help']) {
         process.stdout.write(buildCommonsHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if ((parsed.action === 'export' || parsed.action === 'prompt') && parsed.cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if (parsed.action === 'inspect') {
@@ -3779,7 +3783,7 @@ if (isDirectExecution) {
         await initPricing();
         await runCommonsExport(parsed.cliArgs);
       }
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3790,12 +3794,12 @@ if (isDirectExecution) {
 
     if (focusArgv.includes('--help') || focusArgv.includes('-h')) {
       process.stdout.write(buildFocusHelpText());
-      await exitAfterFlush(0);
+      return finishCommand(0);
     }
 
     if (focusArgv.includes('--version') || focusArgv.includes('-v')) {
       process.stdout.write(buildVersionText());
-      await exitAfterFlush(0);
+      return finishCommand(0);
     }
 
     try {
@@ -3805,22 +3809,22 @@ if (isDirectExecution) {
       handleError(error);
     }
     await runMain(focusMain);
-    await exitAfterFlush(0);
+    return finishCommand(0);
   }
   if (argv[0] === 'pricing') {
     try {
       const cliArgs = parseOptimizationArgs(argv.slice(1));
       if (cliArgs['help']) {
         process.stdout.write(buildPricingHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       await initPricing();
       await runPricing(cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3830,15 +3834,15 @@ if (isDirectExecution) {
       const cliArgs = parseOptimizationArgs(argv.slice(1));
       if (cliArgs['help']) {
         process.stdout.write(buildWasteHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       await initPricing();
       await runWaste(cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3848,15 +3852,15 @@ if (isDirectExecution) {
       const cliArgs = parseOptimizationArgs(argv.slice(1));
       if (cliArgs['help']) {
         process.stdout.write(buildSimulateRoutingHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       await initPricing();
       await runSimulateRouting(cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3866,15 +3870,15 @@ if (isDirectExecution) {
       const cliArgs = parseOptimizationArgs(argv.slice(1));
       if (cliArgs['help']) {
         process.stdout.write(buildBehaviorDiffHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
       await initPricing();
       await runBehaviorDiff(cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3885,12 +3889,12 @@ if (isDirectExecution) {
 
     if (nutritionArgv.includes('--help') || nutritionArgv.includes('-h')) {
       process.stdout.write(buildNutritionHelpText());
-      await exitAfterFlush(0);
+      return finishCommand(0);
     }
 
     if (nutritionArgv.includes('--version') || nutritionArgv.includes('-v')) {
       process.stdout.write(buildVersionText());
-      await exitAfterFlush(0);
+      return finishCommand(0);
     }
 
     try {
@@ -3900,22 +3904,22 @@ if (isDirectExecution) {
       handleError(error);
     }
     await runMain(nutritionMain);
-    await exitAfterFlush(0);
+    return finishCommand(0);
   }
   if (argv[0] === 'cursor') {
     try {
       if (argv[1] === '--help' || argv[1] === '-h' || argv.length === 1) {
         process.stdout.write(buildCursorHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if (argv[1] === '--version' || argv[1] === '-v') {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       await runCursorCommand(argv.slice(1));
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3927,17 +3931,17 @@ if (isDirectExecution) {
 
       if (cliArgs['help']) {
         process.stdout.write(buildReceiptsHelpText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       if (cliArgs['version']) {
         process.stdout.write(buildVersionText());
-        await exitAfterFlush(0);
+        return finishCommand(0);
       }
 
       await initPricing();
       await runReceipts(cliArgs);
-      await exitAfterFlush(0);
+      return finishCommand(0);
     } catch (error: unknown) {
       handleError(error);
     }
@@ -3946,12 +3950,12 @@ if (isDirectExecution) {
   process.argv = [...process.argv.slice(0, 2), ...normalizedArgv];
   if (argv.includes('--help') || argv.includes('-h')) {
     process.stdout.write(buildHelpText());
-    await exitAfterFlush(0);
+    return finishCommand(0);
   }
 
   if (argv.includes('--version') || argv.includes('-v')) {
     process.stdout.write(buildVersionText());
-    await exitAfterFlush(0);
+    return finishCommand(0);
   }
 
   // Every path prices usage, so a broken override file must stop the run up front.
@@ -3977,4 +3981,8 @@ if (isDirectExecution) {
     await initPricing();
     await runMain(main);
   }
+}
+
+if (isDirectExecution) {
+  await dispatchCli();
 }
