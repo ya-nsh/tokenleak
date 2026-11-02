@@ -1,4 +1,2 @@
 [test]
 preload = ["../../tooling/test-setup/isolate.ts"]
-# sharp PNG rendering and git-backed fixtures exceed the 5s default on busy machines.
-timeout = 30000

@@ -177,4 +177,35 @@ describe('JsonRenderer', () => {
     expect(parsed.more.attribution[0].taskStyle).toBe('quick-hit');
     expect(parsed.more.attribution[0].timeWindows[0].sessionCount).toBe(2);
   });
+
+  it('omits captured prompt text unless includePrompts is set', async () => {
+    const provider: ProviderData = {
+      provider: 'claude-code',
+      displayName: 'Claude Code',
+      daily: [],
+      totalTokens: 2,
+      totalCost: 0,
+      colors: { primary: '#000', secondary: '#000', gradient: ['#000', '#000'] },
+      events: [
+        {
+          provider: 'claude-code',
+          timestamp: '2026-10-01T00:00:00.000Z',
+          date: '2026-10-01',
+          model: 'claude-opus-5-5',
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          totalTokens: 2,
+          cost: 0,
+          prompt: 'private prompt',
+        },
+      ],
+    };
+    const output = createMinimalTokenleakOutput({ providers: [provider] });
+
+    expect(await renderer.render(output, options)).not.toContain('private prompt');
+    expect(await renderer.render(output, { ...options, includePrompts: true })).toContain('private prompt');
+  });
 });
+

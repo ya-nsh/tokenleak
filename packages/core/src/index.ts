@@ -3,6 +3,7 @@ export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
 export { formatCostWithCompleteness } from './cost-completeness';
 export { formatTokenCount, formatUsd } from './format';
 export { getTokenleakCacheDir } from './paths';
+export { redactPromptsForExport, redactWasteReportForExport } from './export-privacy';
 
 export type {
   DailyUsage,

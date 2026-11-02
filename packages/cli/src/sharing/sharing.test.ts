@@ -1,4 +1,5 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { buildGistCreateArgs } from './gist';
 import { getClipboardCommand } from './clipboard';
 import { getOpenCommand } from './open';
 
@@ -153,5 +154,13 @@ describe('sharing/index re-exports', () => {
     expect(typeof sharing.getOpenCommand).toBe('function');
     expect(typeof sharing.uploadToGist).toBe('function');
     expect(typeof sharing.isGhAvailable).toBe('function');
+  });
+});
+
+describe('buildGistCreateArgs', () => {
+  test('creates secret gists, never public ones', () => {
+    const args = buildGistCreateArgs('/tmp/report.json', 'Tokenleak report');
+    expect(args).toEqual(['gh', 'gist', 'create', '/tmp/report.json', '--desc', 'Tokenleak report']);
+    expect(args).not.toContain('--public');
   });
 });

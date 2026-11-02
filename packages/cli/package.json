@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "check": "tsc --noEmit"
   },
   "dependencies": {

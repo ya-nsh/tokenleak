@@ -494,9 +494,14 @@ tokenleak -o usage.svg --open
 # If no output path is provided for json/svg/png, Tokenleak uses tokenleak.<format>
 tokenleak --format png --open
 
-# Upload to a GitHub Gist (requires gh CLI to be authenticated)
+# Upload to a secret GitHub Gist (requires gh CLI to be authenticated)
 tokenleak --format json --upload gist
+
+# Keep captured prompt text in JSON exports (omitted by default)
+tokenleak --format json --include-prompts -o usage-with-prompts.json
 ```
+
+JSON exports (files, `--clipboard`, `--upload gist`) omit captured prompt text by default, because prompts often contain pasted secrets and private code. Prompt IDs are kept so turns still group. Gists are created **secret** (unlisted): anyone with the link can open them, but they are not listed on your profile or in search.
 
 ## Interactive modes
 
