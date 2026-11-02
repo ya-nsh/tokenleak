@@ -86,7 +86,7 @@ describe('TUI data cache', () => {
     mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(
       cachePath,
-      JSON.stringify({ version: 2, generatedAt: new Date().toISOString(), data }),
+      JSON.stringify({ version: 3, generatedAt: new Date().toISOString(), data }),
       'utf8',
     );
 
@@ -95,6 +95,17 @@ describe('TUI data cache', () => {
       hasCredentials: true,
       hasCache: true,
     });
+  });
+
+  test('ignores snapshots written before current-model pricing', () => {
+    mkdirSync(dirname(cachePath), { recursive: true });
+    writeFileSync(
+      cachePath,
+      JSON.stringify({ version: 2, generatedAt: new Date().toISOString(), data: makeTuiData() }),
+      'utf8',
+    );
+
+    expect(readCachedTuiData()).toBeNull();
   });
 
   test('does not persist transient Cursor sync failure warnings', () => {
