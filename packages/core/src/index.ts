@@ -145,6 +145,7 @@ export {
   buildProjectRollups,
   buildAttributionClusters,
   inferRepoRoot,
+  describeProject,
   inferDirectoryLabel,
   normalizeScores,
 } from './aggregation/analytics';
@@ -161,9 +162,11 @@ export {
 } from './date-utils';
 
 export {
+  CostCompletenessAccumulator,
   combineCostCompleteness,
   buildDailyCostCompleteness,
   buildEventCostCompleteness,
+  buildModelCostCompleteness,
   mergeCostCompleteness,
 } from './cost-completeness';
 

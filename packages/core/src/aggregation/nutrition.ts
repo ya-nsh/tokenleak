@@ -6,6 +6,7 @@ import type {
   NutritionRepoSummary,
   UsageEvent,
 } from '../types';
+import { CostCompletenessAccumulator, combineCostCompleteness } from '../cost-completeness';
 
 const METHOD =
   'Agent nutrition label v1: outcome-adjacent metrics join token usage with read-only Git commit, file, and line-change counts for the same date range. These are directional indicators, not proof of productivity or code quality.';
@@ -18,6 +19,7 @@ interface RepoAccumulator {
   sessions: Set<string>;
   tokens: number;
   cost: number;
+  completeness: CostCompletenessAccumulator;
 }
 
 function normalizePathLike(value: string): string {
@@ -101,6 +103,7 @@ function buildRepoSummary(
     sessions: accumulator.sessions.size,
     tokens: accumulator.tokens,
     cost: accumulator.cost,
+    costCompleteness: accumulator.completeness.result(),
     commits,
     changedFiles,
     changedLines,
@@ -134,6 +137,7 @@ export function buildNutritionReport(
         sessions: new Set(),
         tokens: 0,
         cost: 0,
+        completeness: new CostCompletenessAccumulator(),
       };
       byRepo.set(key, accumulator);
     }
@@ -145,6 +149,7 @@ export function buildNutritionReport(
     }
     accumulator.tokens += event.totalTokens;
     accumulator.cost += event.cost;
+    accumulator.completeness.add(event);
   }
 
   const repos = [...byRepo.entries()]
@@ -187,6 +192,7 @@ export function buildNutritionReport(
     dateRange,
     totals: {
       ...totals,
+      costCompleteness: combineCostCompleteness(summaries.map((summary) => summary.costCompleteness)),
       tokensPerCommit: ratio(totals.tokens, totals.commits),
       costPerCommit: ratio(totals.cost, totals.commits),
       tokensPerChangedLine: ratio(totals.tokens, totals.changedLines),

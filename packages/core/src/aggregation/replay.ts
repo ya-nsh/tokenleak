@@ -8,6 +8,7 @@ import type {
   TokenVelocityPoint,
   UsageEvent,
 } from '../types';
+import { buildEventCostCompleteness } from '../cost-completeness';
 
 const FLOW_BLOCK_GAP_MS = 15 * 60 * 1_000;
 const DEEP_FLOW_DURATION_MS = 45 * 60 * 1_000;
@@ -130,6 +131,7 @@ function buildFlowBlock(events: UsageEvent[], blockIndex: number): FlowBlock {
     cacheWriteTokens,
     totalTokens,
     cost,
+    costCompleteness: buildEventCostCompleteness(events),
     dominantModel: computeDominantModel(events),
     events,
     modelSwitches: countModelSwitches(events),

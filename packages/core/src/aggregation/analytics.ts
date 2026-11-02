@@ -13,6 +13,7 @@ import type {
   UsageEvent,
 } from '../types';
 import { calculateStreaks } from './streaks';
+import { CostCompletenessAccumulator } from '../cost-completeness';
 
 interface SessionAccumulator {
   sessionId: string;
@@ -33,6 +34,7 @@ interface SessionAccumulator {
   cost: number;
   modelTokens: Map<string, { tokens: number; cost: number }>;
   activeDates: Set<string>;
+  completeness: CostCompletenessAccumulator;
 }
 
 interface AttributionClusterAccumulator {
@@ -118,6 +120,33 @@ function createRepoRootResolver(): typeof inferRepoRoot {
     roots.set(projectId, root);
     return root;
   };
+}
+
+/** Agent worktrees live inside their repo; show them as `repo@branch`, not a deep path. */
+const WORKTREE_PATH = /\/(?:\.claude\/worktrees|\.worktrees)\/([^/]+)$/;
+
+/**
+ * Short human label for a project path: the repo name, `repo/folder` inside
+ * a known repo, or `repo@worktree` for agent worktrees. Full paths stay in
+ * `projectId` / `repoRoot`; this is only for display.
+ */
+export function describeProject(
+  projectId?: string | null,
+  repoRoot?: string | null,
+): string | null {
+  if (!projectId || !projectId.trim()) return null;
+  const path = normalizePathLike(projectId.trim());
+  const worktree = WORKTREE_PATH.exec(path);
+  if (worktree) {
+    const repo = basename(path.slice(0, worktree.index)) || path.slice(0, worktree.index);
+    return `${repo}@${worktree[1]}`;
+  }
+  const root = repoRoot ? normalizePathLike(repoRoot) : null;
+  if (root && path.startsWith(`${root}/`)) {
+    // Keep it short: the repo plus the folder you were in, not the whole subpath.
+    return `${basename(root)}/${basename(path)}`;
+  }
+  return basename(path) || path;
 }
 
 export function inferDirectoryLabel(
@@ -322,6 +351,7 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
         cost: 0,
         modelTokens: new Map(),
         activeDates: new Set(),
+        completeness: new CostCompletenessAccumulator(),
       };
       sessions.set(sessionKey(event.provider, sessionId), session);
     } else {
@@ -346,6 +376,7 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
     session.cacheWriteTokens += event.cacheWriteTokens;
     session.totalTokens += event.totalTokens;
     session.cost += event.cost;
+    session.completeness.add(event);
     session.activeDates.add(event.date);
 
     const existingModel = session.modelTokens.get(event.model) ?? { tokens: 0, cost: 0 };
@@ -386,6 +417,7 @@ export function buildSessionRollups(events: UsageEvent[], topModelLimit: number 
         cacheWriteTokens: session.cacheWriteTokens,
         totalTokens: session.totalTokens,
         cost: session.cost,
+        costCompleteness: session.completeness.result(),
         topModels: topModelEntries(session.modelTokens, session.totalTokens, topModelLimit),
       };
     })
@@ -413,6 +445,7 @@ export function buildProjectRollups(
     cost: number;
     modelTokens: Map<string, { tokens: number; cost: number }>;
     topSessions: SessionDrilldownEntry[];
+    completeness: CostCompletenessAccumulator;
   }>();
 
   for (const event of events) {
@@ -439,6 +472,7 @@ export function buildProjectRollups(
         cost: 0,
         modelTokens: new Map(),
         topSessions: [],
+        completeness: new CostCompletenessAccumulator(),
       };
       byProject.set(projectId, project);
     }
@@ -450,6 +484,7 @@ export function buildProjectRollups(
     project.cacheWriteTokens += event.cacheWriteTokens;
     project.totalTokens += event.totalTokens;
     project.cost += event.cost;
+    project.completeness.add(event);
 
     const existingModel = project.modelTokens.get(event.model) ?? { tokens: 0, cost: 0 };
     existingModel.tokens += event.totalTokens;
@@ -502,6 +537,7 @@ export function buildProjectRollups(
         cacheWriteTokens: project.cacheWriteTokens,
         totalTokens: project.totalTokens,
         cost: project.cost,
+        costCompleteness: project.completeness.result(),
         topModels: topModelEntries(project.modelTokens, project.totalTokens, topModelLimit),
         topSessions: project.topSessions
           .sort((a, b) => b.totalTokens - a.totalTokens)

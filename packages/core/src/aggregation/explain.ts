@@ -1,3 +1,4 @@
+import { formatTokenCount, formatUsd } from '../format';
 import type {
   DailyUsage,
   ExplainAnomaly,
@@ -8,8 +9,14 @@ import type {
   SessionDrilldownEntry,
   UsageEvent,
 } from '../types';
+import type { CostCompleteness } from '../types';
+import {
+  CostCompletenessAccumulator,
+  buildDailyCostCompleteness,
+  formatCostWithCompleteness,
+} from '../cost-completeness';
 import { ONE_DAY_MS, dateToUtcMs, formatDateStringUtc } from '../date-utils';
-import { buildProjectRollups, buildSessionRollups } from './analytics';
+import { buildProjectRollups, buildSessionRollups, describeProject } from './analytics';
 import { cacheHitRate } from './cache-rate';
 import { mergeProviderData } from './merge';
 
@@ -39,6 +46,7 @@ interface CandidateRow {
   label: string;
   tokens: number;
   cost: number;
+  costCompleteness?: CostCompleteness;
 }
 
 function collectEvents(providers: ProviderData[]): UsageEvent[] {
@@ -63,6 +71,7 @@ function toEvidenceRows(
       label: row.label,
       tokens: row.tokens,
       cost: row.cost,
+      ...(row.costCompleteness ? { costCompleteness: row.costCompleteness } : {}),
       share: totalTokens > 0 ? row.tokens / totalTokens : 0,
     }));
 }
@@ -148,6 +157,7 @@ function buildProviderEvidenceRows(
       label: provider.displayName,
       tokens: day?.totalTokens ?? 0,
       cost: day?.cost ?? 0,
+      costCompleteness: buildDailyCostCompleteness(day ? [day] : []),
     };
   });
 
@@ -159,7 +169,7 @@ function buildModelEvidenceRows(
   targetDate: string,
   totalTokens: number,
 ): ExplainEvidenceRow[] {
-  const totals = new Map<string, CandidateRow>();
+  const totals = new Map<string, CandidateRow & { completeness: CostCompletenessAccumulator }>();
 
   for (const provider of providers) {
     const day = provider.daily.find((entry) => entry.date === targetDate);
@@ -172,30 +182,29 @@ function buildModelEvidenceRows(
         label: model.model,
         tokens: 0,
         cost: 0,
+        completeness: new CostCompletenessAccumulator(),
       };
       existing.tokens += model.totalTokens;
       existing.cost += model.cost;
+      existing.completeness.add(model);
       totals.set(model.model, existing);
     }
   }
 
-  return toEvidenceRows([...totals.values()], totalTokens, MODEL_LIMIT);
+  const rows = [...totals.values()].map(({ completeness, ...row }) => ({
+    ...row,
+    costCompleteness: completeness.result(),
+  }));
+  return toEvidenceRows(rows, totalTokens, MODEL_LIMIT);
 }
 
 function buildSessionLabel(session: SessionDrilldownEntry): string {
-  const suffix =
-    session.directory && session.directory !== '.'
-      ? session.directory
-      : (session.projectId ?? session.label ?? session.sessionId);
-  return `${session.provider}:${suffix}`;
+  const name = describeProject(session.projectId, session.repoRoot) ?? session.label ?? session.sessionId;
+  return `${session.provider}:${name}`;
 }
 
 function buildProjectLabel(project: ProjectDrilldownEntry): string {
-  if (project.directory && project.directory !== '.') {
-    return project.directory;
-  }
-
-  return project.projectId;
+  return describeProject(project.projectId, project.repoRoot) ?? project.projectId;
 }
 
 function buildSessionEvidenceRows(events: UsageEvent[], totalTokens: number): ExplainEvidenceRow[] {
@@ -203,6 +212,7 @@ function buildSessionEvidenceRows(events: UsageEvent[], totalTokens: number): Ex
     label: buildSessionLabel(session),
     tokens: session.totalTokens,
     cost: session.cost,
+    costCompleteness: session.costCompleteness,
   }));
 
   return toEvidenceRows(rows, totalTokens, SESSION_LIMIT);
@@ -213,6 +223,7 @@ function buildProjectEvidenceRows(events: UsageEvent[], totalTokens: number): Ex
     label: buildProjectLabel(project),
     tokens: project.totalTokens,
     cost: project.cost,
+    costCompleteness: project.costCompleteness,
   }));
 
   return toEvidenceRows(rows, totalTokens, PROJECT_LIMIT);
@@ -233,24 +244,6 @@ function isSpike(currentTokens: number, averageTokens: number): boolean {
   );
 }
 
-function formatTokens(tokens: number): string {
-  return Math.round(tokens).toLocaleString('en-US');
-}
-
-function formatCompactTokens(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`;
-  }
-  if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}K`;
-  }
-  return `${Math.round(tokens)}`;
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
-
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(0)}%`;
 }
@@ -258,7 +251,7 @@ function formatPercent(rate: number): string {
 function describeDelta(current: number, average: number): string {
   const delta = current - average;
   const sign = delta >= 0 ? '+' : '-';
-  return `${sign}${formatCompactTokens(Math.abs(delta))}`;
+  return `${sign}${formatTokenCount(Math.abs(delta))}`;
 }
 
 function buildHeadline(
@@ -295,6 +288,7 @@ function buildSummaryLines(input: {
   date: string;
   totalTokens: number;
   totalCost: number;
+  totalCostCompleteness: CostCompleteness;
   average7dTokens: number;
   average30dTokens: number;
   average7dCost: number;
@@ -308,18 +302,18 @@ function buildSummaryLines(input: {
   if (input.totalTokens === 0) {
     return [
       `No provider reported activity on ${input.date}.`,
-      `Trailing averages were ${formatCompactTokens(input.average7dTokens)} tokens/day over 7d and ${formatCompactTokens(input.average30dTokens)} tokens/day over 30d.`,
+      `Trailing averages were ${formatTokenCount(input.average7dTokens)} tokens/day over 7d and ${formatTokenCount(input.average30dTokens)} tokens/day over 30d.`,
       'No anomaly flags were raised.',
     ];
   }
 
-  const first = `${formatCompactTokens(input.totalTokens)} tokens (${formatCost(input.totalCost)}) on ${input.date}, ${describeDelta(input.totalTokens, input.average7dTokens)} vs trailing 7d average and ${describeDelta(input.totalTokens, input.average30dTokens)} vs trailing 30d average.`;
+  const first = `${formatTokenCount(input.totalTokens)} tokens (${formatCostWithCompleteness(input.totalCost, input.totalCostCompleteness)}) on ${input.date}, ${describeDelta(input.totalTokens, input.average7dTokens)} vs trailing 7d average and ${describeDelta(input.totalTokens, input.average30dTokens)} vs trailing 30d average.`;
   const provider = input.topProviders[0];
   const model = input.topModels[0];
   const second =
     provider && model
       ? `${provider.label} contributed ${formatPercent(provider.share)} of the day, and ${model.label} accounted for ${formatPercent(model.share)} of tokens.`
-      : `Trailing cost baselines were ${formatCost(input.average7dCost)}/day over 7d and ${formatCost(input.average30dCost)}/day over 30d.`;
+      : `Trailing cost baselines were ${formatUsd(input.average7dCost)}/day over 7d and ${formatUsd(input.average30dCost)}/day over 30d.`;
   const third =
     input.anomalies.length > 0
       ? `${input.anomalies.length} anomaly flag${input.anomalies.length === 1 ? '' : 's'} raised. Cache hit rate was ${formatPercent(input.dayCacheHitRate)} versus a 7d average of ${formatPercent(input.average7dCacheHitRate)}.`
@@ -364,7 +358,7 @@ function buildProviderSpikeAnomaly(
   return {
     type: 'provider-spike',
     title: `${winner.provider.displayName} surged`,
-    detail: `${winner.provider.displayName} reached ${formatTokens(winner.currentTokens)} tokens on ${targetDate} versus a trailing 7d average of ${formatTokens(winner.averageTokens)}.`,
+    detail: `${winner.provider.displayName} reached ${formatTokenCount(winner.currentTokens)} tokens on ${targetDate} versus a trailing 7d average of ${formatTokenCount(winner.averageTokens)}.`,
   };
 }
 
@@ -394,7 +388,7 @@ function buildModelSpikeAnomaly(
   return {
     type: 'model-spike',
     title: `${winner.model} spiked`,
-    detail: `${winner.model} accounted for ${formatTokens(winner.currentTokens)} tokens on ${targetDate} versus a trailing 7d average of ${formatTokens(winner.averageTokens)}.`,
+    detail: `${winner.model} accounted for ${formatTokenCount(winner.currentTokens)} tokens on ${targetDate} versus a trailing 7d average of ${formatTokenCount(winner.averageTokens)}.`,
   };
 }
 
@@ -463,7 +457,7 @@ function buildLongSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAnom
   return {
     type: 'long-session',
     title: 'A single session ran long',
-    detail: `${buildSessionLabel(session)} lasted ${durationHours}h and used ${formatTokens(session.totalTokens)} tokens.`,
+    detail: `${buildSessionLabel(session)} lasted ${durationHours}h and used ${formatTokenCount(session.totalTokens)} tokens.`,
   };
 }
 
@@ -493,7 +487,7 @@ function buildDenseSessionAnomaly(sessions: SessionDrilldownEntry[]): ExplainAno
   return {
     type: 'dense-session',
     title: 'A session was unusually dense',
-    detail: `${buildSessionLabel(candidates.session)} sustained ${formatCompactTokens(candidates.tokensPerHour)} tokens/hour across ${formatTokens(candidates.session.totalTokens)} tokens.`,
+    detail: `${buildSessionLabel(candidates.session)} sustained ${formatTokenCount(candidates.tokensPerHour)} tokens/hour across ${formatTokenCount(candidates.session.totalTokens)} tokens.`,
   };
 }
 
@@ -550,6 +544,9 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
   );
 
   const dayEvents = collectEvents(providers).filter((event) => event.date === targetDate);
+  const dayCompleteness = buildDailyCostCompleteness(
+    providers.flatMap((provider) => provider.daily.filter((day) => day.date === targetDate)),
+  );
   const sessionRollups = buildSessionRollups(dayEvents);
   const topProviders = buildProviderEvidenceRows(providers, targetDate, dayTotals.tokens);
   const topModels = buildModelEvidenceRows(providers, targetDate, dayTotals.tokens);
@@ -565,6 +562,7 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
     date: targetDate,
     totalTokens: dayTotals.tokens,
     totalCost: dayTotals.cost,
+    costCompleteness: dayCompleteness,
     comparedTo7dAverage: dayTotals.tokens - average7dTokens,
     comparedTo30dAverage: dayTotals.tokens - average30dTokens,
     headline: buildHeadline(
@@ -578,6 +576,7 @@ export function buildExplainReport(providers: ProviderData[], targetDate: string
       date: targetDate,
       totalTokens: dayTotals.tokens,
       totalCost: dayTotals.cost,
+      totalCostCompleteness: dayCompleteness,
       average7dTokens,
       average30dTokens,
       average7dCost,
