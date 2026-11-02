@@ -1,5 +1,4 @@
 import type { RenderOptions } from '@tokenleak/core';
-import { colorize } from './ansi';
 import { bold, colorize256, SEMANTIC } from './colors';
 import type { DashboardModel } from './dashboard-model';
 import { renderColumns, truncateVisible } from './layout';

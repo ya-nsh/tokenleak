@@ -39,7 +39,7 @@ import {
   getScopedWindowData,
   buildTokenleakOutput,
 } from './lib/data.js';
-import { createInitialState, WINDOW_LABELS, WINDOW_DAYS } from './lib/state.js';
+import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader } from './panels/header.js';
 import { createChartPanel } from './panels/chart-panel.js';

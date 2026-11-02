@@ -1,10 +1,7 @@
-import { formatCostWithCompleteness, formatModelWithTier } from '@tokenleak/core';
 import type { ModelEfficiencyEntry, TokenleakOutput } from '@tokenleak/core';
-import { colorize256, bold, dim, MODEL_COLORS, SEMANTIC } from '../colors';
+import { colorize256, bold, dim, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
-const BAR_CHAR = '\u2588';
-const TRACK_CHAR = '\u2591';
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

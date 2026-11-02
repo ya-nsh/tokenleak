@@ -53,7 +53,7 @@ interface KiroUsageRecord extends LocalUsageRecord {
   turnKey: string;
 }
 
-function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionId: string, range: DateRange): KiroUsageRecord[] {
+function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionId: string): KiroUsageRecord[] {
   const state = objectValue(value['session_state']);
   const modelInfo = objectValue(objectValue(state?.['rts_model_state'])?.['model_info']);
   const model = stringValue(modelInfo?.['model_id']) ?? 'kiro-unknown';
@@ -86,16 +86,16 @@ function parseKiroSessionObject(value: Record<string, unknown>, fallbackSessionI
   });
 }
 
-function parseKiroFile(file: string, range: DateRange): KiroUsageRecord[] {
+function parseKiroFile(file: string): KiroUsageRecord[] {
   try {
     const value = objectValue(JSON.parse(readFileSync(file, 'utf-8')));
-    return value ? parseKiroSessionObject(value, file, range) : [];
+    return value ? parseKiroSessionObject(value, file) : [];
   } catch {
     return [];
   }
 }
 
-function parseKiroSqlite(dbPath: string, range: DateRange, warnings: ProviderWarning[]): KiroUsageRecord[] {
+function parseKiroSqlite(dbPath: string, warnings: ProviderWarning[]): KiroUsageRecord[] {
   if (!existsSync(dbPath)) return [];
   let db: InstanceType<typeof Database>;
   try {
@@ -108,7 +108,7 @@ function parseKiroSqlite(dbPath: string, range: DateRange, warnings: ProviderWar
     return rows.flatMap((row) => {
       try {
         const history = objectValue(JSON.parse(String(row['history'] ?? '{}')));
-        return history ? parseKiroSessionObject(history, `${dbPath}:${stringValue(row['id']) ?? 'kiro-sqlite'}`, range) : [];
+        return history ? parseKiroSessionObject(history, `${dbPath}:${stringValue(row['id']) ?? 'kiro-sqlite'}`) : [];
       } catch {
         warnings.push({ kind: 'parse', file: dbPath, count: 1 });
         return [];
@@ -140,9 +140,9 @@ export class KiroProvider implements IProvider {
 
   async load(range: DateRange): Promise<ProviderData> {
     const warnings: ProviderWarning[] = [];
-    const records = collectFiles(this.baseDir, isKiroFile).flatMap((file) => parseKiroFile(file, range));
+    const records = collectFiles(this.baseDir, isKiroFile).flatMap((file) => parseKiroFile(file));
     for (const dbPath of this.dbPaths) {
-      records.push(...parseKiroSqlite(dbPath, range, warnings));
+      records.push(...parseKiroSqlite(dbPath, warnings));
     }
     const turns = new Map<string, KiroUsageRecord>();
     for (const record of records) {

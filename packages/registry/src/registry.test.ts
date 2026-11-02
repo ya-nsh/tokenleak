@@ -211,7 +211,7 @@ describe('ProviderRegistry', () => {
         return true;
       },
       async load(_range: DateRange) {
-        throw 'string error'; // eslint-disable-line no-throw-literal
+        throw 'string error';
       },
     };
     registry.register(provider);

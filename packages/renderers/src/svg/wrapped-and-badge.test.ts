@@ -4,7 +4,6 @@ import { renderBadge } from './badge';
 import {
   createOutput,
   createPopulatedStats,
-  createProvider,
 } from '../__test-fixtures__';
 
 describe('renderWrappedCard', () => {

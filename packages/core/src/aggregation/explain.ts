@@ -3,7 +3,6 @@ import type {
   ExplainAnomaly,
   ExplainEvidenceRow,
   ExplainReport,
-  ModelBreakdown,
   ProjectDrilldownEntry,
   ProviderData,
   SessionDrilldownEntry,

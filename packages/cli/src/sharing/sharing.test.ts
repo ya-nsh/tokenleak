@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect } from 'bun:test';
 import { buildGistCreateArgs } from './gist';
 import { getClipboardCommand } from './clipboard';
 import { getOpenCommand } from './open';

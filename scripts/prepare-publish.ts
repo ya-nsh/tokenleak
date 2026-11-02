@@ -6,7 +6,6 @@
 import { readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const rootPkg = JSON.parse(readFileSync('package.json', 'utf-8'));
 const cliPkg = JSON.parse(readFileSync('packages/cli/package.json', 'utf-8'));
 
 const publishPkg = {

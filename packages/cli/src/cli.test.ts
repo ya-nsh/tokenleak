@@ -1,5 +1,5 @@
+import { describe, test, expect, afterEach } from 'bun:test';
 import { defaultTerminalWidth, shouldUseColor } from './output-mode';
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import {
   resolveConfig,
   resolveFocusConfig,
@@ -21,10 +21,7 @@ import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { shouldStartTui } from './tui-launch';
 import {
-  writeFileSync,
   readFileSync,
-  unlinkSync,
-  mkdirSync,
   existsSync,
   cpSync,
   mkdtempSync,
@@ -299,8 +296,6 @@ describe('resolveFocusConfig', () => {
 // ─── loadEnvOverrides ───────────────────────────────────────────────────
 
 describe('loadEnvOverrides', () => {
-  const originalEnv = { ...process.env };
-
   afterEach(() => {
     // Restore original env
     delete process.env['TOKENLEAK_FORMAT'];

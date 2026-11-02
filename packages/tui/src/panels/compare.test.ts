@@ -3,7 +3,13 @@ import { aggregate, buildCompareOutput } from '@tokenleak/core';
 import { createInitialState } from '../lib/state';
 import { createComparePanel } from './compare';
 
-function text(node: any): string { return (node?.props?.content ?? '') + (node?.children ?? []).map(text).join(''); }
+/** Flatten a rendered OpenTUI node tree into its text content. */
+function text(node: unknown): string {
+  if (typeof node !== 'object' || node === null) return '';
+  const { props, children } = node as { props?: { content?: unknown }; children?: unknown };
+  const own = typeof props?.content === 'string' ? props.content : '';
+  return own + (Array.isArray(children) ? children.map(text).join('') : '');
+}
 const range = { since: '2026-03-12', until: '2026-03-12' };
 function stats(tokens: number) {
   return aggregate([{ date: range.since, inputTokens: tokens, outputTokens: 0, cacheReadTokens: 0,

@@ -1153,10 +1153,6 @@ function getRenderer(format: string): IRenderer {
   }
 }
 
-function padCell(value: string, width: number): string {
-  return value.length >= width ? value : value.padEnd(width, ' ');
-}
-
 function truncateCell(value: string, width: number): string {
   if (value.length <= width) {
     return value;
@@ -1323,16 +1319,6 @@ function renderFocusReport(report: FocusReport, width: number, noColor: boolean)
       colWidths.map((w) => border('\u2500'.repeat(w))).join(border(mid)) +
       border(right)
     );
-  }
-
-  function tableRow(cells: string[]): string {
-    const padded = cells.map((cell, c) => {
-      const w = colWidths[c]!;
-      const inner = w - 2; // 1-char padding each side
-      const truncated = truncateFocus(cell, inner);
-      return ` ${truncated.padEnd(inner)} `;
-    });
-    return border('\u2502') + padded.join(border('\u2502')) + border('\u2502');
   }
 
   function coloredDataRow(entry: (typeof report.entries)[number], cells: string[]): string {
@@ -2185,7 +2171,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     };
     const events = providerDataList.flatMap((provider) => provider.events ?? []);
     output.optimization = buildDefaultOptimization(providerDataList, events, dateRange);
-    const { port } = await startLiveServer(output, renderOptions);
+    await startLiveServer(output, renderOptions);
     // Keep process alive until interrupted
     await new Promise<void>((resolve) => {
       process.on('SIGINT', () => {
