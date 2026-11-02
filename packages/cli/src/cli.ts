@@ -1427,9 +1427,9 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
     report.method,
     '',
     `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
-    `Tokens: ${report.totals.tokens.toLocaleString('en-US')}  Cost: ${formatCostWithCompleteness(report.totals.cost, report.totals.costCompleteness)}  Commits: ${report.totals.commits.toLocaleString('en-US')}  Changed lines: ${report.totals.changedLines.toLocaleString('en-US')}`,
-    `Per commit: ${formatNullableNumber(report.totals.tokensPerCommit, 0)} tokens / ${formatNullableCost(report.totals.costPerCommit)}`,
-    `Per changed line: ${formatNullableNumber(report.totals.tokensPerChangedLine, 1)} tokens / ${formatNullableCost(report.totals.costPerChangedLine)}`,
+    `Tokens: ${formatTokenCount(report.totals.tokens)}  Cost: ${formatCostWithCompleteness(report.totals.cost, report.totals.costCompleteness)}  Commits: ${report.totals.commits.toLocaleString('en-US')}  Changed lines: ${formatTokenCount(report.totals.changedLines)}`,
+    `Per commit: ${report.totals.tokensPerCommit === null ? '-' : formatTokenCount(report.totals.tokensPerCommit)} tokens / ${formatNullableCost(report.totals.costPerCommit)}`,
+    `Per changed line: ${report.totals.tokensPerChangedLine === null ? '-' : formatTokenCount(report.totals.tokensPerChangedLine)} tokens / ${formatNullableCost(report.totals.costPerChangedLine)}`,
     '',
   ];
 
@@ -1441,11 +1441,11 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
   const headers = ['Repo', 'Tokens', 'Cost', 'Commits', 'Lines', 'Tok/Commit', '$/Commit'];
   const rows = report.repos.map((repo) => [
     repo.label,
-    repo.tokens.toLocaleString('en-US'),
+    formatTokenCount(repo.tokens),
     formatCostWithCompleteness(repo.cost, repo.costCompleteness),
     repo.commits.toLocaleString('en-US'),
-    repo.changedLines.toLocaleString('en-US'),
-    formatNullableNumber(repo.tokensPerCommit),
+    formatTokenCount(repo.changedLines),
+    repo.tokensPerCommit === null ? '-' : formatTokenCount(repo.tokensPerCommit),
     formatNullableCost(repo.costPerCommit),
   ]);
 
