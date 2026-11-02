@@ -1,11 +1,16 @@
 import { resolveModelIdentity } from './normalizer';
-import type { PricingContext } from './pricing';
-import type { ModelPricing } from './pricing';
-import { getModelPricing, TOKENS_PER_MILLION } from './pricing';
+import type { ModelPricing, PricingContext, PricingSource } from './pricing';
+import { resolveModelPricing, TOKENS_PER_MILLION } from './pricing';
+
+export interface CostContext extends PricingContext {
+  /** Portion of `cacheWriteTokens` written with a 1-hour TTL. */
+  cacheWrite1hTokens?: number;
+}
 
 export interface CostBreakdown {
   normalizedModel: string;
   pricing: ModelPricing | null;
+  pricingSource: PricingSource | null;
   inputCost: number;
   outputCost: number;
   cacheReadCost: number;
@@ -48,15 +53,20 @@ export function estimateCostBreakdown(
   outputTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number,
-  context: PricingContext = {},
+  context: CostContext = {},
 ): CostBreakdown {
   const normalized = resolveModelIdentity(model).model;
-  const pricing = getModelPricing(model, { inputTokens: inputTokens + cacheReadTokens + cacheWriteTokens, ...context });
+  const { cacheWrite1hTokens = 0, ...pricingContext } = context;
+  const resolved = resolveModelPricing(model, {
+    inputTokens: inputTokens + cacheReadTokens + cacheWriteTokens,
+    ...pricingContext,
+  });
 
-  if (!pricing) {
+  if (!resolved) {
     return {
       normalizedModel: normalized,
       pricing: null,
+      pricingSource: null,
       inputCost: 0,
       outputCost: 0,
       cacheReadCost: 0,
@@ -65,14 +75,20 @@ export function estimateCostBreakdown(
     };
   }
 
+  const { pricing } = resolved;
+  // Never let a malformed 1h split exceed the total cache writes it is part of.
+  const longTtlWrites = Math.min(Math.max(cacheWrite1hTokens, 0), cacheWriteTokens);
   const inputCost = (inputTokens / TOKENS_PER_MILLION) * pricing.input;
   const outputCost = (outputTokens / TOKENS_PER_MILLION) * pricing.output;
   const cacheReadCost = (cacheReadTokens / TOKENS_PER_MILLION) * pricing.cacheRead;
-  const cacheWriteCost = (cacheWriteTokens / TOKENS_PER_MILLION) * pricing.cacheWrite;
+  const cacheWriteCost =
+    ((cacheWriteTokens - longTtlWrites) / TOKENS_PER_MILLION) * pricing.cacheWrite +
+    (longTtlWrites / TOKENS_PER_MILLION) * (pricing.cacheWrite1h ?? pricing.cacheWrite);
 
   return {
     normalizedModel: normalized,
     pricing,
+    pricingSource: resolved.source,
     inputCost,
     outputCost,
     cacheReadCost,

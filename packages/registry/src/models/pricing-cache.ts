@@ -1,16 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ModelPricing } from './pricing';
+import type { RemotePricingEntry } from './litellm';
 
 const CACHE_FILENAME = 'pricing.json';
-const CACHE_TTL_MS = 3_600_000; // 1 hour
-const CACHE_VERSION = 1;
+const CACHE_TTL_MS = 86_400_000; // 24 hours
+// v2: rows carry `firstParty`; v1 merged reseller markups over vendor prices.
+const CACHE_VERSION = 2;
 
 export interface PricingCacheEnvelope {
   version: number;
   fetchedAt: number;
-  data: Record<string, ModelPricing>;
+  data: Record<string, RemotePricingEntry>;
 }
 
 function defaultCacheDir(): string {
@@ -27,9 +28,21 @@ function cachePath(cacheDir?: string): string {
 }
 
 export function isCacheValid(envelope: PricingCacheEnvelope): boolean {
+  const age = Date.now() - envelope.fetchedAt;
+  return envelope.version === CACHE_VERSION && age >= 0 && age < CACHE_TTL_MS;
+}
+
+function isRate(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function isRemotePricingEntry(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Record<string, unknown>;
   return (
-    envelope.version === CACHE_VERSION &&
-    Date.now() - envelope.fetchedAt < CACHE_TTL_MS
+    ['input', 'output', 'cacheRead', 'cacheWrite'].every((key) => isRate(entry[key])) &&
+    (entry['cacheWrite1h'] === undefined || isRate(entry['cacheWrite1h'])) &&
+    typeof entry['firstParty'] === 'boolean'
   );
 }
 
@@ -42,9 +55,11 @@ function readEnvelope(cacheDir?: string): PricingCacheEnvelope | null {
     if (
       typeof parsed !== 'object' ||
       parsed === null ||
-      typeof parsed.version !== 'number' ||
+      parsed.version !== CACHE_VERSION ||
       typeof parsed.fetchedAt !== 'number' ||
-      typeof parsed.data !== 'object'
+      typeof parsed.data !== 'object' ||
+      parsed.data === null ||
+      !Object.values(parsed.data).every(isRemotePricingEntry)
     ) {
       return null;
     }
@@ -67,21 +82,20 @@ export function readPricingCache(
 }
 
 /**
- * Read the pricing cache regardless of TTL. Returns data if the file exists
- * and is parseable, even if stale.
+ * Read the pricing cache regardless of TTL. Returns the envelope if the file
+ * exists and is valid, even if stale.
  */
 export function readStalePricingCache(
   cacheDir?: string,
-): Record<string, ModelPricing> | null {
-  const envelope = readEnvelope(cacheDir);
-  return envelope?.data ?? null;
+): PricingCacheEnvelope | null {
+  return readEnvelope(cacheDir);
 }
 
 /**
  * Write pricing data to the disk cache atomically (write tmp + rename).
  */
 export function writePricingCache(
-  data: Record<string, ModelPricing>,
+  data: Record<string, RemotePricingEntry>,
   cacheDir?: string,
 ): void {
   const dir = cacheDir ?? defaultCacheDir();

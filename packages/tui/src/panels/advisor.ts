@@ -1,5 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { AdvisorReport, AdvisorRecommendation, WasteFinding, WasteReport } from '@tokenleak/core';
+import { describePricingGap } from '@tokenleak/core';
 import { formatCost, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
@@ -163,6 +164,7 @@ export function createAdvisorPanel(
   }
 
   const recs = report.recommendations;
+  const pricingGap = describePricingGap(report);
   const wasteFindings = wasteReport?.findings ?? [];
   const items = [
     ...recs.map((rec) => ({ type: 'recommendation' as const, rec })),
@@ -219,12 +221,18 @@ export function createAdvisorPanel(
     },
     Text({ content: ' Advisor ', fg: COLORS.amber, attributes: BOLD }),
     summaryRow,
+    ...(pricingGap ? [Text({ content: `  ${pricingGap}`, fg: COLORS.amber })] : []),
     Text({ content: '', fg: COLORS.dimWhite }),
     ...(showSavingsSection ? [Text({ content: ' Savings Recommendations ', fg: COLORS.amber, attributes: BOLD })] : []),
     ...(visibleRecNodes.length > 0
       ? visibleRecNodes
       : recs.length === 0
-        ? [Text({ content: '  No optimization opportunities detected', fg: COLORS.dimWhite })]
+        ? [Text({
+            content: pricingGap
+              ? '  No opportunities in the priced share of your usage'
+              : '  No optimization opportunities detected',
+            fg: COLORS.dimWhite,
+          })]
         : []),
     ...(showWasteSection ? [Text({ content: ' Waste Patterns ', fg: COLORS.amber, attributes: BOLD })] : []),
     ...(showWasteSection && wasteReport && !wasteReport.enoughEvidence

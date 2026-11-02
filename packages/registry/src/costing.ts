@@ -23,6 +23,10 @@ interface UsageCostInput {
   cacheWriteTokens: number;
   explicitCost?: number;
   serviceTier?: string;
+  /** Portion of `cacheWriteTokens` written with a 1-hour TTL. */
+  cacheWrite1hTokens?: number;
+  /** Anthropic `inference_geo` reported for the request. */
+  inferenceGeo?: string;
 }
 
 function totalTokens(input: UsageCostInput): number {
@@ -51,7 +55,11 @@ export function resolveUsageCost(input: UsageCostInput): UsageCostResult {
     input.outputTokens,
     input.cacheReadTokens,
     input.cacheWriteTokens,
-    { serviceTier: input.serviceTier },
+    {
+      serviceTier: input.serviceTier,
+      cacheWrite1hTokens: input.cacheWrite1hTokens,
+      inferenceGeo: input.inferenceGeo,
+    },
   );
   const tokenCount = totalTokens(input);
   const pricing = costBreakdown.pricing

@@ -16,6 +16,10 @@ export interface AdvisorReport {
   totalMonthlySavings: number;
   analyzedDays: number;
   analyzedEvents: number;
+  /** Share of analyzed tokens that had a known price, 0..1 (1 when there are no tokens). */
+  pricedTokenShare: number;
+  /** Models whose tokens could not be priced, most tokens first. */
+  unpricedModels: string[];
 }
 
 /**

@@ -133,7 +133,14 @@ export function isCachedUsageRecord(value: unknown): boolean {
       'responseId',
       'serviceTier',
       'serviceTierSource',
+      'inferenceGeo',
     ].every((key) => record[key] === undefined || typeof record[key] === 'string')
+  )
+    return false;
+  const longTtlWrites = record['cacheWrite1hTokens'];
+  if (
+    longTtlWrites !== undefined &&
+    (typeof longTtlWrites !== 'number' || !Number.isFinite(longTtlWrites) || longTtlWrites < 0)
   )
     return false;
   if (

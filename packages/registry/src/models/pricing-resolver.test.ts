@@ -52,7 +52,7 @@ describe('getModelPricing fallback chain', () => {
     expect(getModelPricing('nonexistent-model-abc')).toBeUndefined();
   });
 
-  test('does not accept remote-only model pricing as verified pricing', () => {
+  test('does not price an unknown model from a reseller-only remote row', () => {
     resetPricingState();
     setRemotePricingForTest({
       'nonexistent-model-abc': {
@@ -60,10 +60,34 @@ describe('getModelPricing fallback chain', () => {
         output: 456,
         cacheRead: 7,
         cacheWrite: 8,
+        firstParty: false,
       },
     });
 
     expect(getModelPricing('nonexistent-model-abc')).toBeUndefined();
+  });
+
+  test('prices a model newer than this build from the vendor remote row', () => {
+    resetPricingState();
+    setRemotePricingForTest({
+      'gpt-7-sol': { input: 3, output: 12, cacheRead: 0.3, cacheWrite: 3, firstParty: true },
+    });
+
+    expect(getModelPricing('gpt-7-sol')).toEqual({
+      input: 3,
+      output: 12,
+      cacheRead: 0.3,
+      cacheWrite: 3,
+    });
+  });
+
+  test('ignores reseller rows when refining a verified rate', () => {
+    resetPricingState();
+    setRemotePricingForTest({
+      'gpt-4o': { input: 99, output: 99, cacheRead: 9, cacheWrite: 9, firstParty: false },
+    });
+
+    expect(getModelPricing('gpt-4o')!.input).toBe(2.5);
   });
 
   test('allows remote pricing to update verified model rates', () => {
@@ -74,6 +98,7 @@ describe('getModelPricing fallback chain', () => {
         output: 2,
         cacheRead: 3,
         cacheWrite: 4,
+        firstParty: true,
       },
     });
 
@@ -93,6 +118,7 @@ describe('getModelPricing fallback chain', () => {
         output: 2,
         cacheRead: 0,
         cacheWrite: 0,
+        firstParty: true,
       },
     });
 

@@ -18,6 +18,7 @@ describe('parseLiteLLMData', () => {
       output: 10,
       cacheRead: 1.25,
       cacheWrite: 2.5,
+      firstParty: false,
     });
   });
 
@@ -125,5 +126,70 @@ describe('parseLiteLLMData', () => {
     // Normalized key (date suffix stripped)
     expect(result['claude-sonnet-4']).toBeDefined();
     expect(result['claude-sonnet-4']!.input).toBeCloseTo(3.0);
+  });
+
+  test('marks bare rows from the model vendor as first-party', () => {
+    const result = parseLiteLLMData({
+      'claude-opus-5-5': {
+        litellm_provider: 'anthropic',
+        input_cost_per_token: 4e-6,
+        output_cost_per_token: 2e-5,
+        cache_read_input_token_cost: 2e-7,
+        cache_creation_input_token_cost: 5e-6,
+        cache_creation_input_token_cost_above_1hr: 8e-6,
+      },
+    });
+    const row = result['claude-opus-5-5']!;
+    expect(row.input).toBeCloseTo(4);
+    expect(row.output).toBeCloseTo(20);
+    expect(row.cacheRead).toBeCloseTo(0.2);
+    expect(row.cacheWrite).toBeCloseTo(5);
+    expect(row.cacheWrite1h).toBeCloseTo(8);
+    expect(row.firstParty).toBe(true);
+  });
+
+  test('a reseller row never overwrites the vendor price, whatever the file order', () => {
+    const vendor = {
+      litellm_provider: 'anthropic',
+      input_cost_per_token: 5e-6,
+      output_cost_per_token: 2.5e-5,
+    };
+    const reseller = {
+      litellm_provider: 'kyma',
+      input_cost_per_token: 6.75e-6,
+      output_cost_per_token: 3.375e-5,
+    };
+    const resellerFirst = parseLiteLLMData({ 'kyma/claude-opus-5': reseller, 'claude-opus-5': vendor });
+    const vendorFirst = parseLiteLLMData({ 'claude-opus-5': vendor, 'kyma/claude-opus-5': reseller });
+    for (const result of [resellerFirst, vendorFirst]) {
+      expect(result['claude-opus-5']!.input).toBeCloseTo(5);
+      expect(result['claude-opus-5']!.firstParty).toBe(true);
+      // The reseller row stays addressable under its own key.
+      expect(result['kyma/claude-opus-5']!.input).toBeCloseTo(6.75);
+      expect(result['kyma/claude-opus-5']!.firstParty).toBe(false);
+    }
+  });
+
+  test('a vendor-prefixed row beats a bare third-party row', () => {
+    const result = parseLiteLLMData({
+      'mystery-model': { litellm_provider: 'novita', input_cost_per_token: 9e-6, output_cost_per_token: 9e-6 },
+      'openai/mystery-model': { litellm_provider: 'openai', input_cost_per_token: 1e-6, output_cost_per_token: 2e-6 },
+    });
+    expect(result['mystery-model']!.input).toBeCloseTo(1);
+    expect(result['mystery-model']!.firstParty).toBe(true);
+  });
+
+  test('reseller-only models stay available but are never first-party', () => {
+    const result = parseLiteLLMData({
+      'azure_ai/gpt-6.1-sol': { litellm_provider: 'azure_ai', input_cost_per_token: 2e-6, output_cost_per_token: 1e-5 },
+    });
+    expect(result['gpt-6.1-sol']!.firstParty).toBe(false);
+  });
+
+  test('skips rows with negative output cost', () => {
+    const result = parseLiteLLMData({
+      broken: { input_cost_per_token: 1e-6, output_cost_per_token: -1 },
+    });
+    expect(result['broken']).toBeUndefined();
   });
 });

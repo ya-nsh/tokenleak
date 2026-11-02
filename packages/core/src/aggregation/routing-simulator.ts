@@ -6,6 +6,7 @@ import type {
   RoutingSimulationReport,
   UsageEvent,
 } from '../types';
+import { getDowngradePath } from '../advisor/downgrade-paths';
 
 const METHOD =
   'Model routing simulator v1: re-prices historical events under deterministic downgrade rules. Savings are estimates, not enforcement.';
@@ -36,26 +37,6 @@ function normalizeModel(model: string): string {
     normalized = normalized.slice(slashIndex + 1);
   }
   return normalized.replace(/-\d{4}-?\d{2}-?\d{2}$/, '');
-}
-
-function defaultDowngradePath(model: string): string | null {
-  const normalized = normalizeModel(model);
-  const paths: Record<string, string> = {
-    'claude-opus-4-6': 'claude-sonnet-4-6',
-    'claude-opus-4': 'claude-sonnet-4',
-    'claude-opus-4-5': 'claude-sonnet-4-5',
-    'claude-sonnet-4-5': 'claude-haiku-4-5',
-    'claude-3-opus': 'claude-3.5-sonnet',
-    'claude-3-sonnet': 'claude-3-haiku',
-    'claude-3.5-sonnet': 'claude-3.5-haiku',
-    'gpt-4o': 'gpt-4o-mini',
-    'gpt-5.5': 'gpt-5-mini',
-    'gpt-5.4': 'gpt-5.4-mini',
-    'gpt-5': 'gpt-5-mini',
-    o1: 'o1-mini',
-    o3: 'o3-mini',
-  };
-  return paths[normalized] ?? null;
 }
 
 function eventId(event: UsageEvent, index: number): string {
@@ -169,7 +150,7 @@ export function buildRoutingSimulationReport(
   const warnings: string[] = [];
   const candidates: RoutingSimulationCandidate[] = [];
   const rulesById = new Map<string, RoutingRule>();
-  const downgradePath = options.downgradePath ?? defaultDowngradePath;
+  const downgradePath = options.downgradePath ?? getDowngradePath;
   let currentCost = 0;
 
   for (let index = 0; index < events.length; index++) {

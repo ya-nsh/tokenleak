@@ -91,7 +91,7 @@ for (const Provider of [CodexProvider, ClaudeCodeProvider]) {
     // Streaming maxima belong to the original request's day, including on warm reads.
     expect(narrow.totalTokens).toBe(Provider === ClaudeCodeProvider ? 210 : 110);
     expect(narrow.warnings?.some((w) => w.kind === 'parse')).toBe(true);
-    setRemotePricingForTest({ 'gpt-4o': { input: 10, output: 20, cacheRead: 1, cacheWrite: 10 } });
+    setRemotePricingForTest({ 'gpt-4o': { input: 10, output: 20, cacheRead: 1, cacheWrite: 10, firstParty: true } });
     const repriced = await provider.load(range);
     expect(repriced.totalCost).toBeGreaterThan(cold.totalCost);
     expect(repriced.totalTokens).toBe(cold.totalTokens);

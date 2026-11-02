@@ -7,63 +7,119 @@ const LITELLM_URL =
 const FETCH_TIMEOUT_MS = 10_000;
 const PER_TOKEN_TO_PER_MILLION = 1_000_000;
 
+/**
+ * LiteLLM providers that sell their own models at list price. Resellers,
+ * gateways, regional cloud deployments, and government regions carry markups,
+ * so their rows must never stand in for a model's canonical price.
+ */
+const FIRST_PARTY_PROVIDERS: ReadonlySet<string> = new Set([
+  'anthropic',
+  'openai',
+  'gemini',
+  'mistral',
+  'deepseek',
+  'xai',
+  'cohere',
+  'zai',
+  'moonshot',
+  'minimax',
+  'dashscope',
+]);
+
+/** Lower rank wins when two LiteLLM rows map to the same lookup key. */
+const KeyRank = {
+  /** Bare key (`claude-opus-5-5`) published by the model's own vendor. */
+  FirstPartyExact: 0,
+  /** Vendor-prefixed key (`anthropic/claude-opus-5-5`) stripped to the bare name. */
+  FirstPartyPrefixed: 1,
+  /** Bare key from a non-vendor host. */
+  ThirdPartyExact: 2,
+  /** Any other prefixed key stripped to the bare name (resellers, regions). */
+  ThirdPartyPrefixed: 3,
+} as const;
+type KeyRank = (typeof KeyRank)[keyof typeof KeyRank];
+
 interface LiteLLMEntry {
-  input_cost_per_token?: number;
-  output_cost_per_token?: number;
-  cache_read_input_token_cost?: number;
-  cache_creation_input_token_cost?: number;
+  litellm_provider?: unknown;
+  input_cost_per_token?: unknown;
+  output_cost_per_token?: unknown;
+  cache_read_input_token_cost?: unknown;
+  cache_creation_input_token_cost?: unknown;
+  cache_creation_input_token_cost_above_1hr?: unknown;
+}
+
+/** Remote pricing plus whether it came from the model vendor's own row. */
+export interface RemotePricingEntry extends ModelPricing {
+  firstParty: boolean;
+}
+
+function perMillion(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value * PER_TOKEN_TO_PER_MILLION
+    : undefined;
+}
+
+function rankFor(key: string, provider: string): KeyRank {
+  const slashIndex = key.indexOf('/');
+  if (slashIndex === -1) {
+    return FIRST_PARTY_PROVIDERS.has(provider) ? KeyRank.FirstPartyExact : KeyRank.ThirdPartyExact;
+  }
+  const prefix = key.slice(0, slashIndex);
+  return FIRST_PARTY_PROVIDERS.has(prefix) && prefix === provider
+    ? KeyRank.FirstPartyPrefixed
+    : KeyRank.ThirdPartyPrefixed;
 }
 
 /**
- * Parse raw LiteLLM pricing data into a map of normalized model names to
- * {@link ModelPricing}. Each entry is stored under three keys:
+ * Parse raw LiteLLM pricing data into a map of model names to pricing.
  *
- * 1. The original key (e.g. `anthropic/claude-3-opus-20240229`)
- * 2. The unprefixed key (e.g. `claude-3-opus-20240229`)
- * 3. The normalized key (e.g. `claude-3-opus`)
- *
- * Later keys overwrite earlier ones so the normalized name is the canonical
- * lookup key.
+ * Each row is stored under its original key, and also under its unprefixed
+ * and date-normalized names. Several rows usually collapse onto the same bare
+ * name (`kyma/claude-opus-5`, `azure_ai/claude-opus-5`, `claude-opus-5`), so
+ * derived names are claimed by rank: the vendor's own row always wins, and a
+ * reseller row only fills a name nobody better has claimed. File order never
+ * decides a price.
  */
 export function parseLiteLLMData(
   raw: Record<string, unknown>,
-): Record<string, ModelPricing> {
-  const result: Record<string, ModelPricing> = {};
+): Record<string, RemotePricingEntry> {
+  const result: Record<string, RemotePricingEntry> = {};
+  const ranks = new Map<string, KeyRank>();
+
+  const claim = (key: string, rank: KeyRank, pricing: ModelPricing): void => {
+    const existing = ranks.get(key);
+    if (existing !== undefined && existing <= rank) return;
+    ranks.set(key, rank);
+    result[key] = { ...pricing, firstParty: rank <= KeyRank.FirstPartyPrefixed };
+  };
 
   for (const [key, value] of Object.entries(raw)) {
     if (value === null || typeof value !== 'object') continue;
 
     const entry = value as LiteLLMEntry;
-    const inputPerToken = entry.input_cost_per_token;
-    const outputPerToken = entry.output_cost_per_token;
+    const input = perMillion(entry.input_cost_per_token);
+    const output = perMillion(entry.output_cost_per_token);
+    if (input === undefined || input <= 0 || output === undefined) continue;
 
-    if (typeof inputPerToken !== 'number' || inputPerToken <= 0) continue;
-    if (typeof outputPerToken !== 'number') continue;
-
+    const cacheWrite1h = perMillion(entry.cache_creation_input_token_cost_above_1hr);
     const pricing: ModelPricing = {
-      input: inputPerToken * PER_TOKEN_TO_PER_MILLION,
-      output: outputPerToken * PER_TOKEN_TO_PER_MILLION,
-      cacheRead:
-        typeof entry.cache_read_input_token_cost === 'number'
-          ? entry.cache_read_input_token_cost * PER_TOKEN_TO_PER_MILLION
-          : 0,
-      cacheWrite:
-        typeof entry.cache_creation_input_token_cost === 'number'
-          ? entry.cache_creation_input_token_cost * PER_TOKEN_TO_PER_MILLION
-          : 0,
+      input,
+      output,
+      cacheRead: perMillion(entry.cache_read_input_token_cost) ?? 0,
+      cacheWrite: perMillion(entry.cache_creation_input_token_cost) ?? 0,
+      ...(cacheWrite1h !== undefined ? { cacheWrite1h } : {}),
     };
 
-    // Store under full key
-    result[key] = pricing;
+    const provider = typeof entry.litellm_provider === 'string' ? entry.litellm_provider : '';
+    const rank = rankFor(key, provider);
 
-    // Store under unprefixed key (strip provider/ prefix)
+    claim(key, rank, pricing);
     const slashIndex = key.indexOf('/');
     const unprefixed = slashIndex !== -1 ? key.slice(slashIndex + 1) : key;
-    result[unprefixed] = pricing;
+    if (unprefixed !== key) claim(unprefixed, rank, pricing);
 
-    // Store under normalized key (strip date suffix)
     const normalized = normalizeModelName(unprefixed);
-    result[normalized] = pricing;
+    if (normalized !== unprefixed) claim(normalized, rank, pricing);
   }
 
   return result;
@@ -73,11 +129,11 @@ export function parseLiteLLMData(
  * Fetch pricing data from the LiteLLM community-maintained JSON on GitHub.
  * Returns a map of model names to pricing, or throws on network/parse failure.
  */
-export async function fetchLiteLLMPricing(): Promise<
-  Record<string, ModelPricing>
-> {
+export async function fetchLiteLLMPricing(
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Record<string, RemotePricingEntry>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(LITELLM_URL, { signal: controller.signal });

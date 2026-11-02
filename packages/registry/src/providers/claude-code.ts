@@ -38,6 +38,11 @@ interface UsageRecord {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** Portion of cacheWriteTokens written with the 1-hour TTL (billed at 2x input). */
+  cacheWrite1hTokens?: number;
+  /** `fast` when the request ran in fast mode; standard requests omit it. */
+  serviceTier?: string;
+  inferenceGeo?: string;
   messageId?: string;
   requestId?: string;
   sessionId?: string;
@@ -122,6 +127,20 @@ function extractUsage(record: unknown): UsageRecord | null {
   if (!Number.isFinite(millis)) return null;
   const date = new Date(millis).toISOString().slice(0, 10);
 
+  const cacheCreation = u['cache_creation'];
+  const longTtl =
+    typeof cacheCreation === 'object' && cacheCreation !== null
+      ? (cacheCreation as Record<string, unknown>)['ephemeral_1h_input_tokens']
+      : undefined;
+  const cacheWrite1hTokens =
+    typeof longTtl === 'number' && Number.isFinite(longTtl) && longTtl > 0
+      ? Math.min(longTtl, cacheWriteTokens)
+      : undefined;
+  const inferenceGeo =
+    typeof u['inference_geo'] === 'string' && u['inference_geo'] !== 'global'
+      ? u['inference_geo']
+      : undefined;
+
   return {
     date,
     timestamp,
@@ -130,6 +149,9 @@ function extractUsage(record: unknown): UsageRecord | null {
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
+    ...(cacheWrite1hTokens !== undefined ? { cacheWrite1hTokens } : {}),
+    ...(u['speed'] === 'fast' ? { serviceTier: 'fast' } : {}),
+    ...(inferenceGeo !== undefined ? { inferenceGeo } : {}),
     messageId: typeof msg['id'] === 'string' ? msg['id'] : undefined,
     requestId: typeof rec['requestId'] === 'string' ? rec['requestId'] : undefined,
     projectId: typeof rec['cwd'] === 'string' && rec['cwd'].trim() ? rec['cwd'].trim() : undefined,
@@ -199,6 +221,25 @@ function incrementWarningCount(
   warnings.set(key, { kind, file, count: 1 });
 }
 
+function maxOptional(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Math.max(a, b);
+}
+
+function costInput(record: UsageRecord): Parameters<typeof resolveUsageCost>[0] {
+  return {
+    model: record.model,
+    inputTokens: record.inputTokens,
+    outputTokens: record.outputTokens,
+    cacheReadTokens: record.cacheReadTokens,
+    cacheWriteTokens: record.cacheWriteTokens,
+    cacheWrite1hTokens: record.cacheWrite1hTokens,
+    serviceTier: record.serviceTier,
+    inferenceGeo: record.inferenceGeo,
+  };
+}
+
 /**
  * Builds the DailyUsage array from a flat list of usage records,
  * grouping by date and model.
@@ -208,13 +249,7 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
 
   for (const rec of records) {
     const normalizedModel = normalizeModelName(rec.model);
-    const cost = resolveUsageCost({
-      model: rec.model,
-      inputTokens: rec.inputTokens,
-      outputTokens: rec.outputTokens,
-      cacheReadTokens: rec.cacheReadTokens,
-      cacheWriteTokens: rec.cacheWriteTokens,
-    });
+    const cost = resolveUsageCost(costInput(rec));
 
     let dateModels = byDate.get(rec.date);
     if (!dateModels) {
@@ -313,7 +348,7 @@ export class ClaudeCodeProvider implements IProvider {
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<UsageRecord>(
-      'claude-code-v3',
+      'claude-code-v4',
       this.baseDir,
       isCachedUsageRecord,
     );
@@ -386,6 +421,9 @@ export class ClaudeCodeProvider implements IProvider {
         outputTokens: Math.max(previous.outputTokens, record.outputTokens),
         cacheReadTokens: Math.max(previous.cacheReadTokens, record.cacheReadTokens),
         cacheWriteTokens: Math.max(previous.cacheWriteTokens, record.cacheWriteTokens),
+        cacheWrite1hTokens: maxOptional(previous.cacheWrite1hTokens, record.cacheWrite1hTokens),
+        serviceTier: previous.serviceTier ?? record.serviceTier,
+        inferenceGeo: previous.inferenceGeo ?? record.inferenceGeo,
       });
     }
     const allRecords = [...unique.values(), ...anonymous].filter((r) => isInRange(r.date, range));
@@ -393,13 +431,7 @@ export class ClaudeCodeProvider implements IProvider {
     const daily = buildDailyUsage(allRecords);
     for (const record of allRecords) {
       const normalizedModel = normalizeModelName(record.model);
-      const cost = resolveUsageCost({
-        model: record.model,
-        inputTokens: record.inputTokens,
-        outputTokens: record.outputTokens,
-        cacheReadTokens: record.cacheReadTokens,
-        cacheWriteTokens: record.cacheWriteTokens,
-      });
+      const cost = resolveUsageCost(costInput(record));
       allEvents.push({
         provider: this.name,
         timestamp: record.timestamp,
@@ -423,6 +455,7 @@ export class ClaudeCodeProvider implements IProvider {
         projectId: record.projectId,
         prompt: record.prompt,
         promptId: record.promptId,
+        ...(record.serviceTier ? { serviceTier: record.serviceTier, serviceTierSource: 'response' as const } : {}),
       });
     }
     addUnknownPricingWarnings(warnings, allEvents);

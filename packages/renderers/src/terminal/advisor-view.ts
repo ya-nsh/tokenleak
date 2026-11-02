@@ -1,4 +1,5 @@
 import type { AdvisorReport, AdvisorRecommendation } from '@tokenleak/core';
+import { describePricingGap } from '@tokenleak/core';
 import { bold256, bold, dim } from './colors';
 import { stripAnsi } from './layout';
 
@@ -137,9 +138,24 @@ export function renderAdvisorView(
   const subtitle = `Analyzed ${report.analyzedDays} days \u00B7 ${report.analyzedEvents.toLocaleString()} events`;
   lines.push(...renderBox('Model Efficiency Advisor', subtitle, width, noColor));
 
+  const pricingGap = describePricingGap(report);
+  if (pricingGap) {
+    lines.push('');
+    for (const line of wrapText(pricingGap, Math.max(20, width - 4))) {
+      lines.push(`  ${dim(line, noColor)}`);
+    }
+  }
+
   if (report.recommendations.length === 0) {
     lines.push('');
-    lines.push(`  ${dim('No recommendations -- your usage looks efficient!', noColor)}`);
+    lines.push(
+      `  ${dim(
+        pricingGap
+          ? 'No recommendations from the priced share of your usage.'
+          : 'No recommendations -- your usage looks efficient!',
+        noColor,
+      )}`,
+    );
     lines.push('');
     return lines.join('\n');
   }
