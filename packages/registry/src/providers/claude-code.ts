@@ -14,6 +14,7 @@ import type { IProvider } from '../provider';
 import { collectFiles } from './local-usage';
 import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
 import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
+import { cleanPromptText } from '../parsers/prompt-text';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
 import {
@@ -178,6 +179,17 @@ export function extractUserPrompt(record: unknown): string | null {
   const userType = rec['userType'];
   if (userType !== undefined && userType !== 'external') return null;
 
+  // Skill bodies, image metadata, and compaction summaries are injected by the
+  // harness; task notifications and peer sessions carry a non-human origin.
+  if (rec['isMeta'] === true || rec['isCompactSummary'] === true || rec['isVisibleInTranscriptOnly'] === true) {
+    return null;
+  }
+  const origin = rec['origin'];
+  if (typeof origin === 'object' && origin !== null) {
+    const kind = (origin as Record<string, unknown>)['kind'];
+    if (typeof kind === 'string' && kind !== 'human') return null;
+  }
+
   const message = rec['message'];
   if (typeof message !== 'object' || message === null) return null;
   const msg = message as Record<string, unknown>;
@@ -200,10 +212,7 @@ export function extractUserPrompt(record: unknown): string | null {
   }
 
   if (!text) return null;
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return null;
-
-  return trimmed.length > MAX_PROMPT_CHARS ? trimmed.slice(0, MAX_PROMPT_CHARS) : trimmed;
+  return cleanPromptText(text, MAX_PROMPT_CHARS);
 }
 
 function incrementWarningCount(
@@ -348,7 +357,7 @@ export class ClaudeCodeProvider implements IProvider {
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<UsageRecord>(
-      'claude-code-v4',
+      'claude-code-v6',
       this.baseDir,
       isCachedUsageRecord,
     );
