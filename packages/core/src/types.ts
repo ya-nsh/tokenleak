@@ -751,6 +751,8 @@ export interface RenderOptions {
   noColor: boolean;
   output: string | null;
   more?: boolean;
+  /** Keep captured prompt text in exported JSON. Off by default for privacy. */
+  includePrompts?: boolean;
 }
 
 export interface DateRange {
