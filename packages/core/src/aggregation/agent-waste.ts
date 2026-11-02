@@ -9,12 +9,25 @@ import type {
   UsageEvent,
   WasteRecipe,
 } from '../types';
-import { buildSessionRollups } from './analytics';
+import { formatTokenCount, formatUsd } from '../format';
+import { activeDurationMs } from './focus';
+import { buildSessionRollups, describeProject } from './analytics';
 import { clusterPrompts } from './prompt-clusters';
 
 const METHOD =
   'Agent waste detector v1: deterministic signals from local events, prompts, cache, model churn, and session rollups.';
-const CONTEXT_DRAG_INPUT_PER_OUTPUT = 8;
+/** Sessions shorter than this are too brief for context growth to matter. */
+const CONTEXT_DRAG_MIN_TURNS = 20;
+/** Late-session requests carrying at least this much context are heavy. */
+const CONTEXT_DRAG_LATE_TOKENS = 150_000;
+/** ...and only count as drag when they grew this much from the start. */
+const CONTEXT_DRAG_GROWTH = 2;
+/** Share of the extra context a compaction or fresh session would remove. */
+const CONTEXT_DRAG_SAVINGS_FRACTION = 0.5;
+const TOKENS_PER_MILLION = 1_000_000;
+/** Session-level kinds list this many sessions; the rest roll into one signal. */
+const MAX_SIGNALS_PER_SESSION_KIND = 10;
+const SESSION_LEVEL_KINDS: ReadonlySet<AgentWasteSignal['kind']> = new Set(['context-drag', 'long-session-low-yield', 'model-churn']);
 const CACHE_HIT_LOW = 0.25;
 const CACHE_REUSE_LOW = 2;
 const MODEL_CHURN_SWITCHES = 3;
@@ -69,27 +82,59 @@ function bySession(events: UsageEvent[]): Map<string, UsageEvent[]> {
   return sessions;
 }
 
+function requestContext(event: UsageEvent): number {
+  return event.inputTokens + event.cacheReadTokens + event.cacheWriteTokens;
+}
+
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+}
+
+/**
+ * Context drag: a long session whose requests keep re-sending a growing
+ * context. Every agentic turn re-reads the conversation, so a high
+ * input/output ratio alone is normal; what is avoidable is late turns
+ * carrying far more context than early ones did.
+ */
 function detectContextDrag(events: UsageEvent[]): AgentWasteSignal[] {
   const signals: AgentWasteSignal[] = [];
   for (const sessionEvents of bySession(events).values()) {
-    const input = sessionEvents.reduce((sum, event) => sum + event.inputTokens, 0);
-    const output = sessionEvents.reduce((sum, event) => sum + event.outputTokens, 0);
-    if (output <= 0 || input / output < CONTEXT_DRAG_INPUT_PER_OUTPUT) {
-      continue;
+    if (sessionEvents.length < CONTEXT_DRAG_MIN_TURNS) continue;
+    const ordered = sessionEvents.slice().sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const contexts = ordered.map(requestContext);
+    const quarter = Math.floor(contexts.length / 4);
+    const early = median(contexts.slice(0, quarter));
+    const late = median(contexts.slice(contexts.length - quarter));
+    if (early <= 0 || late < CONTEXT_DRAG_LATE_TOKENS || late / early < CONTEXT_DRAG_GROWTH) continue;
+
+    // Price the context carried beyond the early baseline at each turn's cache-read rate.
+    let excessCost = 0;
+    for (const event of ordered) {
+      const excess = Math.max(0, requestContext(event) - early);
+      excessCost += (excess / TOKENS_PER_MILLION) * (event.pricing?.cacheRead ?? 0);
     }
+    const savings = estimatedSavings(excessCost, CONTEXT_DRAG_SAVINGS_FRACTION);
+    const first = ordered[0]!;
+    const label = describeProject(first.projectId, first.repoRoot) ?? first.sessionId ?? 'this session';
     const evidence = evidenceFromEvents(
-      sessionEvents,
-      `Input tokens are ${(input / output).toFixed(1)}x output tokens in this session.`,
+      ordered,
+      `${label}: requests grew from ${formatTokenCount(early)} to ${formatTokenCount(late)} tokens of context over ${ordered.length} turns.`,
     );
     signals.push({
       kind: 'context-drag',
-      title: 'High context drag',
-      severity: severityFor(evidence.cost, 'medium'),
-      confidence: confidenceFor(sessionEvents.length, !sessionEvents[0]?.sessionId),
-      estimatedSavings: estimatedSavings(evidence.cost, 0.2),
+      title: 'Context keeps growing',
+      severity: severityFor(savings ?? 0, 'low'),
+      confidence: confidenceFor(ordered.length, !first.sessionId),
+      estimatedSavings: savings,
       evidence,
       recipes: [
-        recipe('Start a compact follow-up session', 'Ask for a concise handoff, then continue with only the files and context needed for the next step.'),
+        recipe(
+          'Compact or hand off before context balloons',
+          'When a task changes, ask for a short handoff and continue in a fresh session (or /compact) with only the files the next step needs.',
+        ),
       ],
     });
   }
@@ -225,20 +270,38 @@ function detectCacheWaste(providers: ProviderData[]): AgentWasteSignal[] {
   return signals;
 }
 
+/** Sessions with at least this much active time count as long. */
+const LONG_SESSION_ACTIVE_MS = 45 * 60_000;
+/** Below this many output tokens per dollar, a session produced little for its spend. */
+const LOW_YIELD_OUTPUT_PER_DOLLAR = 2_000;
+const LOW_YIELD_SAVINGS_FRACTION = 0.2;
+
 function detectLongLowYield(events: UsageEvent[]): AgentWasteSignal[] {
-  return buildSessionRollups(events)
-    .filter((session) => (
-      (session.durationMs ?? 0) >= 45 * 60 * 1_000 &&
-      session.cost > 0 &&
-      session.outputTokens / session.cost < 2_000
-    ))
-    .slice(0, 5)
-    .map((session): AgentWasteSignal => ({
+  const timestamps = new Map<string, string[]>();
+  for (const event of events) {
+    if (!event.sessionId?.trim()) continue;
+    const key = sessionKey(event.provider, event.sessionId.trim());
+    const list = timestamps.get(key) ?? [];
+    list.push(event.timestamp);
+    timestamps.set(key, list);
+  }
+  return buildSessionRollups(events).flatMap((session): AgentWasteSignal[] => {
+    // Active time, not wall-clock span: a session resumed over two days is not "long".
+    const activeMs = activeDurationMs(timestamps.get(sessionKey(session.provider, session.sessionId)) ?? []);
+    if (
+      activeMs < LONG_SESSION_ACTIVE_MS ||
+      session.cost <= 0 ||
+      session.outputTokens / session.cost >= LOW_YIELD_OUTPUT_PER_DOLLAR
+    ) {
+      return [];
+    }
+    const label = describeProject(session.projectId, session.repoRoot) ?? session.sessionId;
+    return [{
       kind: 'long-session-low-yield',
       title: 'Long session with low output per dollar',
       severity: severityFor(session.cost, 'low'),
       confidence: confidenceFor(session.eventCount),
-      estimatedSavings: estimatedSavings(session.cost, 0.2),
+      estimatedSavings: estimatedSavings(session.cost, LOW_YIELD_SAVINGS_FRACTION),
       evidence: {
         provider: session.provider,
         projectId: session.projectId,
@@ -247,12 +310,13 @@ function detectLongLowYield(events: UsageEvent[]): AgentWasteSignal[] {
         eventCount: session.eventCount,
         tokens: session.totalTokens,
         cost: session.cost,
-        reason: `Session ran ${Math.round((session.durationMs ?? 0) / 60_000)} minutes with low output per dollar.`,
+        reason: `${label}: ${Math.round(activeMs / 60_000)} active minutes produced ${formatTokenCount(session.outputTokens)} output tokens for ${formatUsd(session.cost)}.`,
       },
       recipes: [
         recipe('Inspect the replay', 'Review the session timeline for broad reads, stalled loops, or repeated commands.', `tokenleak replay ${session.start.slice(0, 10)}`),
       ],
-    }));
+    }];
+  });
 }
 
 function sortSignals(signals: AgentWasteSignal[]): AgentWasteSignal[] {
@@ -265,20 +329,62 @@ function sortSignals(signals: AgentWasteSignal[]): AgentWasteSignal[] {
   ));
 }
 
+/**
+ * Keep the costliest sessions of each session-level kind and fold the rest
+ * into a single "N more sessions" signal, so the report stays readable
+ * without losing the total savings estimate.
+ */
+function capSessionSignals(signals: AgentWasteSignal[]): AgentWasteSignal[] {
+  const kept: AgentWasteSignal[] = [];
+  const byKind = new Map<AgentWasteSignal['kind'], AgentWasteSignal[]>();
+  for (const signal of signals) {
+    if (!SESSION_LEVEL_KINDS.has(signal.kind)) {
+      kept.push(signal);
+      continue;
+    }
+    const list = byKind.get(signal.kind) ?? [];
+    list.push(signal);
+    byKind.set(signal.kind, list);
+  }
+  for (const list of byKind.values()) {
+    const ranked = list
+      .slice()
+      .sort((a, b) => (b.estimatedSavings ?? 0) - (a.estimatedSavings ?? 0) || b.evidence.cost - a.evidence.cost);
+    kept.push(...ranked.slice(0, MAX_SIGNALS_PER_SESSION_KIND));
+    const rest = ranked.slice(MAX_SIGNALS_PER_SESSION_KIND);
+    if (rest.length === 0) continue;
+    const savings = rest.reduce((sum, signal) => sum + (signal.estimatedSavings ?? 0), 0);
+    const template = rest[0]!;
+    kept.push({
+      ...template,
+      title: `${template.title} (${rest.length} more sessions)`,
+      severity: severityFor(savings, 'low'),
+      estimatedSavings: savings > 0 ? savings : null,
+      evidence: {
+        eventCount: rest.reduce((sum, signal) => sum + signal.evidence.eventCount, 0),
+        tokens: rest.reduce((sum, signal) => sum + signal.evidence.tokens, 0),
+        cost: rest.reduce((sum, signal) => sum + signal.evidence.cost, 0),
+        reason: `${rest.length} more sessions show the same pattern with smaller estimated savings.`,
+      },
+    });
+  }
+  return kept;
+}
+
 export function buildAgentWasteReport(
   providers: ProviderData[],
   events: UsageEvent[],
   dateRange: DateRange,
 ): AgentWasteReport {
   const warnings: string[] = [];
-  const signals = sortSignals([
+  const signals = sortSignals(capSessionSignals([
     ...detectContextDrag(events),
     ...detectPromptRepeats(events, warnings),
     ...detectModelChurn(events),
     ...detectPremiumSmallTask(events),
     ...detectCacheWaste(providers),
     ...detectLongLowYield(events),
-  ]);
+  ]));
   const estimated = signals
     .map((signal) => signal.estimatedSavings)
     .filter((value): value is number => value !== null);
