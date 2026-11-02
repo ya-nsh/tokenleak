@@ -175,6 +175,9 @@ tokenleak cursor login --name work
 # See every model's rates and where each price came from
 tokenleak pricing
 
+# One-line spend summary for your editor or tmux status bar
+tokenleak statusline
+
 # Show registered providers, availability, and aliases
 tokenleak --list-providers
 ```
@@ -229,6 +232,22 @@ tokenleak behavior-diff --provider claude-code,codex --days 30
 - `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.
 - `tokenleak waste` detects deterministic waste signals such as context drag, repeated prompt clusters, model churn, cache misses, and premium models used for small tasks.
 - `tokenleak behavior-diff` compares cohorts such as provider-vs-provider or model-vs-model and emits deterministic takeaways for engineering teams.
+
+### Status line
+
+`tokenleak statusline` prints one line for editor and terminal status bars:
+
+```text
+$42.10 today (120M) · $836 7d · 14d streak
+```
+
+It reads only the cached logs (no network, no Cursor sync), so it is fast enough to refresh on every prompt. Use it as your Claude Code status line in `~/.claude/settings.json`:
+
+```json
+{ "statusLine": { "type": "command", "command": "tokenleak statusline" } }
+```
+
+or in tmux: `set -g status-right '#(tokenleak statusline --no-color)'`. `--format json` returns the numbers behind the line.
 
 ### Cursor commands
 
