@@ -1,7 +1,7 @@
 import type { TokenleakOutput } from '@tokenleak/core';
 import type { SvgTheme } from './theme';
 import { getTheme } from './theme';
-import { escapeXml, rect, text, group, formatNumber, formatCost } from './utils';
+import { escapeXml, rect, text, formatNumber, formatCost } from './utils';
 import { FONT_FAMILY } from './layout';
 
 const WRAPPED_WIDTH = 1200;

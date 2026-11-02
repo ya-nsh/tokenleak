@@ -3,7 +3,7 @@ import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/.turbo/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/.turbo/**', '.worktrees/**', '.claude/**', '.playwright-mcp/**'],
   },
   {
     files: ['**/*.ts'],
@@ -21,6 +21,13 @@ export default [
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    // Build and release scripts report progress on stdout by design.
+    files: ['scripts/**/*.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 ];

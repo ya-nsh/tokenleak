@@ -265,7 +265,7 @@ function frameToSvg(frame: CapturedFrame, title: string): string {
   ].join('');
 }
 
-async function captureView(renderer: CliRenderer, state: AppState, title: string): Promise<CapturedFrame> {
+async function captureView(renderer: CliRenderer, state: AppState, _title: string): Promise<CapturedFrame> {
   clearRoot(renderer);
   renderer.root.add(buildLayout(state, renderer));
   renderer.requestRender();

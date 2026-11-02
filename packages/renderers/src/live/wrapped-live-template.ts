@@ -127,7 +127,6 @@ export function generateWrappedLiveHtml(output: TokenleakOutput): string {
       const evening = more.hourOfDay
         .filter((e) => e.hour >= 18 && e.hour < 22)
         .reduce((s, e) => s + e.tokens, 0);
-      const night = total - morning - afternoon - evening;
       morningPct = Math.round((morning / total) * 100);
       afternoonPct = Math.round((afternoon / total) * 100);
       eveningPct = Math.round((evening / total) * 100);

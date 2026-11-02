@@ -38,10 +38,6 @@ function matchesSelector(event: UsageEvent, selector: BehaviorCohortSelector): b
   }
 }
 
-function nullWhenMissing(value: number, hasDenominator: boolean): number | null {
-  return hasDenominator ? value : null;
-}
-
 function modelSwitchesPerSession(events: UsageEvent[]): number {
   const bySession = new Map<string, UsageEvent[]>();
   for (const event of events) {

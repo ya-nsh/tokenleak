@@ -1,8 +1,12 @@
 {
   "name": "tokenleak",
   "private": true,
+  "type": "module",
   "packageManager": "bun@1.0.7",
-  "workspaces": ["packages/*", "tooling/*"],
+  "workspaces": [
+    "packages/*",
+    "tooling/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
