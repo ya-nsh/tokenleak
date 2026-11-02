@@ -222,7 +222,8 @@ function buildTopModelPatterns(stats: AggregatedStats): PatternEntry[] {
 
 function buildProviderModel(provider: ProviderData, dateRange: TokenleakOutput['dateRange']): ProviderDashboardModel | null {
   const stats = aggregate(provider.daily, dateRange.until, dateRange);
-  if (stats.totalTokens <= 0) {
+  // Some providers (Crush, Cursor exports) report spend without token counts.
+  if (stats.totalTokens <= 0 && stats.totalCost <= 0) {
     return null;
   }
 
