@@ -47,6 +47,18 @@ function renderAnomalies(anomalies: ExplainAnomaly[]) {
   );
 }
 
+
+/**
+ * `comparedTo*Average` is an absolute token delta (total - average), not a
+ * ratio. Convert it back to a percentage of the average for display.
+ */
+export function formatVsAverage(totalTokens: number, delta: number): string {
+  const average = totalTokens - delta;
+  if (average <= 0) return totalTokens > 0 ? 'new' : '0%';
+  const percent = Math.round((delta / average) * 100);
+  return `${percent >= 0 ? '+' : ''}${percent}%`;
+}
+
 export function createExplainPanel(report: ExplainReport | null, explainDate: string | null) {
   const dateLabel = explainDate ? formatShortDate(explainDate) : '—';
 
@@ -97,7 +109,7 @@ export function createExplainPanel(report: ExplainReport | null, explainDate: st
       }),
       Text({ content: '', fg: COLORS.dimWhite }),
       Text({
-        content: `Tokens: ${formatTokens(report.totalTokens)}  Cost: ${formatRowCost(report.totalCost, report.costCompleteness)}  vs 7d avg: ${report.comparedTo7dAverage >= 0 ? '+' : ''}${(report.comparedTo7dAverage * 100).toFixed(0)}%  vs 30d avg: ${report.comparedTo30dAverage >= 0 ? '+' : ''}${(report.comparedTo30dAverage * 100).toFixed(0)}%`,
+        content: `Tokens: ${formatTokens(report.totalTokens)}  Cost: ${formatRowCost(report.totalCost, report.costCompleteness)}  vs 7d avg: ${formatVsAverage(report.totalTokens, report.comparedTo7dAverage)}  vs 30d avg: ${formatVsAverage(report.totalTokens, report.comparedTo30dAverage)}`,
         fg: COLORS.white,
       }),
       Text({ content: '', fg: COLORS.dimWhite }),
