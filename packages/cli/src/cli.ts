@@ -116,6 +116,7 @@ import {
   renderReceiptTerminal,
 } from './receipts.js';
 import { buildPricingReport, renderPricingReport } from './pricing-report.js';
+import { STATUSLINE_HISTORY_DAYS, buildStatusline, renderStatusline } from './statusline.js';
 import {
   formatCostWithCompleteness,
   formatTokenCount,
@@ -305,6 +306,7 @@ function buildHelpText(): string {
     '  tokenleak waste [flags]',
     '  tokenleak behavior-diff [flags]',
     '  tokenleak pricing [flags]',
+    '  tokenleak statusline [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
@@ -318,6 +320,7 @@ function buildHelpText(): string {
     '  waste                  Detect agent waste signals with evidence',
     '  behavior-diff          Compare agent/model/project behavior cohorts',
     '  pricing                Show each model\'s rates and where the price came from',
+    '  statusline             One-line spend summary for editor and tmux status bars',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -513,6 +516,26 @@ function buildSimulateRoutingHelpText(): string {
   ].join('\n');
 }
 
+function buildStatuslineHelpText(): string {
+  return [
+    `tokenleak statusline ${VERSION}`,
+    "One line of today's spend, the last 7 days, and your streak:",
+    '  $42.10 today (120M) · $836 7d · 14d streak',
+    '',
+    'Usage:',
+    '  tokenleak statusline [flags]',
+    '',
+    'Claude Code (~/.claude/settings.json):',
+    '  { "statusLine": { "type": "command", "command": "tokenleak statusline" } }',
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal (default), json',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
+    '      --no-color          Disable ANSI colors (also off when piped)',
+    '',
+  ].join('\n');
+}
+
 function buildPricingHelpText(): string {
   return [
     `tokenleak pricing ${VERSION}`,
@@ -702,7 +725,7 @@ function validateProviderSelection(
 }
 
 export async function selectAvailableProviders(
-  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
+  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig & { syncCursor?: boolean },
 ): Promise<IProvider[]> {
   validateProviderSelection(config);
 
@@ -713,7 +736,8 @@ export async function selectAvailableProviders(
       'Cursor is selected but not authenticated. Run `tokenleak cursor login` first.',
     );
   }
-  const cursorSync = await shouldSyncCursorForRun(config);
+  // Status bars refresh constantly; they read the Cursor cache without a network round trip.
+  const cursorSync = config.syncCursor === false ? { attempted: false } : await shouldSyncCursorForRun(config);
   if (cursorSync.error) {
     if (requestedCursor && !hasCursorUsageCache()) {
       throw new TokenleakError(cursorSync.error);
@@ -761,7 +785,7 @@ async function loadProviderData(config: ProviderLoadConfig): Promise<{
 }
 
 async function loadProviderDataForRange(
-  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
+  config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig & { syncCursor?: boolean },
   dateRange: DateRange,
   available: IProvider[] | null = null,
 ): Promise<{
@@ -1676,6 +1700,18 @@ async function writeReportOutput(rendered: string, output: string | null): Promi
   } else {
     process.stdout.write(`${rendered}\n`);
   }
+}
+
+async function runStatusline(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig({ ...cliArgs, days: STATUSLINE_HISTORY_DAYS });
+  const format = resolveTerminalJsonFormat('statusline', cliArgs);
+  const dateRange = computeDateRange({ days: STATUSLINE_HISTORY_DAYS });
+  const { providerDataList } = await loadProviderDataForRange({ ...config, syncCursor: false }, dateRange);
+  // A status bar has no room for warnings; `tokenleak --verbose` shows them.
+  const summary = buildStatusline(mergeProviderData(providerDataList), dateRange.until);
+  const rendered =
+    format === 'json' ? JSON.stringify(summary, null, 2) : renderStatusline(summary, { noColor: config.noColor });
+  await writeReportOutput(rendered, null);
 }
 
 async function runPricing(cliArgs: Record<string, unknown>): Promise<void> {
@@ -3810,6 +3846,24 @@ async function dispatchCli(): Promise<void> {
     }
     await runMain(focusMain);
     return finishCommand(0);
+  }
+  if (argv[0] === 'statusline') {
+    try {
+      const cliArgs = parseOptimizationArgs(argv.slice(1));
+      if (cliArgs['help']) {
+        process.stdout.write(buildStatuslineHelpText());
+        return finishCommand(0);
+      }
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        return finishCommand(0);
+      }
+      await initPricing();
+      await runStatusline(cliArgs);
+      return finishCommand(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
   }
   if (argv[0] === 'pricing') {
     try {

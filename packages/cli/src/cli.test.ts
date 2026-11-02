@@ -966,6 +966,20 @@ describe('CLI invocation', () => {
     expect(stderr).toContain('Unknown flag "--bogus" for `tokenleak focus`');
   });
 
+  test('statusline --help documents the Claude Code status line setup', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--help'], { stdout: 'pipe', stderr: 'pipe' });
+    const stdout = await new Response(proc.stdout).text();
+    expect(await proc.exited).toBe(0);
+    expect(stdout).toContain('"statusLine"');
+    expect(stdout).toContain('tokenleak statusline');
+  });
+
+  test('statusline rejects unknown flags', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--colour'], { stdout: 'pipe', stderr: 'pipe' });
+    expect(await proc.exited).toBe(1);
+    expect(await new Response(proc.stderr).text()).toContain('Unknown flag "--colour"');
+  });
+
   test('--verbose is accepted by every command', async () => {
     const proc = Bun.spawn(['bun', cliPath, 'pricing', '--help', '--verbose'], {
       stdout: 'pipe',
