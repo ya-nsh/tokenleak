@@ -63,9 +63,10 @@ npx tokenleak --help
 ```
 
 After installing, run `tokenleak` in your terminal. It auto-detects supported providers from their local logs.
-In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 10 views:
+In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 15 views:
 
 - **Overview** — heatmap, stats, providers, and top models
+- **Quotas** — live subscription limits for Claude, Codex, and Copilot
 - **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
 - **Advisor** — model efficiency recommendations, projected savings, and waste-pattern recipes
 - **Focus** — deep-work session rankings scored by duration, density, and streaks
@@ -75,6 +76,12 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
 - **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
 - **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
+- **Receipts** — itemized spend by prompt behavior
+- **Sim** — what routing short tasks to cheaper models would have saved
+- **Waste** — deterministic waste signals with evidence
+- **Diff** — compare providers, models, or projects side by side
+
+On narrow terminals the tab bar shows the views around the active one (`‹` / `›` mark the rest) and footer hints drop by priority, so `q:quit` and `?:keys` are always visible.
 
 
 ### From source
@@ -501,7 +508,7 @@ JSON exports (files, `--clipboard`, `--upload gist`) omit captured prompt text b
 
 ### TUI dashboard (default)
 
-In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 8 views with keyboard and mouse navigation. The Advisor view includes both savings recommendations and waste-pattern recipes.
+In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 15 views with keyboard and mouse navigation. The Advisor view includes both savings recommendations and waste-pattern recipes.
 
 Latest OpenTUI screenshots from the current dashboard build:
 

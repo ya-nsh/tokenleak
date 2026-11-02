@@ -1,6 +1,53 @@
 import { Box, Text } from '@opentui/core';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
+import { fitHints, type Hint } from '../lib/fit.js';
+
+const DEFAULT_STATUS_WIDTH = 120;
+const STATUS_PADDING = 2;
+const UPDATED_WIDTH = 'Updated 00:00'.length + 2;
+const REPLAY_CHIP = ' ▶ [o] interactive replay  · ';
+
+/** The replay chip belongs to the views it acts on, or when a server is running. */
+function showsReplayChip(state: AppState): boolean {
+  return state.replayLiveServerPort !== null || state.selectedView === 'replay';
+}
+
+function chipWidth(state: AppState): number {
+  if (!showsReplayChip(state)) return 0;
+  return state.replayLiveServerPort !== null
+    ? ` ✓ replay open :${state.replayLiveServerPort}  · `.length
+    : REPLAY_CHIP.length;
+}
+
+/** Hints for the active view; priority 0 survives longest. */
+function viewHints(state: AppState): Hint[] {
+  const viewSpecific: Record<string, string[]> = {
+    overview: ['j/k:scroll', 's:sort'],
+    matrix: ['[/]:page'],
+    explain: ['h/l:date'],
+    replay: ['h/l:date', 'j/k:select', 'enter/space:toggle'],
+    receipts: ['j/k:select', 'enter/space:toggle', 'S:sort', 'f:filter'],
+    export: ['p:png', 'w:wrapped', 'l:live', 'a:LLM prompt'],
+    advisor: ['j/k:scroll'],
+    focus: ['j/k:scroll'],
+    compare: ['j/k:scroll'],
+    wrapped: ['j/k:scroll'],
+    nutrition: ['j/k:scroll'],
+    simulator: ['j/k:scroll'],
+    waste: ['j/k:scroll'],
+    behavior: ['j/k:scroll'],
+  };
+  return [
+    { text: '←→:view', priority: 1 },
+    { text: 'tab/⇧tab:period', priority: 3 },
+    ...(viewSpecific[state.selectedView] ?? []).map((text, index) => ({ text, priority: 2 + index })),
+    { text: 'r:refresh', priority: 4 },
+    { text: 'c:cursor', priority: 6 },
+    { text: '?:keys', priority: 1 },
+    { text: 'q:quit', priority: 0 },
+  ];
+}
 
 function formatUpdateTime(): string {
   const now = new Date();
@@ -24,13 +71,13 @@ export function buildReplayCtaChip(state: AppState) {
     });
   }
   return Text({
-    content: ' ▶ [o] interactive replay  · ',
+    content: REPLAY_CHIP,
     fg: COLORS.green,
     attributes: BOLD,
   });
 }
 
-export function buildStatusBar(state: AppState) {
+export function buildStatusBar(state: AppState, width = DEFAULT_STATUS_WIDTH) {
   if (state.selectedView === 'quotas' && !state.showHelp && !state.showCursorSetup) {
     return Box({ flexDirection: 'row', width: '100%', height: 1, paddingLeft: 1 },
       Text({ content: `${state.quotasLoading ? 'Checking quotas...  ' : ''}←→:view  j/k:scroll  r:refresh  ?:keys  q:quit`, fg: COLORS.cyan }));
@@ -110,41 +157,10 @@ export function buildStatusBar(state: AppState) {
     );
   }
 
-  const helpHint = '?:keys';
-  const nav = `←→:view  tab/⇧tab:period`;
-  const cursorHint = '  c:cursor';
+  const keys = fitHints(viewHints(state), width - STATUS_PADDING - UPDATED_WIDTH - chipWidth(state));
 
-  let keys: string;
-  if (state.selectedView === 'overview') {
-    keys = `${nav}  j/k:scroll  s:sort  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'matrix') {
-    keys = `${nav}  [/]:page  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'explain') {
-    keys = `${nav}  h/l:date  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'replay') {
-    keys = `${nav}  h/l:date  j/k:select  enter/space:toggle  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'receipts') {
-    keys = `${nav}  j/k:select  enter/space:toggle  S:sort  f:filter  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (
-    state.selectedView === 'advisor' ||
-    state.selectedView === 'focus' ||
-    state.selectedView === 'compare' ||
-    state.selectedView === 'wrapped' ||
-    state.selectedView === 'nutrition'
-    || state.selectedView === 'simulator'
-    || state.selectedView === 'waste'
-    || state.selectedView === 'behavior'
-  ) {
-    keys = `${nav}  j/k:scroll  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else if (state.selectedView === 'export') {
-    keys = `${nav}  p:png  w:wrapped  l:live  a:LLM prompt  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  } else {
-    keys = `${nav}  r:refresh${cursorHint}  ${helpHint}  q:quit`;
-  }
-
-  // Always-visible CTA on the left, view-specific keymap immediately
-  // after, timestamp on the right. The bright emerald chip next to
-  // dim-white hints is the "highlighted at any cost" affordance.
+  // View-specific keymap on the left (with the replay chip where it applies),
+  // timestamp on the right. Hints shrink by priority instead of being cut.
   return Box(
     {
       flexDirection: 'row',
@@ -156,7 +172,7 @@ export function buildStatusBar(state: AppState) {
     },
     Box(
       { flexDirection: 'row' },
-      buildReplayCtaChip(state),
+      ...(showsReplayChip(state) ? [buildReplayCtaChip(state)] : []),
       Text({ content: keys, fg: COLORS.dimWhite }),
     ),
     Text({

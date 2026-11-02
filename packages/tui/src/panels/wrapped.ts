@@ -39,6 +39,22 @@ function bigStat(label: string, value: string, valueColor: string) {
   );
 }
 
+const TOP_PROVIDER_LIMIT = 5;
+
+type WrappedProvider = { displayName: string; totalTokens: number; totalCost: number };
+
+/**
+ * Providers that did something, biggest first. The list arrives in registry
+ * order, so taking the first five used to show idle providers at 0 tokens and
+ * drop the one doing 96% of the work.
+ */
+export function rankWrappedProviders<T extends WrappedProvider>(providers: readonly T[]): T[] {
+  return providers
+    .filter((provider) => provider.totalTokens > 0 || provider.totalCost > 0)
+    .slice()
+    .sort((a, b) => b.totalTokens - a.totalTokens || b.totalCost - a.totalCost || a.displayName.localeCompare(b.displayName));
+}
+
 export function createWrappedPanel(
   stats: AggregatedStats | null,
   achievements: Achievement[],
@@ -197,8 +213,9 @@ export function createWrappedPanel(
   }
 
   // Top providers section — expanded to one per line with tokens + cost
-  if (providers.length > 0) {
-    const totalTokens = providers.reduce((s, p) => s + p.totalTokens, 0) || 1;
+  const rankedProviders = rankWrappedProviders(providers);
+  if (rankedProviders.length > 0) {
+    const totalTokens = rankedProviders.reduce((s, p) => s + p.totalTokens, 0) || 1;
 
     contentRows.push(
       Text({
@@ -208,7 +225,7 @@ export function createWrappedPanel(
       }),
     );
 
-    for (const p of providers.slice(0, 5)) {
+    for (const p of rankedProviders.slice(0, TOP_PROVIDER_LIMIT)) {
       const pct = ((p.totalTokens / totalTokens) * 100).toFixed(0);
       contentRows.push(
         Box(

@@ -116,6 +116,36 @@ function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerComm
   ];
 }
 
+export interface GitSignalNotice {
+  tone: 'ok' | 'partial' | 'none';
+  headline: string;
+  detail: string | null;
+}
+
+/**
+ * Describe Git coverage for the window. The old banner said "no commits were
+ * found" whenever any single repo lacked commits, right under a total of
+ * 1,350 commits.
+ */
+export function describeGitSignal(totalCommits: number, reposWithoutCommits: number): GitSignalNotice {
+  const repos = `${reposWithoutCommits} repo${reposWithoutCommits === 1 ? '' : 's'}`;
+  if (reposWithoutCommits === 0) {
+    return { tone: 'ok', headline: 'Every repo with AI usage has matching Git commits in this window.', detail: null };
+  }
+  if (totalCommits > 0) {
+    return {
+      tone: 'partial',
+      headline: `${repos} had AI usage but no commits in this window (marked "No signal").`,
+      detail: 'They may be scratch work, or live outside a local Git checkout.',
+    };
+  }
+  return {
+    tone: 'none',
+    headline: 'No Git signal: AI usage exists, but no commits were found in this window.',
+    detail: 'Open the repo locally as a Git checkout, or choose a window that contains commits.',
+  };
+}
+
 export function createNutritionPanel(state: AppState, report: NutritionReport | null) {
   if (state.nutritionSignalsLoading) {
     return Box(
@@ -173,25 +203,11 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
 
-  const signalNotice =
-    missingCount > 0
-      ? [
-          Text({
-            content: 'No Git signal: AI usage exists, but no commits were found in this window.',
-            fg: COLORS.red,
-          }),
-          Text({
-            content:
-              'Enable it by opening the repo locally, ensuring it is a Git worktree, and choosing a window with commits.',
-            fg: COLORS.red,
-          }),
-        ]
-      : [
-          Text({
-            content: 'All repo-root usage has matching Git output in this window.',
-            fg: COLORS.green,
-          }),
-        ];
+  const notice = describeGitSignal(report.totals.commits, missingCount);
+  const signalNotice = [
+    Text({ content: notice.headline, fg: notice.tone === 'ok' ? COLORS.green : notice.tone === 'partial' ? COLORS.amber : COLORS.red }),
+    ...(notice.detail ? [Text({ content: notice.detail, fg: COLORS.dimWhite })] : []),
+  ];
 
   const tableRows = visible.flatMap((repo, index) =>
     renderRepoRows(repo, offset + index + 1, maxCostPerCommit),

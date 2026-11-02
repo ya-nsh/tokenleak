@@ -23,6 +23,19 @@ function collectTextContent(node: unknown): string[] {
 }
 
 describe('buildHeader', () => {
+  test('narrow terminals show the tabs around the active view with overflow markers', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    state.selectedView = 'replay';
+
+    const text = collectTextContent(buildHeader(state, { width: 100 } as CliRenderer)).join('');
+
+    expect(text).toContain(' Replay ');
+    expect(text).toContain('‹');
+    expect(text).toContain('›');
+    expect(text).not.toContain(' Overview ');
+  });
+
   test('renders view tabs without visible shortcut prefixes', () => {
     const state = createInitialState();
     state.isLoading = false;

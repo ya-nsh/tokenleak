@@ -1034,7 +1034,7 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
     buildHeader(state, renderer, handleViewSwitch),
     ...(cursorBanner ? [cursorBanner] : []),
     buildContent(state, renderer),
-    buildStatusBar(state),
+    buildStatusBar(state, renderer.width),
   );
 }
 

@@ -12,11 +12,14 @@ interface TimeWindowsProps {
   windows: TimeWindowData[];
 }
 
+/** Sized so five windows fit a half-width quadrant without wrapping values. */
+const LABEL_W = 15;
+const COL_W = 9;
+
 function headerRow(labels: string[]) {
-  const COL_W = 12;
   return Box(
     { flexDirection: 'row', width: '100%' },
-    Text({ content: padRight('Metric', 18), fg: COLORS.amber, attributes: BOLD }),
+    Text({ content: padRight('Metric', LABEL_W), fg: COLORS.amber, attributes: BOLD }),
     ...labels.map((l) =>
       Text({ content: padLeft(l, COL_W), fg: COLORS.amber, attributes: BOLD }),
     ),
@@ -28,13 +31,13 @@ function dataRow(
   values: string[],
   highlights: boolean[],
 ) {
-  const COL_W = 12;
   return Box(
     { flexDirection: 'row', width: '100%' },
-    Text({ content: padRight(label, 18), fg: COLORS.dimWhite }),
+    Text({ content: padRight(label, LABEL_W), fg: COLORS.dimWhite }),
     ...values.map((v, i) =>
       Text({
         content: padLeft(v, COL_W),
+        flexShrink: 0,
         fg: highlights[i] ? COLORS.amber : COLORS.green,
         attributes: highlights[i] ? BOLD : undefined,
       }),
@@ -72,7 +75,7 @@ export function createTimeWindowsPanel(props: TimeWindowsProps) {
 
     children.push(
       headerRow(labels),
-      Text({ content: '\u2500'.repeat(66), fg: COLORS.dimWhite }),
+      Text({ content: '\u2500'.repeat(LABEL_W + COL_W * labels.length), fg: COLORS.dimWhite }),
       dataRow(
         'Tokens',
         tokenValues.map(formatTokens),
@@ -84,12 +87,12 @@ export function createTimeWindowsPanel(props: TimeWindowsProps) {
         findMaxIndex(costValues),
       ),
       dataRow(
-        'Avg Daily Tokens',
+        'Avg/Day Tokens',
         avgTokenValues.map(formatTokens),
         findMaxIndex(avgTokenValues),
       ),
       dataRow(
-        'Avg Daily Cost',
+        'Avg/Day Cost',
         windows.map((w) =>
           formatCostWithCompleteness(w.stats.averageDailyCost, w.stats.costCompleteness),
         ),
