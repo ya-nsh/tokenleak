@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { FocusEntry, FocusReport } from '@tokenleak/core';
-import { formatCost, formatTokens, formatShortDate, asciiBar, padRight, padLeft, truncate } from '../lib/format.js';
+import { formatTokens, formatShortDate, asciiBar, padRight, padLeft, truncate, formatRowCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
@@ -27,7 +27,7 @@ function renderEntry(entry: FocusEntry, rank: number, sessionColWidth: number) {
   const startDate = entry.start ? formatShortDate(entry.start.slice(0, 10)) : '';
   const duration = formatHours(entry.durationMs);
   const density = formatTokPerHour(entry.tokensPerHour);
-  const cost = formatCost(entry.cost);
+  const cost = formatRowCost(entry.cost, entry.costCompleteness);
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },

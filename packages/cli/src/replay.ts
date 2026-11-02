@@ -1,18 +1,6 @@
+import { formatCostWithCompleteness, formatTokenCount } from '@tokenleak/core';
 import type { FlowBlock, ReplayReport, TokenVelocityPoint } from '@tokenleak/core';
 
-function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`;
-  }
-  if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}K`;
-  }
-  return `${Math.round(tokens)}`;
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function formatDuration(ms: number): string {
   if (ms <= 0) {
@@ -84,7 +72,7 @@ function renderActivityBar(report: ReplayReport, width: number): string[] {
 
 function renderFlowBlockCard(block: FlowBlock, width: number): string[] {
   const timeRange = `${formatTime(block.start)}-${formatTime(block.end)}`;
-  const header = `  [${timeRange}] ${block.label} | ${block.eventCount} events | ${formatTokens(block.totalTokens)} tok | ${formatCost(block.cost)}`;
+  const header = `  [${timeRange}] ${block.label} | ${block.eventCount} events | ${formatTokenCount(block.totalTokens)} tok | ${formatCostWithCompleteness(block.cost, block.costCompleteness)}`;
 
   const lines = [truncate(header, width)];
 
@@ -132,7 +120,7 @@ function renderPulseChart(velocity: TokenVelocityPoint[], width: number): string
   }
 
   const lines = ['Pulse (tokens/min)'];
-  const maxLabel = formatTokens(maxTpm);
+  const maxLabel = formatTokenCount(maxTpm);
   for (let row = 0; row < chartHeight; row++) {
     const label = row === 0 ? maxLabel.padStart(7) : row === chartHeight - 1 ? '      0' : '       ';
     lines.push(`${label} |${grid[row].join('')}`);
@@ -172,7 +160,7 @@ export function renderReplayTerminal(report: ReplayReport, width: number = 80): 
     `Ratio: ${(s.flowThinkRatio * 100).toFixed(0)}%`,
   ];
   if (s.peakMinute) {
-    summaryParts.push(`Peak: ${formatTokens(s.peakMinute.tokensPerMinute)} tok/min at ${formatTime(s.peakMinute.minute)}`);
+    summaryParts.push(`Peak: ${formatTokenCount(s.peakMinute.tokensPerMinute)} tok/min at ${formatTime(s.peakMinute.minute)}`);
   }
   lines.push(truncate(summaryParts.join(' | '), width));
 

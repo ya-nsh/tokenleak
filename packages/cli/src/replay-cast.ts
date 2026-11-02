@@ -1,3 +1,4 @@
+import { formatTokenCount } from '@tokenleak/core';
 import type { ReplayReport, UsageEvent } from '@tokenleak/core';
 
 /**
@@ -137,12 +138,12 @@ function renderPlaybackFrame(report: ReplayReport, ctx: FrameContext): string {
   const cacheRate = ctx.cumInput + ctx.cumCacheR > 0
     ? ctx.cumCacheR / (ctx.cumInput + ctx.cumCacheR)
     : 0;
-  const costLine = `cost: ${formatCost(ctx.cumCost)} / ${formatCost(ctx.totalCost)}    tokens: ${formatTokens(ctx.cumTokens)} / ${formatTokens(ctx.totalTokens)}    cache ${formatPercent(cacheRate)}`;
+  const costLine = `cost: ${formatCost(ctx.cumCost)} / ${formatCost(ctx.totalCost)}    tokens: ${formatTokenCount(ctx.cumTokens)} / ${formatTokenCount(ctx.totalTokens)}    cache ${formatPercent(cacheRate)}`;
   lines.push(costLine);
   const cacheRateOnEvent = cursorEvent.inputTokens + cursorEvent.cacheReadTokens > 0
     ? cursorEvent.cacheReadTokens / (cursorEvent.inputTokens + cursorEvent.cacheReadTokens)
     : 0;
-  const eventLine = `clock: ${formatTimeSeconds(cursorEvent.timestamp)}    event: ${cursorEvent.model} · ${formatTokens(cursorEvent.totalTokens)} tok · cache ${formatPercent(cacheRateOnEvent)} · ${formatCost(cursorEvent.cost)}`;
+  const eventLine = `clock: ${formatTimeSeconds(cursorEvent.timestamp)}    event: ${cursorEvent.model} · ${formatTokenCount(cursorEvent.totalTokens)} tok · cache ${formatPercent(cacheRateOnEvent)} · ${formatCost(cursorEvent.cost)}`;
   lines.push(eventLine);
   lines.push('');
 
@@ -174,7 +175,7 @@ function renderPlaybackFrame(report: ReplayReport, ctx: FrameContext): string {
     const e = report.events[i];
     const marker = i === ctx.cursorIndex ? '▶' : ' ';
     const cr = e.inputTokens + e.cacheReadTokens > 0 ? e.cacheReadTokens / (e.inputTokens + e.cacheReadTokens) : 0;
-    lines.push(` ${marker} ${formatTimeSeconds(e.timestamp).padEnd(9)} ${truncate(e.model, 22).padEnd(22)} ${formatTokens(e.totalTokens).padStart(8)} tok  cache ${formatPercent(cr).padStart(5)}  ${formatCost(e.cost).padStart(8)}`);
+    lines.push(` ${marker} ${formatTimeSeconds(e.timestamp).padEnd(9)} ${truncate(e.model, 22).padEnd(22)} ${formatTokenCount(e.totalTokens).padStart(8)} tok  cache ${formatPercent(cr).padStart(5)}  ${formatCost(e.cost).padStart(8)}`);
   }
   lines.push('');
 
@@ -236,12 +237,6 @@ function renderEmptyFrame(report: ReplayReport, width: number): string {
 
 function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return `${Math.round(n)}`;
 }
 
 function formatPercent(n: number): string {

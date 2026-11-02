@@ -193,8 +193,8 @@ describe('buildExplainReport', () => {
     expect(report.summary[1]).toContain('Codex contributed 90%');
     expect(report.topProviders.map((entry) => entry.label)).toEqual(['Codex', 'Claude Code']);
     expect(report.topModels[0]).toMatchObject({ label: 'gpt-5', tokens: 16_000 });
-    expect(report.topSessions[0]?.label).toBe('codex:apps');
-    expect(report.topProjects[0]?.label).toBe('apps');
+    expect(report.topSessions[0]?.label).toBe('codex:work/web');
+    expect(report.topProjects[0]?.label).toBe('work/web');
     expect(report.anomalies.map((entry) => entry.type)).toEqual([
       'provider-spike',
       'model-spike',

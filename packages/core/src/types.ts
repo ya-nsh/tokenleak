@@ -273,6 +273,8 @@ export interface SessionDrilldownEntry {
   cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   topModels: TopModelEntry[];
 }
 
@@ -289,6 +291,8 @@ export interface ProjectDrilldownEntry {
   cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   topModels: TopModelEntry[];
   topSessions: SessionSummary[];
 }
@@ -320,6 +324,8 @@ export interface ExplainEvidenceRow {
   label: string;
   tokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   share: number;
 }
 
@@ -333,6 +339,8 @@ export interface ExplainReport {
   date: string;
   totalTokens: number;
   totalCost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   comparedTo7dAverage: number;
   comparedTo30dAverage: number;
   headline: string;
@@ -356,6 +364,8 @@ export interface FocusEntry {
   tokensPerHour: number;
   totalTokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   streak: number;
   score: number;
   scoreBreakdown: {
@@ -386,6 +396,8 @@ export interface FlowBlock {
   cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   dominantModel: string;
   events: UsageEvent[];
   modelSwitches: number;
@@ -516,6 +528,8 @@ export interface NutritionRepoSummary {
   sessions: number;
   tokens: number;
   cost: number;
+  /** Whether `cost` covers every token, some, or none. */
+  costCompleteness?: CostCompleteness;
   commits: number;
   changedFiles: number;
   changedLines: number;
@@ -531,6 +545,7 @@ export interface NutritionReport {
   totals: {
     tokens: number;
     cost: number;
+    costCompleteness?: CostCompleteness;
     commits: number;
     changedFiles: number;
     changedLines: number;

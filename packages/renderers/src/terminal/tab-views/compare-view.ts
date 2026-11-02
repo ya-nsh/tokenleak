@@ -1,17 +1,7 @@
-import { formatCostWithCompleteness } from '@tokenleak/core';
+import { formatCostWithCompleteness, formatTokenCount, formatUsd } from '@tokenleak/core';
 import type { CompareDeltas, TokenleakOutput } from '@tokenleak/core';
 import { bold, colorize256, dim, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
-
-function formatTokens(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(Math.round(n));
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
@@ -89,14 +79,14 @@ export function renderCompareView(output: TokenleakOutput, width: number, noColo
   ));
   lines.push('');
   lines.push(truncateVisible(`  ${dim('Metric'.padEnd(18), noColor)} ${dim('Current'.padStart(11), noColor)} ${dim('Previous'.padStart(11), noColor)} ${dim('Delta'.padStart(11), noColor)}`, width));
-  lines.push(renderDeltaRow('Total Tokens', formatTokens(output.aggregated.totalTokens), formatTokens(previousStats.totalTokens), formatSignedNumber(deltas.tokens, formatTokens), deltas.tokens, width, noColor));
+  lines.push(renderDeltaRow('Total Tokens', formatTokenCount(output.aggregated.totalTokens), formatTokenCount(previousStats.totalTokens), formatSignedNumber(deltas.tokens, formatTokenCount), deltas.tokens, width, noColor));
   const costDelta = [output.aggregated, previousStats].some((stats) =>
     stats.costCompleteness && stats.costCompleteness.status !== 'complete')
-    ? 'Unknown' : formatSignedNumber(deltas.cost, formatCost);
+    ? 'Unknown' : formatSignedNumber(deltas.cost, formatUsd);
   lines.push(renderDeltaRow('Total Cost', formatCostWithCompleteness(output.aggregated.totalCost, output.aggregated.costCompleteness), formatCostWithCompleteness(previousStats.totalCost, previousStats.costCompleteness), costDelta, deltas.cost, width, noColor));
   lines.push(renderDeltaRow('Active Days', String(output.aggregated.activeDays), String(previousStats.activeDays), formatSignedNumber(deltas.activeDays, (value) => String(Math.round(value))), deltas.activeDays, width, noColor));
   lines.push(renderDeltaRow('Current Streak', `${output.aggregated.currentStreak}d`, `${previousStats.currentStreak}d`, formatSignedNumber(deltas.streak, (value) => `${Math.round(value)}d`), deltas.streak, width, noColor));
-  lines.push(renderDeltaRow('Avg Daily Tok', formatTokens(output.aggregated.averageDailyTokens), formatTokens(previousStats.averageDailyTokens), formatSignedNumber(deltas.averageDailyTokens, formatTokens), deltas.averageDailyTokens, width, noColor));
+  lines.push(renderDeltaRow('Avg Daily Tok', formatTokenCount(output.aggregated.averageDailyTokens), formatTokenCount(previousStats.averageDailyTokens), formatSignedNumber(deltas.averageDailyTokens, formatTokenCount), deltas.averageDailyTokens, width, noColor));
   lines.push(renderDeltaRow('Cache Hit Rate', formatPercent(output.aggregated.cacheHitRate), formatPercent(previousStats.cacheHitRate), formatSignedPercentPoints(deltas.cacheHitRate), deltas.cacheHitRate, width, noColor));
 
   if (compare.modelMixShift.length > 0) {

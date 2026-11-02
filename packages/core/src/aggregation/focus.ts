@@ -1,5 +1,6 @@
+import { formatTokenCount } from '../format';
 import type { FocusEntry, FocusReport, SessionDrilldownEntry, UsageEvent } from '../types';
-import { buildProjectRollups, buildSessionRollups, normalizeScores } from './analytics';
+import { buildProjectRollups, buildSessionRollups, describeProject, normalizeScores } from './analytics';
 
 const FOCUS_WEIGHTS = {
   duration: 0.45,
@@ -35,7 +36,7 @@ function formatDuration(durationMs: number | null): string {
 }
 
 function formatTokensPerHour(tokensPerHour: number): string {
-  return `${Math.round(tokensPerHour).toLocaleString('en-US')} tok/hr`;
+  return `${formatTokenCount(tokensPerHour)} tok/hr`;
 }
 
 function normalizeFocusScores(values: number[]): number[] {
@@ -115,7 +116,7 @@ export function buildFocusReport(events: UsageEvent[]): FocusReport {
 
       return {
         sessionId: session.sessionId,
-        label: session.label,
+        label: describeProject(session.projectId, session.repoRoot) ?? session.label,
         provider: session.provider,
         projectId: session.projectId,
         repoRoot: session.repoRoot,
@@ -125,6 +126,7 @@ export function buildFocusReport(events: UsageEvent[]): FocusReport {
         tokensPerHour: round(tokensPerHour, 2),
         totalTokens: session.totalTokens,
         cost: round(session.cost, 4),
+        ...(session.costCompleteness ? { costCompleteness: session.costCompleteness } : {}),
         streak,
         score,
         scoreBreakdown: {

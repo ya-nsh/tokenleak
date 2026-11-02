@@ -36,6 +36,7 @@ export {
   buildProjectRollups,
   buildAttributionClusters,
   inferRepoRoot,
+  describeProject,
   inferDirectoryLabel,
   normalizeScores,
 } from './analytics';

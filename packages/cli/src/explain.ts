@@ -1,12 +1,5 @@
+import { formatCostWithCompleteness, formatTokenCount } from '@tokenleak/core';
 import type { ExplainEvidenceRow, ExplainReport } from '@tokenleak/core';
-
-function formatTokens(tokens: number): string {
-  return Math.round(tokens).toLocaleString('en-US');
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
 
 function formatShare(share: number): string {
   return `${(share * 100).toFixed(0)}%`;
@@ -36,7 +29,7 @@ function renderEvidenceTable(title: string, rows: ExplainEvidenceRow[], width: n
   const lines = [title, header, divider];
   for (const row of rows) {
     lines.push(
-      `  ${truncate(row.label, labelWidth).padEnd(labelWidth)} ${formatTokens(row.tokens).padStart(12)} ${formatShare(row.share).padStart(6)} ${formatCost(row.cost).padStart(10)}`,
+      `  ${truncate(row.label, labelWidth).padEnd(labelWidth)} ${formatTokenCount(row.tokens).padStart(12)} ${formatShare(row.share).padStart(6)} ${formatCostWithCompleteness(row.cost, row.costCompleteness).padStart(10)}`,
     );
   }
 

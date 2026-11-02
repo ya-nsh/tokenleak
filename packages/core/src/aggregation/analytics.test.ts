@@ -204,3 +204,25 @@ describe('analytics helpers', () => {
     expect(normalizeScores([])).toEqual([]);
   });
 });
+
+describe('describeProject', () => {
+  const { describeProject: describe_ } = require('./analytics') as typeof import('./analytics');
+
+  it.each([
+    ['/Users/me/work/repos/loopcraft', null, 'loopcraft'],
+    ['/Users/me/work/repos/loopcraft/', null, 'loopcraft'],
+    ['/Users/me/work/repos/screen-grabber/.claude/worktrees/v2-sd-spec', null, 'screen-grabber@v2-sd-spec'],
+    ['/Users/me/work/app/.worktrees/fix-login', null, 'app@fix-login'],
+    ['/Users/me/work/mono/packages/api', '/Users/me/work/mono', 'mono/api'],
+    ['/Users/me/work/mono', '/Users/me/work/mono', 'mono'],
+    ['C:\\Users\\me\\proj', null, 'proj'],
+    ['relative-project', null, 'relative-project'],
+  ])('%s → %s', (projectId, repoRoot, expected) => {
+    expect(describe_(projectId, repoRoot)).toBe(expected);
+  });
+
+  it('empty input has no label', () => {
+    expect(describe_(null, null)).toBeNull();
+    expect(describe_('   ', null)).toBeNull();
+  });
+});
