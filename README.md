@@ -69,7 +69,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Quotas** — live subscription limits for Claude, Codex, and Copilot
 - **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
 - **Advisor** — model efficiency recommendations, projected savings, and waste-pattern recipes
-- **Focus** — deep-work session rankings scored by duration, density, and streaks
+- **Focus** — deep-work session rankings scored by active time (breaks over 30 min excluded), density, and streaks
 - **Explain** — narrative day-by-day usage breakdown
 - **Compare** — side-by-side period comparison with deltas
 - **Export** — save PNG, Wrapped PNG, launch a live server, or copy an LLM-ready analysis prompt
@@ -223,7 +223,7 @@ tokenleak behavior-diff --provider claude-code,codex --days 30
 ```
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
-- `tokenleak focus` ranks sessions by a deep-work score derived from duration, token density, and project streak.
+- `tokenleak focus` ranks sessions by a deep-work score derived from active time, token density, and project streak. Active time skips gaps over 30 minutes (or uses provider-reported turn durations), and density needs at least 10 active minutes.
 - `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI on `http://localhost:3567` — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
 - `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.

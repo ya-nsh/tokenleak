@@ -360,7 +360,10 @@ export interface FocusEntry {
   repoRoot: string | null;
   start: string;
   end: string;
+  /** Active time: gaps between events over 30 minutes are breaks. */
   durationMs: number | null;
+  /** First-to-last event span, including breaks. */
+  spanMs?: number | null;
   tokensPerHour: number;
   totalTokens: number;
   cost: number;
