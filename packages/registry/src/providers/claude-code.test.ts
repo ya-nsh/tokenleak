@@ -263,6 +263,63 @@ describe('ClaudeCodeProvider', () => {
     });
   });
 
+  describe('load — billing modifiers', () => {
+    function writeSession(root: string, usage: Record<string, unknown>): void {
+      const projectDir = join(root, 'project-a');
+      mkdirSync(projectDir, { recursive: true });
+      writeFileSync(
+        join(projectDir, 'session.jsonl'),
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2026-10-01T10:00:00.000Z',
+          message: { id: 'msg-1', model: 'claude-opus-5-5', usage },
+        }),
+      );
+    }
+
+    it('bills 1h cache writes at 2x input and the remainder at 1.25x', async () => {
+      const root = join(tmpdir(), `claude-code-ttl-${Date.now()}-${Math.random()}`);
+      writeSession(root, {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 1_000_000,
+        cache_creation: { ephemeral_5m_input_tokens: 250_000, ephemeral_1h_input_tokens: 750_000 },
+        speed: 'standard',
+        inference_geo: 'global',
+      });
+      try {
+        const data = await new ClaudeCodeProvider(root).load({ since: '2026-10-01', until: '2026-10-01' });
+        // 250K * $5/M + 750K * $8/M
+        expect(data.totalCost).toBeCloseTo(1.25 + 6);
+        expect(data.events?.[0]?.costSource).toBe('estimated');
+        expect(data.events?.[0]?.serviceTier).toBeUndefined();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('prices fast mode and US-only inference with their surcharges', async () => {
+      const root = join(tmpdir(), `claude-code-fast-${Date.now()}-${Math.random()}`);
+      writeSession(root, {
+        input_tokens: 1_000_000,
+        output_tokens: 1_000_000,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        speed: 'fast',
+        inference_geo: 'us',
+      });
+      try {
+        const data = await new ClaudeCodeProvider(root).load({ since: '2026-10-01', until: '2026-10-01' });
+        // ($8 + $40) * 1.1
+        expect(data.totalCost).toBeCloseTo(52.8);
+        expect(data.events?.[0]?.serviceTier).toBe('fast');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('extractUserPrompt', () => {
     it('returns null for non-user records', () => {
       expect(extractUserPrompt({ type: 'assistant', message: { content: 'hi' } })).toBeNull();
