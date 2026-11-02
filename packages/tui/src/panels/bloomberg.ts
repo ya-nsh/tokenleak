@@ -1,11 +1,11 @@
 import { Box, Text } from '@opentui/core';
-import { getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
+import { buildDailyCostCompleteness, getTodayLocal, shiftDateStringLocal } from '@tokenleak/core';
+import type { CostCompleteness, ProviderData } from '@tokenleak/core';
 import type { AppState } from '../lib/state.js';
 import { WINDOW_DAYS } from '../lib/state.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import {
   formatTokens,
-  formatCost,
   formatCostCompletenessWarning,
   formatCostWithCompleteness,
   padRight,
@@ -41,6 +41,35 @@ function statRow(label: string, value: string, valueColor: string = COLORS.green
   );
 }
 
+export interface WindowProviderTotal extends ProviderData {
+  windowTokens: number;
+  windowCost: number;
+  windowCompleteness: CostCompleteness;
+}
+
+/**
+ * Per-provider totals inside the selected window, keeping only providers that
+ * had any usage or spend there. `days` of 0/undefined means all time.
+ */
+export function windowProviderTotals(
+  providers: readonly ProviderData[],
+  days: number | undefined,
+  today: string = getTodayLocal(),
+): WindowProviderTotal[] {
+  const since = days && days > 0 ? shiftDateStringLocal(today, -(days - 1)) : null;
+  return providers
+    .map((provider) => {
+      const daily = since ? provider.daily.filter((d) => d.date >= since && d.date <= today) : provider.daily;
+      return {
+        ...provider,
+        windowTokens: daily.reduce((sum, d) => sum + d.totalTokens, 0),
+        windowCost: daily.reduce((sum, d) => sum + d.cost, 0),
+        windowCompleteness: buildDailyCostCompleteness(daily),
+      };
+    })
+    .filter((provider) => provider.windowTokens > 0 || provider.windowCost > 0);
+}
+
 /** Overview quadrant: aggregated stats for the selected window */
 function createOverviewPanel(state: AppState) {
   const stats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
@@ -70,7 +99,7 @@ function createOverviewPanel(state: AppState) {
         formatCostWithCompleteness(stats.averageDailyCost, stats.costCompleteness),
         COLORS.amber,
       ),
-      statRow('Providers', `${providers.length} active`),
+      statRow('Providers', `${windowProviderTotals(providers, WINDOW_DAYS[state.selectedWindowIndex]).length} active`),
       statRow('Peak Day', stats.peakDay ? `${stats.peakDay.date} (${formatTokens(stats.peakDay.tokens)})` : 'N/A'),
       statRow('Input Tokens', formatTokens(stats.totalInputTokens)),
       statRow('Output Tokens', formatTokens(stats.totalOutputTokens)),
@@ -120,26 +149,9 @@ function createProvidersPanel(state: AppState) {
       Text({ content: '\u2500'.repeat(58), fg: COLORS.dimWhite }),
     );
 
-    // Use window stats for providers — filter each provider's daily data
-    const days = WINDOW_DAYS[state.selectedWindowIndex];
-    const providerTotals = providers.map((p) => {
-      let provTokens = p.totalTokens;
-      let provCost = p.totalCost;
+    const providerTotals = windowProviderTotals(providers, WINDOW_DAYS[state.selectedWindowIndex]);
 
-      if (days && days > 0 && p.daily) {
-        const todayStr = getTodayLocal();
-        const sinceStr = shiftDateStringLocal(todayStr, -(days - 1));
-        const filtered = p.daily.filter((d) => d.date >= sinceStr && d.date <= todayStr);
-        provTokens = filtered.reduce((s, d) => s + d.totalTokens, 0);
-        provCost = filtered.reduce((s, d) => s + d.cost, 0);
-      }
-
-      return { ...p, windowTokens: provTokens, windowCost: provCost };
-    });
-
-    const sorted = providerTotals
-      .filter((p) => p.windowTokens > 0)
-      .sort((a, b) => b.windowTokens - a.windowTokens);
+    const sorted = providerTotals.sort((a, b) => b.windowTokens - a.windowTokens || b.windowCost - a.windowCost);
 
     if (sorted.length === 0) {
       children.push(Text({ content: 'No provider data for this period', fg: COLORS.dimWhite }));
@@ -154,7 +166,7 @@ function createProvidersPanel(state: AppState) {
             { flexDirection: 'row', width: '100%' },
             Text({ content: padRight(p.displayName, 14), fg: color, attributes: BOLD }),
             Text({ content: padLeft(formatTokens(p.windowTokens), 10), fg: COLORS.green }),
-            Text({ content: padLeft(formatCost(p.windowCost), 10), fg: COLORS.amber }),
+            Text({ content: padLeft(formatCostWithCompleteness(p.windowCost, p.windowCompleteness), 10), fg: COLORS.amber }),
             Text({
               content: padLeft(`${(share * 100).toFixed(1)}%`, 8),
               fg: COLORS.white,
