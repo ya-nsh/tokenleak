@@ -501,3 +501,28 @@ describe('ClaudeCodeProvider', () => {
     });
   });
 });
+
+describe('ClaudeCodeProvider local day bucketing', () => {
+  it('counts work after local midnight as today, not yesterday', async () => {
+    const original = process.env['TZ'];
+    process.env['TZ'] = 'Asia/Kolkata';
+    const root = join(tmpdir(), `claude-code-tz-${Date.now()}-${Math.random()}`);
+    mkdirSync(join(root, 'p'), { recursive: true });
+    writeFileSync(
+      join(root, 'p', 's.jsonl'),
+      JSON.stringify({
+        type: 'assistant',
+        // 01:17 IST on Nov 3.
+        timestamp: '2026-11-02T19:47:00.000Z',
+        message: { id: 'm1', model: 'claude-opus-5-5', usage: { input_tokens: 10, output_tokens: 10 } },
+      }),
+    );
+    try {
+      const data = await new ClaudeCodeProvider(root).load({ since: '2026-11-03', until: '2026-11-03' });
+      expect(data.daily.map((d) => d.date)).toEqual(['2026-11-03']);
+    } finally {
+      process.env['TZ'] = original;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

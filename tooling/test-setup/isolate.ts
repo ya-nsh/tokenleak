@@ -16,6 +16,9 @@ const root = mkdtempSync(join(tmpdir(), 'tokenleak-test-'));
 process.env['TOKENLEAK_CACHE_DIR'] ??= join(root, 'cache');
 process.env['TOKENLEAK_PRICING_FILE'] ??= join(root, 'no-pricing-overrides.json');
 process.env['TOKENLEAK_OFFLINE'] ??= '1';
+// Day bucketing follows the local timezone; pin it so results do not depend
+// on where the suite runs. Tests that care about timezones set TZ themselves.
+process.env['TZ'] = 'UTC';
 
 // bun runs preload-registered lifecycle hooks once per test run; the exit
 // listener is a fallback for runs that end early.

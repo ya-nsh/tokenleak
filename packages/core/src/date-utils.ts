@@ -27,6 +27,27 @@ export function formatDateStringLocal(date: Date): string {
   return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The local calendar day (YYYY-MM-DD) an instant falls on, or null when it
+ * cannot be parsed. Usage is bucketed by the user's day, the same way ranges
+ * and "today" are, so work after local midnight is not filed under
+ * yesterday for anyone east of UTC (or tomorrow for anyone west).
+ *
+ * Date-only strings are already calendar days and are returned as written
+ * (after validation) instead of being shifted through UTC midnight.
+ */
+export function localDateOfTimestamp(timestamp: string | number | Date): string | null {
+  if (typeof timestamp === 'string' && DATE_ONLY.test(timestamp.trim())) {
+    const day = timestamp.trim();
+    const parsed = new Date(`${day}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day ? day : null;
+  }
+  const millis = timestamp instanceof Date ? timestamp.getTime() : typeof timestamp === 'number' ? timestamp : Date.parse(timestamp);
+  return Number.isFinite(millis) ? formatDateStringLocal(new Date(millis)) : null;
+}
+
 /**
  * Return today's local calendar date as YYYY-MM-DD.
  */

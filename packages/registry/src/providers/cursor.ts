@@ -12,7 +12,7 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { resolveModelIdentity } from '../models/normalizer';
-import { mergeServiceTiers } from '@tokenleak/core';
+import { mergeServiceTiers, localDateOfTimestamp } from '@tokenleak/core';
 import { parseCsvLine, parseCursorHeader } from '../parsers/cursor-csv';
 import { isInRange } from '../utils';
 import {
@@ -85,8 +85,7 @@ function collectUsageFiles(dir: string): string[] {
 
 
 function extractDate(timestamp: string): string | null {
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
-  return match ? match[1]! : null;
+  return localDateOfTimestamp(timestamp);
 }
 
 function toIsoTimestamp(value: string): string | null {

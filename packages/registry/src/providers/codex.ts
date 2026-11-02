@@ -15,7 +15,7 @@ import { collectFiles } from './local-usage';
 import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
 import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
-import { mergeServiceTiers } from '@tokenleak/core';
+import { mergeServiceTiers, localDateOfTimestamp } from '@tokenleak/core';
 import { isInRange, mapWithConcurrency } from '../utils';
 import {
   addUnknownPricingWarnings,
@@ -167,8 +167,7 @@ function compactModelDateSuffix(model: string): string {
  * Returns `null` if the timestamp cannot be parsed.
  */
 function extractDate(timestamp: string): string | null {
-  const millis = Date.parse(timestamp);
-  return Number.isFinite(millis) ? new Date(millis).toISOString().slice(0, 10) : null;
+  return localDateOfTimestamp(timestamp);
 }
 
 function incrementWarningCount(
@@ -897,7 +896,7 @@ export class CodexProvider implements IProvider {
     ];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<CodexUsageRecord>(
-      'codex-v4',
+      'codex-v5',
       this.sessionsDir,
       isCachedUsageRecord,
     );

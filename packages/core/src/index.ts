@@ -155,6 +155,7 @@ export {
   dateToUtcMs,
   formatDateStringUtc,
   formatDateStringLocal,
+  localDateOfTimestamp,
   getTodayLocal,
   shiftDateStringLocal,
   inclusiveDaySpan,
