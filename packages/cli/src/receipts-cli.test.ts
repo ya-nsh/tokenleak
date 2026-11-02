@@ -7,12 +7,12 @@ import {
 import { TokenleakError } from './errors';
 
 describe('parseReceiptsArgs', () => {
-  test('accepts --width like every other terminal command', () => {
+  it('accepts --width like every other terminal command', () => {
     expect(parseReceiptsArgs(['--width', '100'])['width']).toBe(100);
     expect(parseReceiptsArgs(['-w', '72'])['width']).toBe(72);
   });
 
-  test('rejects a non-positive --width', () => {
+  it('rejects a non-positive --width', () => {
     expect(() => parseReceiptsArgs(['--width', '0'])).toThrow('--width must be a positive integer');
     expect(() => parseReceiptsArgs(['--width', 'wide'])).toThrow('--width must be a positive integer');
   });
