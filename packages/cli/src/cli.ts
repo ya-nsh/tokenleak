@@ -66,8 +66,11 @@ import {
   SyntheticProvider,
   OpenCodeProvider,
   PiProvider,
-  MODEL_PRICING,
+  buildPricingTable,
+  getPricingOverridePath,
+  getRemotePricingStatus,
   initPricing,
+  resolveModelPricing,
 } from '@tokenleak/registry';
 import type { IProvider } from '@tokenleak/registry';
 import {
@@ -112,6 +115,7 @@ import {
   renderReceiptTerminal,
 } from './receipts.js';
 import { buildCliArgTokens } from './flags.js';
+import { buildPricingReport, renderPricingReport } from './pricing-report.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
@@ -287,6 +291,7 @@ function buildHelpText(): string {
     '  tokenleak simulate-routing [flags]',
     '  tokenleak waste [flags]',
     '  tokenleak behavior-diff [flags]',
+    '  tokenleak pricing [flags]',
     '  tokenleak cursor <command>',
     '',
     'Subcommands:',
@@ -299,6 +304,7 @@ function buildHelpText(): string {
     '  simulate-routing       Estimate savings from model routing changes',
     '  waste                  Detect agent waste signals with evidence',
     '  behavior-diff          Compare agent/model/project behavior cohorts',
+    '  pricing                Show each model\'s rates and where the price came from',
     '  cursor                 Manage Cursor auth and cache sync',
     '',
     'Provider Shortcuts:',
@@ -488,6 +494,30 @@ function buildSimulateRoutingHelpText(): string {
     '  -o, --output <path>     Write output to a file',
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --strategy <name>   conservative, aggressive, or manual',
+    '      --no-color          Disable ANSI colors',
+    '',
+  ].join('\n');
+}
+
+function buildPricingHelpText(): string {
+  return [
+    `tokenleak pricing ${VERSION}`,
+    'Show every model in your usage, its rates, and where each price came from.',
+    '',
+    'Usage:',
+    '  tokenleak pricing [flags]',
+    '',
+    'Sources: your override file, the verified built-in table, or the model',
+    "vendor's own LiteLLM row. Unknown models are listed so you can price them in",
+    `${getPricingOverridePath()}.`,
+    '',
+    'Flags:',
+    '  -f, --format <format>   Output format: terminal, json',
+    '  -s, --since <date>      Start date in YYYY-MM-DD format',
+    '  -u, --until <date>      End date in YYYY-MM-DD format',
+    `  -d, --days <number>     Number of trailing days to include (default: ${DEFAULT_DAYS})`,
+    '  -o, --output <path>     Write output to a file',
+    '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --no-color          Disable ANSI colors',
     '',
   ].join('\n');
@@ -1794,13 +1824,31 @@ async function writeReportOutput(rendered: string, output: string | null): Promi
   }
 }
 
+async function runPricing(cliArgs: Record<string, unknown>): Promise<void> {
+  const config = resolveConfig(cliArgs);
+  const format = resolveTerminalJsonFormat('pricing', cliArgs);
+  const { dateRange, providers } = await loadOptimizationInput(config);
+  const report = buildPricingReport(
+    providers.flatMap((provider) => provider.events ?? []),
+    dateRange,
+    {
+      resolve: (model) => resolveModelPricing(model),
+      overridePath: getPricingOverridePath(),
+      remote: getRemotePricingStatus(),
+    },
+  );
+  const rendered =
+    format === 'json' ? JSON.stringify(report, null, 2) : renderPricingReport(report, { noColor: config.noColor });
+  await writeReportOutput(rendered, config.output);
+}
+
 async function runSimulateRouting(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const format = resolveTerminalJsonFormat('simulate-routing', cliArgs);
   const strategy = typeof cliArgs['strategy'] === 'string' ? cliArgs['strategy'] : 'conservative';
   const { dateRange, providers } = await loadOptimizationInput(config);
   const events = providers.flatMap((provider) => provider.events ?? []);
-  const report = buildRoutingSimulationReport(events, dateRange, MODEL_PRICING, { strategy });
+  const report = buildRoutingSimulationReport(events, dateRange, buildPricingTable(events.map((event) => event.model)), { strategy });
   const rendered = format === 'json'
     ? JSON.stringify(report, null, 2)
     : renderRoutingSimulationReport(report, config.width, config.noColor);
@@ -2196,7 +2244,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       );
     }
 
-    const advisorReport = analyzeEfficiency(output, MODEL_PRICING);
+    const advisorReport = analyzeEfficiency(output, buildPricingTable(output.providers.flatMap((p) => (p.events ?? []).map((e) => e.model))));
 
     if (config.format === 'json') {
       const rendered = JSON.stringify(advisorReport, null, 2);
@@ -3877,9 +3925,31 @@ if (isDirectExecution) {
       process.exit(0);
     }
 
-    await initPricing();
+    try {
+      await initPricing();
+    } catch (error: unknown) {
+      handleError(error);
+    }
     await runMain(focusMain);
     process.exit(0);
+  }
+  if (argv[0] === 'pricing') {
+    try {
+      const cliArgs = parseOptimizationArgs(argv.slice(1));
+      if (cliArgs['help']) {
+        process.stdout.write(buildPricingHelpText());
+        process.exit(0);
+      }
+      if (cliArgs['version']) {
+        process.stdout.write(buildVersionText());
+        process.exit(0);
+      }
+      await initPricing();
+      await runPricing(cliArgs);
+      process.exit(0);
+    } catch (error: unknown) {
+      handleError(error);
+    }
   }
   if (argv[0] === 'waste') {
     try {
@@ -3949,7 +4019,11 @@ if (isDirectExecution) {
       process.exit(0);
     }
 
-    await initPricing();
+    try {
+      await initPricing();
+    } catch (error: unknown) {
+      handleError(error);
+    }
     await runMain(nutritionMain);
     process.exit(0);
   }
@@ -4005,6 +4079,13 @@ if (isDirectExecution) {
     process.exit(0);
   }
 
+  // Every path prices usage, so a broken override file must stop the run up front.
+  try {
+    await initPricing();
+  } catch (error: unknown) {
+    handleError(error);
+  }
+
   if (
     argv.includes('--legacy') &&
     shouldStartInteractiveCli(
@@ -4013,7 +4094,6 @@ if (isDirectExecution) {
       Boolean(process.stdout.isTTY),
     )
   ) {
-    void initPricing();
     const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
       const scopedProviders = await resolveTabbedDashboardProviders(opts);
 
@@ -4035,7 +4115,6 @@ if (isDirectExecution) {
   } else if (
     shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))
   ) {
-    void initPricing();
     try {
       const { main: startTui } = await import('@tokenleak/tui');
       await startTui();

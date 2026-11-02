@@ -168,6 +168,9 @@ tokenleak behavior-diff --provider claude-code,codex --days 30 --format json
 # Authenticate Cursor and sync its local cache
 tokenleak cursor login --name work
 
+# See every model's rates and where each price came from
+tokenleak pricing
+
 # Show registered providers, availability, and aliases
 tokenleak --list-providers
 ```
@@ -997,6 +1000,7 @@ All fields are optional. Only include the ones you want to override.
 | `TOKENLEAK_THEME` | `dark` | Default theme |
 | `TOKENLEAK_DAYS` | `90` | Default lookback period in days |
 | `TOKENLEAK_MAX_JSONL_RECORD_BYTES` | `10485760` (10 MB) | Max size of a single JSONL record before it is rejected |
+| `TOKENLEAK_PRICING_FILE` | `~/.config/tokenleak/pricing.json` | User pricing overrides (see [Pricing sources](#pricing-sources)) |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code configuration directory |
 | `CODEX_HOME` | `~/.codex` | Codex home directory |
 | `TOKENLEAK_CURSOR_DIR` | `~/.config/tokenleak` | Cursor credentials/cache root (`cursor-credentials.json`, `cursor-cache/`) |
@@ -1060,7 +1064,37 @@ Fast mode is recorded separately from the base model. Reports retain service-tie
 
 Costs are **API-equivalent estimates**, not ChatGPT subscription charges or a reconstruction of past invoices. Known Fast tiers use verified API Fast rates, not subscription credit multipliers. Missing historical tier metadata uses the standard API rate as an estimate. GPT-5.6 estimates include cache writes and the published long-context threshold. Rates are current catalog estimates, not a date-versioned price history. Sources: [OpenAI pricing](https://developers.openai.com/api/docs/pricing), [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode), and [Codex speed and credits](https://learn.chatgpt.com/docs/agent-configuration/speed).
 
-Unknown model/tier prices display **Unknown**; partially priced totals carry `+`. Provider-reported zero costs remain `$0.00`. The verified catalog deliberately does not invent prices for research-preview models such as Codex-Spark. Cursor `auto` or legacy Composer records without a reported cost also remain unpriced when no applicable rate can be verified. Refreshing the remote pricing cache updates known models; adding a newly verified model requires a catalog update.
+Unknown model/tier prices display **Unknown**; partially priced totals carry `+`. Provider-reported zero costs remain `$0.00`. The verified catalog deliberately does not invent prices for research-preview models such as Codex-Spark. Cursor `auto` or legacy Composer records without a reported cost also remain unpriced when no applicable rate can be verified.
+
+### Pricing sources
+
+Every token is priced from the most trusted source that knows its model:
+
+1. **Your overrides** in `~/.config/tokenleak/pricing.json` (or `TOKENLEAK_PRICING_FILE`).
+2. **The verified built-in table**, refined by the model vendor's own [LiteLLM](https://github.com/BerriAI/litellm) row.
+3. **The vendor's own LiteLLM row** for models released after your Tokenleak build, so a new model is priced the day LiteLLM lists it. Reseller, gateway, and regional rows (which carry markups) never price a model on their own.
+
+Claude Code costs follow Anthropic's billing details: 1-hour cache writes bill at 2x input (5-minute writes at 1.25x), fast mode uses the published fast rates, `inference_geo: "us"` adds the 1.1x surcharge on 4.6+ models, and Haiku 5.5 prompts over 100K tokens use the long-prompt rates. Remote rates are cached for 24 hours; a stale cache is used immediately and refreshed in the background.
+
+See which source priced each model, and what is still unknown:
+
+```bash
+tokenleak pricing
+tokenleak pricing --days 30 --format json
+```
+
+Price a model yourself (rates are USD per 1M tokens; `cacheRead` defaults to 0.1x input and `cacheWrite` to 1.25x input):
+
+```json
+{
+  "models": {
+    "claude-opus-5-5": { "input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5 },
+    "in-house-model": { "input": 1, "output": 3 }
+  }
+}
+```
+
+A malformed override file stops the run with an error naming the file and field, rather than silently pricing with the wrong rates.
 
 Cursor aliases such as `claude-4.5-opus-high-thinking` map to their canonical model for estimation, while reported costs take precedence. If the export endpoint redirects to sign-in, Tokenleak preserves the cached CSV and requests `tokenleak cursor login`. Only successful, schema-validated CSV responses replace the cache.
 
