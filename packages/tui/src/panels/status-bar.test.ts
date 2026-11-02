@@ -45,23 +45,30 @@ describe('buildStatusBar', () => {
     expect(text).toContain('r:retry');
   });
 
-  test('always shows the [o] interactive replay CTA chip on every non-modal view', () => {
+  test('shows the [o] replay chip on the replay view only, not on every view', () => {
     const state = createInitialState();
     state.isLoading = false;
 
-    const overviewText = collectTextContent(buildStatusBar(state)).join('');
-    expect(overviewText).toContain('[o] interactive replay');
+    expect(collectTextContent(buildStatusBar(state)).join('')).not.toContain('[o] interactive replay');
 
-    state.selectedView = 'wrapped';
-    const wrappedText = collectTextContent(buildStatusBar(state)).join('');
-    expect(wrappedText).toContain('[o] interactive replay');
+    state.selectedView = 'replay';
+    expect(collectTextContent(buildStatusBar(state)).join('')).toContain('[o] interactive replay');
 
     state.selectedView = 'receipts';
     const receiptsText = collectTextContent(buildStatusBar(state)).join('');
-    expect(receiptsText).toContain('[o] interactive replay');
-    // Receipts sort moved off [o] — make sure the new key shows up.
     expect(receiptsText).toContain('S:sort');
     expect(receiptsText).not.toContain('o:sort');
+  });
+
+  test('narrow terminals drop low-priority hints but keep quit and help', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    state.selectedView = 'receipts';
+
+    const text = collectTextContent(buildStatusBar(state, 60)).join('');
+    expect(text).toContain('q:quit');
+    expect(text).toContain('?:keys');
+    expect(text).not.toContain('c:cursor');
   });
 
   test('CTA chip swaps to the open-status form once the live server is running', () => {

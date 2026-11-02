@@ -4,6 +4,11 @@ import { formatCostWithCompleteness } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState, ViewMode } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
+import { OVERFLOW_MARKER_WIDTH, fitTabWindow, tabWidth } from '../lib/fit.js';
+
+const HEADER_PADDING = 2;
+const RIGHT_GAP = 2;
+const SECTION_GAP = 1;
 
 function formatCompactTime(): string {
   const now = new Date();
@@ -77,9 +82,24 @@ export function buildHeader(
   }
 
   // View mode indicators — each is a clickable Box. Keyboard shortcuts stay in
-  // the help panel so the tab row remains clean.
-  const viewParts: ReturnType<typeof Box>[] = [];
-  for (const v of VIEWS) {
+  // the help panel so the tab row remains clean. On narrow terminals only the
+  // tabs around the active view are shown, with ‹ › marking the rest.
+  const rightText = state.selectedView === 'quotas' ? 'Account capacity' : windowCost;
+  const time = formatCompactTime();
+  const periodWidth = state.selectedView === 'quotas'
+    ? ' LIVE '.length
+    : WINDOW_LABELS.reduce((sum, label) => sum + tabWidth(label), 0);
+  // Without a measured terminal (tests, first frame) show every tab.
+  const terminalWidth = Number.isFinite(renderer.width) ? renderer.width : Number.POSITIVE_INFINITY;
+  const budget =
+    terminalWidth - HEADER_PADDING - periodWidth - SECTION_GAP - rightText.length - RIGHT_GAP - time.length - RIGHT_GAP;
+  const activeIndex = Math.max(0, VIEWS.findIndex((v) => v.mode === state.selectedView));
+  const window = fitTabWindow(VIEWS.map((v) => v.label), activeIndex, budget);
+  const viewParts: ReturnType<typeof Box | typeof Text>[] = [];
+  if (window.start > 0) {
+    viewParts.push(Text({ content: '‹'.padEnd(OVERFLOW_MARKER_WIDTH), fg: COLORS.dimWhite }));
+  }
+  for (const v of VIEWS.slice(window.start, window.end)) {
     const isActive = state.selectedView === v.mode;
     const viewMode = v.mode;
     const children = isActive
@@ -112,6 +132,9 @@ export function buildHeader(
       ),
     );
   }
+  if (window.end < VIEWS.length) {
+    viewParts.push(Text({ content: '›'.padStart(OVERFLOW_MARKER_WIDTH), fg: COLORS.dimWhite }));
+  }
 
   return Box(
     {
@@ -130,8 +153,8 @@ export function buildHeader(
     ),
     Box(
       { flexDirection: 'row', gap: 2 },
-      Text({ content: state.selectedView === 'quotas' ? 'Account capacity' : windowCost, fg: COLORS.amber, attributes: BOLD }),
-      Text({ content: formatCompactTime(), fg: COLORS.green }),
+      Text({ content: rightText, fg: COLORS.amber, attributes: BOLD }),
+      Text({ content: time, fg: COLORS.green }),
     ),
   );
 }
