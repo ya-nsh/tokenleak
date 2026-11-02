@@ -117,6 +117,7 @@ import {
 } from './receipts.js';
 import { buildCliArgTokens } from './flags.js';
 import { buildPricingReport, renderPricingReport } from './pricing-report.js';
+import { redactWasteReportForExport } from '@tokenleak/core';
 import { assertKnownFlags } from './flag-validation.js';
 import {
   defaultTerminalWidth,
@@ -338,6 +339,7 @@ function buildHelpText(): string {
     '      --compare <range>   Compare against YYYY-MM-DD..YYYY-MM-DD or auto',
     '      --more             Add expanded PNG/SVG stats and unlock compare cards',
     '      --advisor           Analyze usage and suggest cost-saving model switches',
+    '      --include-prompts   Keep captured prompt text in JSON exports (omitted by default)',
     '      --clipboard         Copy rendered output to the clipboard',
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
@@ -550,6 +552,7 @@ function buildWasteHelpText(): string {
     '  -o, --output <path>     Write output to a file',
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --severity <level>  all, high, medium, or low',
+    '      --include-prompts   Keep quoted prompt text in JSON output',
     '      --no-color          Disable ANSI colors',
     '',
   ].join('\n');
@@ -592,6 +595,7 @@ function normalizeCliArg(arg: string): string {
     '--wrapped-live': '--wrappedLive',
     '--no-color': '--noColor',
     '--no-insights': '--noInsights',
+    '--include-prompts': '--includePrompts',
   };
 
   return flagMap[arg] ?? arg;
@@ -1001,6 +1005,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   liveServer: boolean;
   wrappedLive: boolean;
   advisor: boolean;
+  includePrompts: boolean;
 } {
   const fileConfig = loadConfig();
   const envConfig = loadEnvOverrides();
@@ -1030,6 +1035,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     liveServer: boolean;
     wrappedLive: boolean;
     advisor: boolean;
+    includePrompts: boolean;
   } = {
     format: 'terminal',
     theme: 'dark',
@@ -1051,6 +1057,7 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     liveServer: false,
     wrappedLive: false,
     advisor: false,
+    includePrompts: false,
   };
 
   // Layer: defaults < file config < env vars < CLI flags
@@ -1161,6 +1168,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['advisor'] !== undefined) {
     result.advisor = cliArgs['advisor'] as boolean;
+  }
+  if (cliArgs['includePrompts'] !== undefined) {
+    result.includePrompts = cliArgs['includePrompts'] as boolean;
   }
 
   return result;
@@ -1859,17 +1869,19 @@ async function runWaste(cliArgs: Record<string, unknown>): Promise<void> {
   const config = resolveConfig(cliArgs);
   const format = resolveTerminalJsonFormat('waste', cliArgs);
   const severity = typeof cliArgs['severity'] === 'string' ? cliArgs['severity'] : 'all';
+  const includePrompts = cliArgs['includePrompts'] === true;
   if (!['all', 'high', 'medium', 'low'].includes(severity)) {
     throw new TokenleakError('tokenleak waste --severity must be all, high, medium, or low');
   }
   const { dateRange, providers } = await loadOptimizationInput(config);
   const events = providers.flatMap((provider) => provider.events ?? []);
   const report = buildAgentWasteReport(providers, events, dateRange);
+  const exported = includePrompts ? report : redactWasteReportForExport(report);
   const rendered = format === 'json'
     ? JSON.stringify(
         severity === 'all'
-          ? report
-          : { ...report, signals: report.signals.filter((signal) => signal.severity === severity) },
+          ? exported
+          : { ...exported, signals: exported.signals.filter((signal) => signal.severity === severity) },
         null,
         2,
       )
@@ -1982,6 +1994,10 @@ function parseOptimizationArgs(argv: string[]): Record<string, unknown> {
         break;
       case '--severity':
         cliArgs['severity'] = next();
+        break;
+      case '--include-prompts':
+      case '--includePrompts':
+        cliArgs['includePrompts'] = true;
         break;
       case '--claude':
         cliArgs['claude'] = true;
@@ -2288,7 +2304,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       const filename = 'tokenleak-wrapped.base64.txt';
       const description = `Tokenleak Wrapped (${dateRange.since} to ${dateRange.until}) — base64-encoded PNG, decode with: base64 -d tokenleak-wrapped.base64.txt > wrapped.png`;
       const url = await uploadToGist(base64Content, filename, description);
-      process.stderr.write(`Uploaded to gist: ${url}\n`);
+      process.stderr.write(`Uploaded to a secret gist (unlisted; anyone with the link can view it): ${url}\n`);
     } else if (config.upload !== undefined) {
       throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
     }
@@ -2372,6 +2388,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     noColor: config.noColor,
     output: config.output,
     more: config.more,
+    includePrompts: config.includePrompts,
   };
 
   const rendered = await renderer.render(output, renderOptions);
@@ -2408,7 +2425,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     const filename = `tokenleak.${ext}`;
     const description = `Tokenleak report (${dateRange.since} to ${dateRange.until})`;
     const url = await uploadToGist(text, filename, description);
-    process.stderr.write(`Uploaded to gist: ${url}\n`);
+    process.stderr.write(`Uploaded to a secret gist (unlisted; anyone with the link can view it): ${url}\n`);
   } else if (config.upload !== undefined) {
     throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
   }
@@ -3424,7 +3441,7 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
     const filename = `tokenleak-receipt.${ext}`;
     const description = `Tokenleak receipt (${range.since} to ${range.until})`;
     const url = await uploadToGist(rendered as string, filename, description);
-    process.stderr.write(`Uploaded to gist: ${url}\n`);
+    process.stderr.write(`Uploaded to a secret gist (unlisted; anyone with the link can view it): ${url}\n`);
   }
 }
 
@@ -3483,6 +3500,11 @@ const main = defineCommand({
     more: {
       type: 'boolean',
       description: 'Add expanded PNG/SVG stats and compare cards',
+      default: false,
+    },
+    includePrompts: {
+      type: 'boolean',
+      description: 'Keep captured prompt text in JSON exports',
       default: false,
     },
     compare: {
@@ -3594,6 +3616,7 @@ const main = defineCommand({
       if (args.liveServer) cliArgs['liveServer'] = true;
       if (args.wrappedLive) cliArgs['wrappedLive'] = true;
       if (args.advisor) cliArgs['advisor'] = true;
+      if (args.includePrompts) cliArgs['includePrompts'] = true;
 
       await run(cliArgs);
     } catch (error: unknown) {

@@ -20,10 +20,18 @@ export async function isGhAvailable(): Promise<boolean> {
 }
 
 /**
+ * `gh` arguments for creating a gist. Secret (unlisted) on purpose: usage
+ * data reveals project names, paths, and working hours.
+ */
+export function buildGistCreateArgs(path: string, description: string): string[] {
+  return ['gh', 'gist', 'create', path, '--desc', description];
+}
+
+/**
  * Upload content to a GitHub Gist.
  *
- * Creates a temporary file, uploads it via `gh gist create`, and returns
- * the URL of the created gist.
+ * Creates a temporary file, uploads it via `gh gist create` as a secret
+ * (unlisted) gist, and returns the URL of the created gist.
  *
  * @param content - The content to upload
  * @param filename - The filename for the gist (e.g., "tokenleak.json")
@@ -54,7 +62,7 @@ export async function uploadToGist(
 
   try {
     const proc = Bun.spawn(
-      ['gh', 'gist', 'create', tmpPath, '--desc', description, '--public'],
+      buildGistCreateArgs(tmpPath, description),
       {
         stdout: 'pipe',
         stderr: 'pipe',
