@@ -76,7 +76,6 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
 - **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
 
-Use `tokenleak --legacy` to open the classic interactive launcher instead.
 
 ### From source
 
@@ -100,9 +99,6 @@ Maintainers can run `bun run prepublish && bun run verify:package` to build, pac
 ```bash
 # Open the TUI dashboard (TTY only)
 tokenleak
-
-# Open the classic interactive launcher
-tokenleak --legacy
 
 # Skip the TUI and render directly with flags
 tokenleak --format terminal
@@ -397,7 +393,7 @@ The wrapped card includes 12 sections: title, big numbers, streak story, top mod
 
 Achievements are computed from your actual data — earn badges like Streak Master (30+ day streak), Cache Master (>50% hit rate), Night Owl (>40% usage 10pm-6am), Power User (>10k avg daily tokens), and more.
 
-The TUI dashboard includes a Wrapped view (press `8` or arrow to it). The classic launcher (`tokenleak --legacy`) also offers a guided Wrapped setup flow.
+The TUI dashboard includes a Wrapped view (press `8` or arrow to it).
 
 ### Wrapped Live
 
@@ -417,8 +413,6 @@ tokenleak --wrapped-live --provider claude-code,codex
 `tokenleak --format wrapped` is the static export path: it writes a tall PNG you can attach to docs, posts, or issues. `tokenleak --wrapped-live` uses the same underlying stats, but serves them as a browser deck that is better for demos, screenshares, and walking through each section interactively.
 
 The Wrapped Live server starts on `http://localhost:3456` and automatically increments to the next free port if `3456` is already taken. The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
-
-The classic launcher (`tokenleak --legacy`) includes Wrapped Live as a menu option.
 
 ### Model Efficiency Advisor
 
@@ -544,10 +538,6 @@ The Matrix view spans 4 pages:
 3. Cache economics, cache ROI, session metrics, top projects
 4. Model efficiency, attribution clusters, top sessions, cache ROI by model
 
-### Classic launcher
-
-`tokenleak --legacy` opens the previous interactive launcher with a numbered menu, command preview, and guided setup flows for exports, wrapped cards, and the live dashboard.
-
 ### Live dashboard
 
 `tokenleak --live-server` starts a local HTTP server that serves an interactive HTML dashboard. The server starts on `http://localhost:3333` and increments the port if needed.
@@ -590,7 +580,6 @@ Subcommands:
 | `--live-server` | `-L` | `false` | Start the local browser dashboard |
 | `--wrapped-live` |  | `false` | Start the interactive AI Wrapped presentation in a browser |
 | `--advisor` |  | `false` | Run the model efficiency advisor |
-| `--legacy` |  | `false` | Open the classic interactive launcher instead of the TUI |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |
 | `--version` |  |  | Print version information |

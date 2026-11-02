@@ -2,7 +2,6 @@ import { formatCostWithCompleteness, formatModelWithTier } from '@tokenleak/core
 import type { ModelEfficiencyEntry, TokenleakOutput } from '@tokenleak/core';
 import { colorize256, bold, dim, MODEL_COLORS, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
-import { renderCacheRoiBreakdowns } from './cache-roi';
 
 const BAR_CHAR = '\u2588';
 const TRACK_CHAR = '\u2591';
@@ -104,83 +103,6 @@ export function renderModelEfficiencySection(
         width,
       ));
     }
-  }
-
-  return lines.join('\n');
-}
-
-export function renderModelView(output: TokenleakOutput, width: number, noColor: boolean): string {
-  const models = output.aggregated.allModels ?? output.aggregated.topModels;
-  if (models.length === 0) {
-    return `  ${dim('No model data available.', noColor)}`;
-  }
-
-  const lines: string[] = [bold('  Models', noColor), ''];
-
-  const nameWidth = Math.min(28, Math.max(12, Math.floor(width * 0.25)));
-  const valueWidth = 8;
-  const costWidth = 10;
-  const shareWidth = 6;
-  const barWidth = Math.max(8, width - nameWidth - valueWidth - costWidth - shareWidth - 10);
-  const maxTokens = Math.max(...models.map((m) => m.tokens), 0);
-
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i]!;
-    const colorCode = MODEL_COLORS[i % MODEL_COLORS.length]!;
-    const ratio = maxTokens > 0 ? model.tokens / maxTokens : 0;
-    const fillLen = Math.max(ratio > 0 ? 1 : 0, Math.round(ratio * barWidth));
-    const bar = colorize256(BAR_CHAR.repeat(fillLen), colorCode, noColor) +
-      dim(TRACK_CHAR.repeat(Math.max(0, barWidth - fillLen)), noColor);
-    const shareStr = `${model.percentage.toFixed(0)}%`.padStart(shareWidth);
-    const tokStr = formatTokens(model.tokens).padStart(valueWidth);
-    const costStr = formatCostWithCompleteness(model.cost, model.costCompleteness).padStart(costWidth);
-    const label = formatModelWithTier(model.model, model.serviceTiers);
-    const name = label.length > nameWidth
-      ? label.slice(0, nameWidth - 1) + '…'
-      : label.padEnd(nameWidth);
-
-    lines.push(truncateVisible(
-      `  ${colorize256(name, colorCode, noColor)} ${bar} ${shareStr} ${tokStr} ${costStr}`,
-      width,
-    ));
-  }
-
-  // Input/output ratio
-  const io = output.more?.inputOutput;
-  if (io) {
-    lines.push('');
-    lines.push(`  ${bold('Input / Output Ratio', noColor)}`);
-    const inputShare = 1 - io.outputShare;
-    const ioBarWidth = Math.max(10, width - 20);
-    const inputLen = Math.round(inputShare * ioBarWidth);
-    const outputLen = ioBarWidth - inputLen;
-    const ioBar =
-      colorize256(BAR_CHAR.repeat(inputLen), SEMANTIC.INPUT, noColor) +
-      colorize256(BAR_CHAR.repeat(outputLen), SEMANTIC.OUTPUT, noColor);
-    lines.push(truncateVisible(
-      `  ${ioBar}  ${dim(`input ${(inputShare * 100).toFixed(0)}%`, noColor)} ${dim(`output ${(io.outputShare * 100).toFixed(0)}%`, noColor)}`,
-      width,
-    ));
-  }
-
-  const roiLines = renderCacheRoiBreakdowns(
-    'Cache ROI by Model',
-    output.more?.cacheRoi?.byModel ?? [],
-    width,
-    noColor,
-  );
-  if (roiLines.length > 0) {
-    lines.push('', ...roiLines);
-  }
-
-  const efficiencySection = renderModelEfficiencySection(output, width, noColor, {
-    title: 'Efficiency Ranking',
-    limit: 6,
-    includeMethod: true,
-    includeIneligible: true,
-  });
-  if (efficiencySection) {
-    lines.push('', efficiencySection);
   }
 
   return lines.join('\n');

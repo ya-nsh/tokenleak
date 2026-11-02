@@ -15,22 +15,5 @@ export {
   MODEL_COLORS,
   PROJECT_COLORS,
 } from './colors';
-export {
-  renderTabBar,
-  renderOverviewView,
-  renderCompareView,
-  renderProviderView,
-  renderDowView,
-  renderTodView,
-  renderSessionView,
-  renderModelView,
-  renderTokenView,
-  renderCwdView,
-  renderRoutingSimulatorView,
-  renderAgentWasteView,
-  renderAgentBehaviorDiffView,
-  TIME_RANGES,
-  METRIC_TABS,
-} from './tab-views';
-export type { TimeRange, MetricTab } from './tab-views';
+export { renderCompareView } from './tab-views';
 export { renderAdvisorView } from './advisor-view';

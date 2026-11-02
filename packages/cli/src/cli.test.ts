@@ -1,11 +1,9 @@
 import { defaultTerminalWidth, shouldUseColor } from './output-mode';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import {
-  buildInteractiveSummary,
   resolveConfig,
   resolveFocusConfig,
-  resolveTabbedDashboardProviderConfig,
-  resolveTabbedDashboardProviders,
+  selectAvailableProviders,
   computeDateRange,
   inferFormatFromPath,
   normalizeCliArgv,
@@ -21,22 +19,7 @@ import {
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
-import { buildCliArgTokens, buildCliPreview } from './flags';
-import {
-  INTERACTIVE_FLAG_LINES,
-  shouldStartInteractiveCli,
-  finalizeCliArgs,
-  stripAnsi,
-  visibleLength,
-  padVisible,
-  truncateVisible,
-  clampScrollOffset,
-  buildOutputSectionLines,
-  buildLauncherBody,
-  buildTabbedDashboardOptions,
-  createMenuOptions,
-  renderProgressBar,
-} from './interactive';
+import { shouldStartTui } from './tui-launch';
 import {
   writeFileSync,
   readFileSync,
@@ -119,328 +102,26 @@ describe('normalizeCliArgv', () => {
   });
 });
 
-describe('interactive launcher', () => {
+function providerSelection(names: string[]): Parameters<typeof selectAvailableProviders>[0] {
+  return {
+    provider: names.length > 0 ? names.join(',') : undefined,
+    claude: false,
+    codex: false,
+    cursor: false,
+    pi: false,
+    openCode: false,
+    allProviders: false,
+  };
+}
+
+describe('shouldStartTui', () => {
   test('starts only for bare tokenleak in a TTY', () => {
-    expect(shouldStartInteractiveCli([], true, true)).toBe(true);
-    expect(shouldStartInteractiveCli(['--help'], true, true)).toBe(false);
-    expect(shouldStartInteractiveCli([], false, true)).toBe(false);
-    expect(shouldStartInteractiveCli([], true, false)).toBe(false);
-  });
-
-  test('--legacy flag routes to classic launcher (not TUI)', () => {
-    // --legacy alone should still trigger interactive (after filtering)
-    const legacyArgv = ['--legacy'];
-    const filtered = legacyArgv.filter((a) => a !== '--legacy');
-    expect(shouldStartInteractiveCli(filtered, true, true)).toBe(true);
-    // --legacy with other flags should not trigger interactive
-    expect(shouldStartInteractiveCli(['--legacy', '--help'], true, true)).toBe(false);
-  });
-
-  test('flag panel includes key interactive flags', () => {
-    expect(INTERACTIVE_FLAG_LINES).toContain('    explain <date>       explain one day of usage');
-    expect(INTERACTIVE_FLAG_LINES).toContain('    focus                rank deep-work sessions');
-    expect(INTERACTIVE_FLAG_LINES).toContain('    --cursor            shortcut for Cursor');
-    expect(INTERACTIVE_FLAG_LINES).toContain(
-      '-f, --format <format>   terminal | png | svg | json | wrapped',
-    );
-    expect(INTERACTIVE_FLAG_LINES).toContain(
-      '    --compare <range>   auto or YYYY-MM-DD..YYYY-MM-DD',
-    );
-    expect(INTERACTIVE_FLAG_LINES).toContain('-L, --live-server       local interactive dashboard');
-  });
-
-  test('buildTabbedDashboardOptions preserves dashboard scope inputs', () => {
-    expect(
-      buildTabbedDashboardOptions(
-        { days: 7, until: '2026-03-14' },
-        ['claude-code', 'codex'],
-        120,
-        true,
-        true,
-      ),
-    ).toEqual({
-      compare: 'auto',
-      initialTimeRange: '7d',
-      noColor: true,
-      noInsights: true,
-      providerNames: ['claude-code', 'codex'],
-      until: '2026-03-14',
-      width: 120,
-    });
-  });
-
-  test('buildTabbedDashboardOptions maps custom ranges onto the nearest dashboard tab', () => {
-    expect(
-      buildTabbedDashboardOptions(
-        { since: '2026-01-01', until: '2026-03-14' },
-        [],
-        null,
-        false,
-        false,
-      ),
-    ).toMatchObject({
-      compare: 'auto',
-      initialTimeRange: '90d',
-      initialRange: {
-        since: '2026-01-01',
-        until: '2026-03-14',
-      },
-      noColor: false,
-      noInsights: false,
-      until: '2026-03-14',
-    });
-  });
-
-  test('buildTabbedDashboardOptions validates custom dates before storing them', () => {
-    expect(() =>
-      buildTabbedDashboardOptions(
-        { since: '2026-03-14', until: '2026-03-01' },
-        [],
-        null,
-        false,
-        false,
-        null,
-      ),
-    ).toThrow('must not be after');
-
-    expect(() =>
-      buildTabbedDashboardOptions({ since: 'not-a-date' }, [], null, false, false, null),
-    ).toThrow('Invalid --since date');
-  });
-
-  test('resolveTabbedDashboardProviderConfig preserves selected providers', () => {
-    expect(resolveTabbedDashboardProviderConfig({ providerNames: ['cursor'] })).toEqual({
-      provider: 'cursor',
-      claude: false,
-      codex: false,
-      cursor: false,
-      pi: false,
-      openCode: false,
-      allProviders: false,
-    });
+    expect(shouldStartTui([], true, true)).toBe(true);
+    expect(shouldStartTui(['--help'], true, true)).toBe(false);
+    expect(shouldStartTui([], false, true)).toBe(false);
+    expect(shouldStartTui([], true, false)).toBe(false);
   });
 });
-
-describe('consolidated menu', () => {
-  test('has unique shortcuts covering digits 1-0 and Receipts', () => {
-    const options = createMenuOptions();
-    expect(options).toHaveLength(11);
-    const shortcuts = options.map((o) => o.shortcut);
-    expect(new Set(shortcuts).size).toBe(shortcuts.length);
-    expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'R', '0']);
-  });
-
-  test('has Receipts entry reachable from the launcher', () => {
-    const options = createMenuOptions();
-    const receipts = options.find((o) => o.shortcut === 'R');
-    expect(receipts).toBeDefined();
-    expect(receipts!.title).toBe('Receipts');
-  });
-
-  test('has Export as item 2', () => {
-    const options = createMenuOptions();
-    const exportItem = options.find((o) => o.shortcut === '2');
-    expect(exportItem).toBeDefined();
-    expect(exportItem!.title).toBe('Export');
-  });
-
-  test('has Build Custom Command as item 0', () => {
-    const options = createMenuOptions();
-    const item0 = options.find((o) => o.shortcut === '0');
-    expect(item0).toBeDefined();
-    expect(item0!.title).toBe('Build Custom Command');
-  });
-
-  test('does not have separate Export JSON, Export SVG, or Export PNG items', () => {
-    const options = createMenuOptions();
-    const titles = options.map((o) => o.title);
-    expect(titles).not.toContain('Export JSON');
-    expect(titles).not.toContain('Export SVG');
-    expect(titles).not.toContain('Export PNG');
-  });
-
-  test('every option has a select function', () => {
-    const options = createMenuOptions();
-    for (const option of options) {
-      expect(typeof option.select).toBe('function');
-    }
-  });
-});
-
-describe('flag serialization', () => {
-  test('buildCliArgTokens serializes booleans and values in CLI order', () => {
-    expect(
-      buildCliArgTokens({
-        format: 'png',
-        output: 'card.png',
-        cursor: true,
-        openCode: true,
-        noColor: true,
-      }),
-    ).toEqual(['--format', 'png', '--output', 'card.png', '--cursor', '--open-code', '--no-color']);
-  });
-
-  test('buildCliPreview includes the tokenleak executable prefix', () => {
-    expect(buildCliPreview({ format: 'json', output: 'out.json' })).toBe(
-      'tokenleak --format json --output out.json',
-    );
-    expect(buildCliPreview({})).toBe('tokenleak');
-  });
-
-  test('buildCliPreview includes --advisor flag', () => {
-    expect(buildCliPreview({ advisor: true })).toBe('tokenleak --advisor');
-  });
-
-  test('buildCliPreview combines advisor with other flags', () => {
-    expect(buildCliPreview({ advisor: true, format: 'terminal', days: 30 })).toBe(
-      'tokenleak --format terminal --days 30 --advisor',
-    );
-  });
-
-  test('buildCliArgTokens emits --advisor', () => {
-    expect(buildCliArgTokens({ advisor: true })).toEqual(['--advisor']);
-  });
-});
-
-describe('interactive helpers', () => {
-  test('finalizeCliArgs forces --more for image compare flows', () => {
-    expect(finalizeCliArgs({ format: 'png', compare: 'auto' })).toMatchObject({
-      format: 'png',
-      compare: 'auto',
-      more: true,
-    });
-  });
-
-  test('finalizeCliArgs adds a default output when --open is requested for JSON', () => {
-    expect(finalizeCliArgs({ format: 'json', open: true })).toMatchObject({
-      format: 'json',
-      open: true,
-      output: 'tokenleak.json',
-    });
-  });
-
-  test('stripAnsi removes ANSI escape sequences', () => {
-    expect(stripAnsi('\x1b[32mhello\x1b[0m')).toBe('hello');
-  });
-
-  test('visibleLength counts only printable characters', () => {
-    expect(visibleLength('\x1b[31mred\x1b[0m')).toBe(3);
-  });
-
-  test('padVisible pads up to the requested width', () => {
-    expect(padVisible('abc', 5)).toBe('abc  ');
-  });
-
-  test('truncateVisible preserves ANSI-wrapped content when truncating', () => {
-    expect(truncateVisible('\x1b[32mhello-world\x1b[0m', 8)).toContain('\x1b[32m');
-    expect(stripAnsi(truncateVisible('\x1b[32mhello-world\x1b[0m', 8))).toBe('hello...');
-  });
-
-  test('clampScrollOffset keeps the offset inside the visible range', () => {
-    expect(clampScrollOffset(-5, 20, 8)).toBe(0);
-    expect(clampScrollOffset(3, 20, 8)).toBe(3);
-    expect(clampScrollOffset(50, 20, 8)).toBe(12);
-  });
-
-  test('buildOutputSectionLines preserves all lines instead of clipping them', () => {
-    expect(buildOutputSectionLines('Output', 'a\nb\nc\nd', 20)).toEqual([
-      expect.stringContaining('Output'),
-      'a',
-      'b',
-      'c',
-      'd',
-      '',
-    ]);
-  });
-
-  test('buildLauncherBody keeps the full two-column launcher in a large terminal', () => {
-    const output = stripAnsi(
-      buildLauncherBody(
-        { version: '2.2.1', helpText: 'help' },
-        createMenuOptions(),
-        0,
-        140,
-        40,
-      ).join('\n'),
-    );
-
-    expect(output).toContain('All Flags');
-    expect(output).toContain('Launch Dashboard');
-  });
-
-  test('buildLauncherBody switches to a compact menu when the stacked launcher would overflow', () => {
-    const output = stripAnsi(
-      buildLauncherBody(
-        { version: '2.2.1', helpText: 'help' },
-        createMenuOptions(),
-        0,
-        88,
-        20,
-      ).join('\n'),
-    );
-
-    expect(output).not.toContain('All Flags');
-    expect(output).toContain('Narrow pane detected. Press H for the full flag reference.');
-    expect(output).toContain('Launch Dashboard');
-  });
-
-  test('buildLauncherBody keeps the selected action visible in compact mode', () => {
-    const options = createMenuOptions();
-    const customIndex = options.findIndex((o) => o.title === 'Build Custom Command');
-    const output = stripAnsi(
-      buildLauncherBody({ version: '2.2.1', helpText: 'help' }, options, customIndex, 88, 12).join(
-        '\n',
-      ),
-    );
-
-    expect(output).toContain('Build Custom Command');
-    expect(output).toContain('tokenleak --format terminal --days 90');
-  });
-});
-
-describe('interactive summaries', () => {
-  test('summarizes successful file output commands', () => {
-    expect(buildInteractiveSummary({ format: 'svg', output: 'card.svg' }, true, 0)).toBe(
-      'SVG written to card.svg.',
-    );
-  });
-
-  test('summarizes list provider runs', () => {
-    expect(buildInteractiveSummary({ listProviders: true }, true, 0)).toBe(
-      'Provider registry loaded.',
-    );
-  });
-
-  test('summarizes live server runs', () => {
-    expect(buildInteractiveSummary({ liveServer: true }, true, 0)).toBe('Live dashboard stopped.');
-  });
-
-  test('summarizes compare runs', () => {
-    expect(buildInteractiveSummary({ compare: 'auto' }, true, 0)).toBe('Compare report generated.');
-  });
-
-  test('summarizes explain runs', () => {
-    expect(buildInteractiveSummary({ subcommand: 'explain' }, true, 0)).toBe(
-      'Explain report generated.',
-    );
-  });
-
-  test('summarizes focus runs', () => {
-    expect(buildInteractiveSummary({ subcommand: 'focus' }, true, 0)).toBe(
-      'Focus report generated.',
-    );
-  });
-
-  test('summarizes terminal dashboard runs', () => {
-    expect(buildInteractiveSummary({}, true, 0)).toBe('Terminal dashboard generated.');
-  });
-
-  test('summarizes failures using the exit code', () => {
-    expect(buildInteractiveSummary({}, false, 130)).toBe('Command exited with code 130.');
-  });
-});
-
-// ─── computeDateRange ───────────────────────────────────────────────────
 
 describe('computeDateRange', () => {
   test('uses --since and --until when both provided', () => {
@@ -748,13 +429,13 @@ describe('run', () => {
     expect((thrown as TokenleakError).message).toContain('--all-providers');
   });
 
-  test('resolveTabbedDashboardProviders loads cursor from selected provider list', async () => {
+  test('selectAvailableProviders loads cursor from selected provider list', async () => {
     const { env, cleanup } = createProviderFixtureEnv();
     const previousEnv = process.env;
 
     try {
       process.env = env;
-      const providers = await resolveTabbedDashboardProviders({ providerNames: ['cursor'] });
+      const providers = await selectAvailableProviders(providerSelection(['cursor']));
       expect(providers).toHaveLength(1);
       expect(providers[0]?.name).toBe('cursor');
     } finally {
@@ -763,7 +444,7 @@ describe('run', () => {
     }
   });
 
-  test('resolveTabbedDashboardProviders keeps synthetic selection scoped', async () => {
+  test('selectAvailableProviders keeps synthetic selection scoped', async () => {
     const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-cli-'));
     const dbPath = join(root, 'sqlite.db');
     const db = new Database(dbPath);
@@ -774,7 +455,7 @@ describe('run', () => {
 
     try {
       process.env = { ...process.env, TOKENLEAK_SYNTHETIC_DIR: dbPath };
-      const providers = await resolveTabbedDashboardProviders({ providerNames: ['synthetic'] });
+      const providers = await selectAvailableProviders(providerSelection(['synthetic']));
       expect(providers.map((provider) => provider.name)).toEqual(['synthetic']);
     } finally {
       process.env = previousEnv;
@@ -782,7 +463,7 @@ describe('run', () => {
     }
   });
 
-  test('resolveTabbedDashboardProviders excludes synthetic from default provider scans', async () => {
+  test('selectAvailableProviders excludes synthetic from default provider scans', async () => {
     const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-default-cli-'));
     const dbPath = join(root, 'sqlite.db');
     const db = new Database(dbPath);
@@ -793,7 +474,7 @@ describe('run', () => {
 
     try {
       process.env = { ...process.env, TOKENLEAK_SYNTHETIC_DIR: dbPath };
-      const providers = await resolveTabbedDashboardProviders({ providerNames: [] });
+      const providers = await selectAvailableProviders(providerSelection([]));
       expect(providers.map((provider) => provider.name)).not.toContain('synthetic');
     } finally {
       process.env = previousEnv;
@@ -840,7 +521,8 @@ describe('CLI invocation', () => {
     expect(stdout).toContain('tokenleak simulate-routing');
     expect(stdout).toContain('tokenleak waste');
     expect(stdout).toContain('tokenleak behavior-diff');
-    expect(stdout).toContain('interactive launcher');
+    expect(stdout).toContain('opens the TUI dashboard');
+    expect(stdout).not.toContain('--legacy');
     expect(stdout).toContain('Examples:');
   });
 
@@ -1551,45 +1233,3 @@ describe('renderFocusReport', () => {
   });
 });
 
-// --- tqdm-style progress bar ---
-
-describe('tqdm-style progress bar', () => {
-  test('contains braille spinner character', () => {
-    const bar = renderProgressBar(0, 60, 5);
-    expect(bar).toContain('⠋');
-  });
-
-  test('contains block characters', () => {
-    const bar = renderProgressBar(5, 60, 10);
-    // At frame 5, should have some filled blocks
-    expect(bar).toContain('█');
-    expect(bar).toContain('░');
-  });
-
-  test('contains elapsed time', () => {
-    const bar = renderProgressBar(0, 60, 42);
-    expect(bar).toContain('42s');
-  });
-
-  test('spinner cycles through braille chars', () => {
-    const plain0 = stripAnsi(renderProgressBar(0, 60, 0));
-    const plain1 = stripAnsi(renderProgressBar(1, 60, 0));
-    // Different spinner chars
-    expect(plain0[0]).not.toBe(plain1[0]);
-  });
-
-  test('adapts to narrow width', () => {
-    const bar = renderProgressBar(3, 30, 5);
-    const plain = stripAnsi(bar);
-    // Should not crash, and should have some visible content
-    expect(plain.length).toBeGreaterThan(10);
-  });
-
-  test('fill amount changes with frame', () => {
-    const bar0 = stripAnsi(renderProgressBar(0, 60, 0));
-    const bar10 = stripAnsi(renderProgressBar(10, 60, 0));
-    const fill0 = (bar0.match(/█/g) || []).length;
-    const fill10 = (bar10.match(/█/g) || []).length;
-    expect(fill10).toBeGreaterThan(fill0);
-  });
-});
