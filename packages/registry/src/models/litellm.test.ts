@@ -193,3 +193,17 @@ describe('parseLiteLLMData', () => {
     expect(result['broken']).toBeUndefined();
   });
 });
+
+describe('fetchLiteLLMPricing', () => {
+  test('never touches the network when TOKENLEAK_OFFLINE=1', async () => {
+    const { fetchLiteLLMPricing } = await import('./litellm');
+    const previous = process.env['TOKENLEAK_OFFLINE'];
+    process.env['TOKENLEAK_OFFLINE'] = '1';
+    try {
+      await expect(fetchLiteLLMPricing()).rejects.toThrow('TOKENLEAK_OFFLINE=1');
+    } finally {
+      if (previous === undefined) delete process.env['TOKENLEAK_OFFLINE'];
+      else process.env['TOKENLEAK_OFFLINE'] = previous;
+    }
+  });
+});

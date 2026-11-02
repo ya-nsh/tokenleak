@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { getTokenleakCacheDir } from '@tokenleak/core';
 import { join } from 'node:path';
 import type { RemotePricingEntry } from './litellm';
 
@@ -15,12 +15,7 @@ export interface PricingCacheEnvelope {
 }
 
 function defaultCacheDir(): string {
-  try {
-    const home = homedir();
-    return join(home, '.cache', 'tokenleak');
-  } catch {
-    return join(tmpdir(), 'tokenleak-cache');
-  }
+  return getTokenleakCacheDir();
 }
 
 function cachePath(cacheDir?: string): string {
