@@ -1,13 +1,8 @@
+import { formatTokenCount } from '@tokenleak/core';
 import type { ModelEfficiencyEntry, TokenleakOutput } from '@tokenleak/core';
 import { colorize256, bold, dim, SEMANTIC } from '../colors';
 import { truncateVisible } from '../layout';
 
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
-}
 
 function formatCompactCost(cost: number): string {
   if (cost >= 100) return `$${cost.toFixed(0)}`;
@@ -39,7 +34,7 @@ function renderEfficiencyRow(
   return truncateVisible(
     `  ${colorize256(name, SEMANTIC.ACCENT, noColor)} ` +
     `${bold(`${(entry.score * 100).toFixed(0)}`.padStart(5), noColor)} ` +
-    `${formatTokens(entry.outputPerDollar).padStart(7)} ` +
+    `${formatTokenCount(entry.outputPerDollar).padStart(7)} ` +
     `${formatRatio(entry.outputInputRatio).padStart(6)} ` +
     `${`${(entry.cacheCoverage * 100).toFixed(0)}%`.padStart(6)} ` +
     `${formatCompactCost(entry.costPer1MTotal).padStart(8)}`,
@@ -90,7 +85,7 @@ export function renderModelEfficiencySection(
     lines.push(`  ${bold('Ineligible', noColor)}`);
     for (const entry of efficiency.ineligibleModels.slice(0, 4)) {
       lines.push(truncateVisible(
-        `  ${entry.model} ${dim(`(${entry.eventCount} evt, ${formatTokens(entry.totalTokens)} tok)`, noColor)} ${dim(entry.reason, noColor)}`,
+        `  ${entry.model} ${dim(`(${entry.eventCount} evt, ${formatTokenCount(entry.totalTokens)} tok)`, noColor)} ${dim(entry.reason, noColor)}`,
         width,
       ));
     }

@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { ExplainReport, ExplainEvidenceRow, ExplainAnomaly } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft } from '../lib/format.js';
+import { formatTokens, formatPercent, formatShortDate, padRight, padLeft, formatRowCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 
 function renderEvidenceTable(title: string, rows: ExplainEvidenceRow[]) {
@@ -20,7 +20,7 @@ function renderEvidenceTable(title: string, rows: ExplainEvidenceRow[]) {
       Text({ content: padRight(row.label, 22), fg: COLORS.white }),
       Text({ content: padLeft(formatTokens(row.tokens), 12), fg: COLORS.green }),
       Text({ content: padLeft(formatPercent(row.share), 10), fg: COLORS.cyan }),
-      Text({ content: padLeft(formatCost(row.cost), 12), fg: COLORS.amber }),
+      Text({ content: padLeft(formatRowCost(row.cost, row.costCompleteness), 12), fg: COLORS.amber }),
     ),
   );
 
@@ -97,7 +97,7 @@ export function createExplainPanel(report: ExplainReport | null, explainDate: st
       }),
       Text({ content: '', fg: COLORS.dimWhite }),
       Text({
-        content: `Tokens: ${formatTokens(report.totalTokens)}  Cost: ${formatCost(report.totalCost)}  vs 7d avg: ${report.comparedTo7dAverage >= 0 ? '+' : ''}${(report.comparedTo7dAverage * 100).toFixed(0)}%  vs 30d avg: ${report.comparedTo30dAverage >= 0 ? '+' : ''}${(report.comparedTo30dAverage * 100).toFixed(0)}%`,
+        content: `Tokens: ${formatTokens(report.totalTokens)}  Cost: ${formatRowCost(report.totalCost, report.costCompleteness)}  vs 7d avg: ${report.comparedTo7dAverage >= 0 ? '+' : ''}${(report.comparedTo7dAverage * 100).toFixed(0)}%  vs 30d avg: ${report.comparedTo30dAverage >= 0 ? '+' : ''}${(report.comparedTo30dAverage * 100).toFixed(0)}%`,
         fg: COLORS.white,
       }),
       Text({ content: '', fg: COLORS.dimWhite }),

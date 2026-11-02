@@ -39,3 +39,13 @@ test('Wrapped counts the full inventory even when the ranking shows ten models',
   expect(generateWrappedLiveHtml(output)).toContain('11 models');
   expect(computeAchievements(output).some((achievement) => achievement.subtitle === '11 models used')).toBe(true);
 });
+
+test('model shares never claim 0% or 100% while other models exist', async () => {
+  const { formatSharePercent } = await import('./dashboard-model');
+  expect(formatSharePercent(0)).toBe('0%');
+  expect(formatSharePercent(0.2)).toBe('<1%');
+  expect(formatSharePercent(0.5)).toBe('1%');
+  expect(formatSharePercent(42.4)).toBe('42%');
+  expect(formatSharePercent(99.7)).toBe('>99%');
+  expect(formatSharePercent(100)).toBe('100%');
+});

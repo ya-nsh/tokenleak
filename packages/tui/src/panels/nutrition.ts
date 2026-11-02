@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { NutritionRepoSummary, NutritionReport } from '@tokenleak/core';
-import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate } from '../lib/format.js';
+import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate, formatRowCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
@@ -28,7 +28,7 @@ function formatNullableNumber(value: number | null, digits: number = 0): string 
 }
 
 function formatNullableCost(value: number | null): string {
-  return value === null ? '-' : `$${value.toFixed(4)}`;
+  return value === null ? '-' : formatCost(value);
 }
 
 function buildEfficiencyRatio(repo: NutritionRepoSummary, maxCostPerCommit: number): number {
@@ -102,7 +102,7 @@ function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerComm
         `${rank}.`,
         label,
         formatTokens(repo.tokens),
-        formatCost(repo.cost),
+        formatRowCost(repo.cost, repo.costCompleteness),
         outcome,
         formatNullableNumber(repo.tokensPerCommit),
         formatNullableCost(repo.costPerCommit),
@@ -214,7 +214,7 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
         fg: COLORS.dimWhite,
       }),
       Text({
-        content: `Tokens ${formatTokens(report.totals.tokens)}  Cost ${formatCost(report.totals.cost)}  Commits ${report.totals.commits.toLocaleString('en-US')}  Changed lines ${formatTokens(report.totals.changedLines)}`,
+        content: `Tokens ${formatTokens(report.totals.tokens)}  Cost ${formatRowCost(report.totals.cost, report.totals.costCompleteness)}  Commits ${report.totals.commits.toLocaleString('en-US')}  Changed lines ${formatTokens(report.totals.changedLines)}`,
         fg: COLORS.white,
       }),
       Text({

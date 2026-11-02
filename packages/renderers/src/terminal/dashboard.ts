@@ -6,11 +6,7 @@ import type {
   PatternEntry,
   ProviderDashboardModel,
 } from './dashboard-model';
-import {
-  buildDashboardModel,
-  formatCost,
-  formatTokens,
-} from './dashboard-model';
+import { buildDashboardModel } from './dashboard-model';
 import { renderTerminalHeatmap } from './heatmap';
 import { padVisible, renderColumns, truncateVisible, visibleLength } from './layout';
 
@@ -100,7 +96,7 @@ function renderPatternList(
   const barWidth = Math.max(6, innerWidth - nameWidth - valueWidth - 6);
 
   for (const entry of entries) {
-    const fillLength = Math.max(1, Math.round(entry.share * barWidth));
+    const fillLength = entry.share > 0 ? Math.max(1, Math.round(entry.share * barWidth)) : 0;
     const fill = colorize256(BAR_CHAR.repeat(fillLength), SEMANTIC.OUTPUT, noColor);
     const track = TRACK_CHAR.repeat(Math.max(0, barWidth - fillLength));
     const line = `  ${colorize256(truncateVisible(entry.label, nameWidth).padEnd(nameWidth), SEMANTIC.ACCENT, noColor)}  ${fill}${track}  ${entry.value.padStart(valueWidth)}`;
@@ -212,4 +208,3 @@ export function renderDashboard(output: TokenleakOutput, options: RenderOptions)
   return renderDashboardModel(buildDashboardModel(output, options), options);
 }
 
-export { formatCost, formatTokens };

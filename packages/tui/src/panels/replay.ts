@@ -1,6 +1,7 @@
+import { buildEventCostCompleteness } from '@tokenleak/core';
 import { Box, Text } from '@opentui/core';
 import type { FlowBlock, ReplayReport, TokenVelocityPoint, UsageEvent } from '@tokenleak/core';
-import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft, truncate, wrapText } from '../lib/format.js';
+import { formatCost, formatTokens, formatPercent, formatShortDate, padRight, padLeft, truncate, wrapText, formatRowCost } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { PlaybackSummary } from '../lib/replay-playback.js';
 
@@ -92,7 +93,7 @@ function renderFlowBlockCard(
   onToggleBlock?: ReplayToggleHandler,
 ) {
   const timeRange = `${formatTime(block.start)}–${formatTime(block.end)}`;
-  const headerText = `${timeRange}  ${block.label}  |  ${block.eventCount} events  |  ${formatTokens(block.totalTokens)} tok  |  ${formatCost(block.cost)}`;
+  const headerText = `${timeRange}  ${block.label}  |  ${block.eventCount} events  |  ${formatTokens(block.totalTokens)} tok  |  ${formatRowCost(block.cost, block.costCompleteness)}`;
   const cursor = active ? '▶' : selected ? '▸' : ' ';
   const expandIcon = expanded ? '▼' : '▶';
 
@@ -328,6 +329,7 @@ export function createReplayPanel(
   // flex layout never compresses sibling Text rows on top of each other.
   const visibleBlocks = playback ? REPLAY_VISIBLE_BLOCKS_PLAYBACK : REPLAY_VISIBLE_BLOCKS;
   const totalCost = report.events.reduce((sum, e) => sum + e.cost, 0);
+  const totalCompleteness = buildEventCostCompleteness(report.events);
   const safeOffset = Math.max(0, Math.min(scrollOffset, Math.max(0, report.flowBlocks.length - visibleBlocks)));
   const blockCards = report.flowBlocks
     .slice(safeOffset, safeOffset + visibleBlocks)
@@ -362,7 +364,7 @@ export function createReplayPanel(
     }),
     Box(
       { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-      Text({ content: `Total: ${formatCost(totalCost)}`, fg: COLORS.green }),
+      Text({ content: `Total: ${formatRowCost(totalCost, totalCompleteness)}`, fg: COLORS.green }),
     ),
   ];
   if (playbackHeader) {

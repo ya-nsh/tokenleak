@@ -1,3 +1,4 @@
+import { formatTokenCount, formatUsd } from '@tokenleak/core';
 import type { TokenleakOutput, RenderOptions } from '@tokenleak/core';
 import type { IRenderer } from '../renderer';
 import { renderCompactDashboard } from './compact';
@@ -27,17 +28,7 @@ function appendCostCompletenessWarning(rendered: string, output: TokenleakOutput
   const models = completeness.unknownModels.slice(0, 4).join(', ');
   const suffix = completeness.unknownModels.length > 4 ? ', ...' : '';
   const modelText = models ? ` Unknown pricing: ${models}${suffix}.` : '';
-  return `${rendered}\n\nCost totals are incomplete: ${formatTokens(completeness.unpricedTokens)} tokens were not priced.${modelText}`;
-}
-
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-  return String(Math.round(value));
-}
-
-function formatMoney(value: number): string {
-  return `$${value.toFixed(2)}`;
+  return `${rendered}\n\nCost totals are incomplete: ${formatTokenCount(completeness.unpricedTokens)} tokens were not priced.${modelText}`;
 }
 
 function appendCacheRoiSection(rendered: string, output: TokenleakOutput, options: RenderOptions): string {
@@ -49,12 +40,12 @@ function appendCacheRoiSection(rendered: string, output: TokenleakOutput, option
   const bestProject = roi.byProject[0];
   const lines = [
     'Cache ROI',
-    `  Net savings ${formatMoney(roi.summary.netSavings)}  Read savings ${formatMoney(roi.summary.readSavings)}  Write cost ${formatMoney(roi.summary.writeCost)}`,
-    `  Reuse ${roi.summary.reuseRatio === null ? 'n/a' : `${roi.summary.reuseRatio.toFixed(2)}x`}  Payback ${roi.summary.paybackRatio === null ? 'n/a' : `${roi.summary.paybackRatio.toFixed(2)}x`}  Cache reads ${formatTokens(roi.summary.readTokens)}`,
+    `  Net savings ${formatUsd(roi.summary.netSavings)}  Read savings ${formatUsd(roi.summary.readSavings)}  Write cost ${formatUsd(roi.summary.writeCost)}`,
+    `  Reuse ${roi.summary.reuseRatio === null ? 'n/a' : `${roi.summary.reuseRatio.toFixed(2)}x`}  Payback ${roi.summary.paybackRatio === null ? 'n/a' : `${roi.summary.paybackRatio.toFixed(2)}x`}  Cache reads ${formatTokenCount(roi.summary.readTokens)}`,
   ];
 
   if (bestProject) {
-    lines.push(`  Top project ${bestProject.label} (${formatMoney(bestProject.netSavings)} net)`);
+    lines.push(`  Top project ${bestProject.label} (${formatUsd(bestProject.netSavings)} net)`);
   }
 
   return `${rendered}\n\n${lines.join('\n')}`;

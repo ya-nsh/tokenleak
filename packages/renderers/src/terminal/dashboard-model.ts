@@ -1,4 +1,4 @@
-import { aggregate, mergeProviderData, formatCostWithCompleteness, formatModelWithTier } from '@tokenleak/core';
+import { aggregate, mergeProviderData, formatCostWithCompleteness, formatModelWithTier, formatTokenCount, formatUsd } from '@tokenleak/core';
 import type {
   AggregatedStats,
   CacheRoiSummary,
@@ -48,25 +48,15 @@ export interface DashboardModel {
   overview: DashboardOverviewModel;
 }
 
-function formatTokens(count: number): string {
-  if (count >= 1_000_000) {
-    return `${(count / 1_000_000).toFixed(1)}M`;
-  }
-  if (count >= 1_000) {
-    return `${(count / 1_000).toFixed(0)}K`;
-  }
-  return String(count);
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
-
 function formatPercent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-function formatSharePercent(percentage: number): string {
+/** Shares never round to a misleading 0% or 100% while other entries exist. */
+export function formatSharePercent(percentage: number): string {
+  if (percentage <= 0) return '0%';
+  if (percentage < 0.5) return '<1%';
+  if (percentage < 100 && percentage >= 99.5) return '>99%';
   return `${percentage.toFixed(0)}%`;
 }
 
@@ -109,22 +99,22 @@ function buildMetricEntries(
   const metrics: MetricEntry[] = [
     { label: 'Current Streak', value: `${stats.currentStreak}d` },
     { label: 'Longest Streak', value: `${stats.longestStreak}d` },
-    { label: 'Total Tokens', value: formatTokens(stats.totalTokens) },
+    { label: 'Total Tokens', value: formatTokenCount(stats.totalTokens) },
     { label: 'Total Cost', value: formatCostWithCompleteness(stats.totalCost, stats.costCompleteness) },
   ];
 
   if (stats.rolling30dTokens > 0 || stats.rolling30dCost > 0) {
-    metrics.push({ label: '30d Tokens', value: formatTokens(stats.rolling30dTokens) });
+    metrics.push({ label: '30d Tokens', value: formatTokenCount(stats.rolling30dTokens) });
     metrics.push({ label: '30d Cost', value: formatCostWithCompleteness(stats.rolling30dCost, stats.rolling30dCostCompleteness ?? stats.costCompleteness) });
   }
 
   if (stats.rolling7dTokens > 0 || stats.rolling7dCost > 0) {
-    metrics.push({ label: '7d Tokens', value: formatTokens(stats.rolling7dTokens) });
+    metrics.push({ label: '7d Tokens', value: formatTokenCount(stats.rolling7dTokens) });
     metrics.push({ label: '7d Cost', value: formatCostWithCompleteness(stats.rolling7dCost, stats.rolling7dCostCompleteness ?? stats.costCompleteness) });
   }
 
   if (stats.activeDays > 0) {
-    metrics.push({ label: 'Avg Daily Tokens', value: formatTokens(stats.averageDailyTokens) });
+    metrics.push({ label: 'Avg Daily Tokens', value: formatTokenCount(stats.averageDailyTokens) });
     metrics.push({ label: 'Avg Daily Cost', value: formatCostWithCompleteness(stats.averageDailyCost, stats.costCompleteness) });
   }
 
@@ -137,14 +127,14 @@ function buildMetricEntries(
   if (stats.peakDay) {
     metrics.push({
       label: 'Peak Day',
-      value: `${stats.peakDay.date} (${formatTokens(stats.peakDay.tokens)})`,
+      value: `${stats.peakDay.date} (${formatTokenCount(stats.peakDay.tokens)})`,
     });
   }
 
   if (cacheRoiSummary) {
     metrics.push({
       label: 'Cache ROI',
-      value: `${cacheRoiSummary.netSavings >= 0 ? '+' : '-'}${formatCost(Math.abs(cacheRoiSummary.netSavings))}`,
+      value: `${cacheRoiSummary.netSavings >= 0 ? '+' : '-'}${formatUsd(Math.abs(cacheRoiSummary.netSavings))}`,
     });
     if (cacheRoiSummary.paybackRatio !== null) {
       metrics.push({
@@ -159,7 +149,7 @@ function buildMetricEntries(
 
 function buildProviderSummary(provider: ProviderData, stats: AggregatedStats): string[] {
   const parts = [
-    `${formatTokens(stats.totalTokens)} tokens`,
+    `${formatTokenCount(stats.totalTokens)} tokens`,
     formatCostWithCompleteness(stats.totalCost, stats.costCompleteness),
     `${stats.activeDays} active day${stats.activeDays === 1 ? '' : 's'}`,
   ];
@@ -185,7 +175,7 @@ function buildInsights(stats: AggregatedStats): string[] {
     insights.push('Cache reuse is low. There is room to improve prompt caching.');
   }
   if (stats.peakDay) {
-    insights.push(`Peak usage hit ${formatTokens(stats.peakDay.tokens)} on ${stats.peakDay.date}.`);
+    insights.push(`Peak usage hit ${formatTokenCount(stats.peakDay.tokens)} on ${stats.peakDay.date}.`);
   }
   if (stats.topModels[0] && stats.topModels[0].percentage >= 70) {
     insights.push(`${stats.topModels[0].model} dominates at ${formatSharePercent(stats.topModels[0].percentage)}.`);
@@ -204,7 +194,7 @@ function buildDayOfWeekPatterns(stats: AggregatedStats): PatternEntry[] {
     .filter((entry) => entry.tokens > 0)
     .map((entry) => ({
       label: entry.label,
-      value: formatTokens(entry.tokens),
+      value: formatTokenCount(entry.tokens),
       share: entry.tokens / maxTokens,
     }));
 }
@@ -216,7 +206,7 @@ function buildTopModelPatterns(stats: AggregatedStats): PatternEntry[] {
     .map((entry) => ({
       label: formatModelWithTier(entry.model, entry.serviceTiers),
       value: formatSharePercent(entry.percentage),
-      share: Math.max(0.03, entry.percentage / 100),
+      share: entry.percentage / 100,
     }));
 }
 
@@ -245,7 +235,7 @@ function buildOverview(output: TokenleakOutput, activeProviders: ProviderDashboa
     ? mergeProviderData(activeProviders.map((entry) => entry.provider))
     : [];
   const summary = [
-    `${formatTokens(output.aggregated.totalTokens)} tokens`,
+    `${formatTokenCount(output.aggregated.totalTokens)} tokens`,
     formatCostWithCompleteness(output.aggregated.totalCost, output.aggregated.costCompleteness),
     `${activeProviders.length} active provider${activeProviders.length === 1 ? '' : 's'}`,
     `${output.aggregated.activeDays} active day${output.aggregated.activeDays === 1 ? '' : 's'}`,
@@ -258,7 +248,7 @@ function buildOverview(output: TokenleakOutput, activeProviders: ProviderDashboa
     .sort((left, right) => right.stats.totalTokens - left.stats.totalTokens)
     .map((entry) => ({
       label: entry.provider.displayName,
-      value: formatTokens(entry.stats.totalTokens),
+      value: formatTokenCount(entry.stats.totalTokens),
       share: maxProviderTokens > 0 ? entry.stats.totalTokens / maxProviderTokens : 0,
     }));
 
@@ -301,4 +291,3 @@ export function buildDashboardModel(
   };
 }
 
-export { formatCost, formatPercent, formatSharePercent, formatTokens };

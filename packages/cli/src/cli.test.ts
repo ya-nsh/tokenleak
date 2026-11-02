@@ -267,8 +267,8 @@ describe('resolveFocusConfig', () => {
     const config = resolveFocusConfig({});
     expect(config.format).toBe('terminal');
     expect(config.days).toBe(90);
-    expect(config.width).toBe(80);
-    expect(config.noColor).toBe(false);
+    expect(config.width).toBe(defaultTerminalWidth());
+    expect(config.noColor).toBe(!shouldUseColor());
     expect(config.output).toBeNull();
     expect(config.listProviders).toBe(false);
   });

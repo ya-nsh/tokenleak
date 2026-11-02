@@ -1,17 +1,20 @@
 import type { CostCompleteness } from '@tokenleak/core';
+import { formatCostWithCompleteness, formatTokenCount, formatUsd } from '@tokenleak/core';
 export { formatCostWithCompleteness } from '@tokenleak/core';
 
-/** Format a token count into a human-readable abbreviated string */
+/** Compact token count shared with every other report surface. */
 export function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString('en-US');
+  return formatTokenCount(n);
 }
 
-/** Format a cost value with dollar sign and 2 decimal places */
+/** Dollars, shared with every other report surface. */
 export function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
+  return formatUsd(n);
+}
+
+/** Dollars, or Unknown / `+` when the amount does not cover every token. */
+export function formatRowCost(cost: number, completeness: CostCompleteness | undefined): string {
+  return formatCostWithCompleteness(cost, completeness);
 }
 
 export function isCostComplete(completeness: CostCompleteness | undefined): boolean {

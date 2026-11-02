@@ -116,7 +116,12 @@ import {
   renderReceiptTerminal,
 } from './receipts.js';
 import { buildPricingReport, renderPricingReport } from './pricing-report.js';
-import { redactWasteReportForExport } from '@tokenleak/core';
+import {
+  formatCostWithCompleteness,
+  formatTokenCount,
+  formatUsd,
+  redactWasteReportForExport,
+} from '@tokenleak/core';
 import { assertKnownFlags } from './flag-validation.js';
 import { shouldStartTui } from './tui-launch.js';
 import {
@@ -1038,8 +1043,8 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
     until: undefined,
     days: DEFAULT_DAYS,
     output: null,
-    width: 80,
-    noColor: false,
+    width: defaultTerminalWidth(),
+    noColor: !shouldUseColor(),
     provider: undefined,
     claude: false,
     codex: false,
@@ -1186,7 +1191,7 @@ function formatFocusDuration(durationMs: number | null): string {
 }
 
 function formatFocusDensity(tokensPerHour: number): string {
-  return `${Math.round(tokensPerHour).toLocaleString('en-US')}/h`;
+  return `${formatTokenCount(tokensPerHour)}/h`;
 }
 
 // ─── Focus report color helpers ───────────────────────────────────────
@@ -1411,7 +1416,7 @@ function formatNullableNumber(value: number | null, digits: number = 0): string 
 }
 
 function formatNullableCost(value: number | null): string {
-  return value === null ? '-' : `$${value.toFixed(4)}`;
+  return value === null ? '-' : formatUsd(value);
 }
 
 function renderNutritionReport(report: NutritionReport, width: number, noColor: boolean): string {
@@ -1421,7 +1426,7 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
     report.method,
     '',
     `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
-    `Tokens: ${report.totals.tokens.toLocaleString('en-US')}  Cost: $${report.totals.cost.toFixed(4)}  Commits: ${report.totals.commits.toLocaleString('en-US')}  Changed lines: ${report.totals.changedLines.toLocaleString('en-US')}`,
+    `Tokens: ${report.totals.tokens.toLocaleString('en-US')}  Cost: ${formatCostWithCompleteness(report.totals.cost, report.totals.costCompleteness)}  Commits: ${report.totals.commits.toLocaleString('en-US')}  Changed lines: ${report.totals.changedLines.toLocaleString('en-US')}`,
     `Per commit: ${formatNullableNumber(report.totals.tokensPerCommit, 0)} tokens / ${formatNullableCost(report.totals.costPerCommit)}`,
     `Per changed line: ${formatNullableNumber(report.totals.tokensPerChangedLine, 1)} tokens / ${formatNullableCost(report.totals.costPerChangedLine)}`,
     '',
@@ -1436,7 +1441,7 @@ function renderNutritionReport(report: NutritionReport, width: number, noColor: 
   const rows = report.repos.map((repo) => [
     repo.label,
     repo.tokens.toLocaleString('en-US'),
-    `$${repo.cost.toFixed(4)}`,
+    formatCostWithCompleteness(repo.cost, repo.costCompleteness),
     repo.commits.toLocaleString('en-US'),
     repo.changedLines.toLocaleString('en-US'),
     formatNullableNumber(repo.tokensPerCommit),
@@ -1478,7 +1483,7 @@ function renderRoutingSimulationReport(report: RoutingSimulationReport, width: n
     report.method,
     '',
     `Range: ${report.dateRange.since} to ${report.dateRange.until}  Strategy: ${report.strategy}`,
-    `Current: $${report.currentCost.toFixed(4)}  Simulated: $${report.simulatedCost.toFixed(4)}  Savings: $${report.estimatedSavings.toFixed(4)} (${(report.estimatedSavingsPercent * 100).toFixed(1)}%)`,
+    `Current: ${formatUsd(report.currentCost)}  Simulated: ${formatUsd(report.simulatedCost)}  Savings: ${formatUsd(report.estimatedSavings)} (${(report.estimatedSavingsPercent * 100).toFixed(1)}%)`,
     `Affected: ${report.affectedEvents.toLocaleString('en-US')} events / ${report.affectedTokens.toLocaleString('en-US')} tokens`,
     '',
   ];
@@ -1501,7 +1506,7 @@ function renderRoutingSimulationReport(report: RoutingSimulationReport, width: n
         candidate.fromModel,
         candidate.toModel,
         candidate.tokens.toLocaleString('en-US'),
-        `$${(candidate.savings ?? 0).toFixed(4)}`,
+        formatUsd(candidate.savings ?? 0),
         candidate.confidence,
       ]));
     }
