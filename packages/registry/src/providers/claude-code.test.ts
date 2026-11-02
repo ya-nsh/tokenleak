@@ -321,6 +321,27 @@ describe('ClaudeCodeProvider', () => {
   });
 
   describe('extractUserPrompt', () => {
+    const userRecord = (extra: Record<string, unknown>, content: unknown = 'real prompt') => ({
+      type: 'user',
+      userType: 'external',
+      message: { role: 'user', content },
+      ...extra,
+    });
+
+    it('ignores harness-injected messages', () => {
+      expect(extractUserPrompt(userRecord({ isMeta: true }, 'Base directory for this skill: /x'))).toBeNull();
+      expect(extractUserPrompt(userRecord({ isCompactSummary: true }))).toBeNull();
+      expect(extractUserPrompt(userRecord({ origin: { kind: 'task-notification' } }))).toBeNull();
+      expect(extractUserPrompt(userRecord({ origin: { kind: 'peer', from: 'abc' } }))).toBeNull();
+    });
+
+    it('keeps human-origin prompts and unwraps pasted content', () => {
+      expect(extractUserPrompt(userRecord({ origin: { kind: 'human' } }, 'go ahead'))).toBe('go ahead');
+      expect(
+        extractUserPrompt(userRecord({}, '<pasted_content id="1">Plan</pasted_content> build it')),
+      ).toBe('Plan build it');
+    });
+
     it('returns null for non-user records', () => {
       expect(extractUserPrompt({ type: 'assistant', message: { content: 'hi' } })).toBeNull();
       expect(extractUserPrompt({ type: 'system' })).toBeNull();
