@@ -15,24 +15,7 @@ export type {
   ReplayHeatmapEntry,
 } from './live/replay-live-server';
 export { generateReplayLiveHtml } from './live/replay-live-template';
-export {
-  renderTabBar,
-  renderOverviewView,
-  renderCompareView,
-  renderProviderView,
-  renderDowView,
-  renderTodView,
-  renderSessionView,
-  renderModelView,
-  renderTokenView,
-  renderCwdView,
-  renderRoutingSimulatorView,
-  renderAgentWasteView,
-  renderAgentBehaviorDiffView,
-  TIME_RANGES,
-  METRIC_TABS,
-} from './terminal/index';
-export type { TimeRange, MetricTab } from './terminal/index';
+export { renderCompareView } from './terminal/index';
 export { renderAdvisorView } from './terminal/index';
 export { colorize256, bold256, dim, bold } from './terminal/index';
 export { quotaLines, formatQuotaReset, formatQuotaWindow } from './quota';

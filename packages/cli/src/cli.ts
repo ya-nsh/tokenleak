@@ -115,10 +115,10 @@ import {
   collectEventsForReceipt,
   renderReceiptTerminal,
 } from './receipts.js';
-import { buildCliArgTokens } from './flags.js';
 import { buildPricingReport, renderPricingReport } from './pricing-report.js';
 import { redactWasteReportForExport } from '@tokenleak/core';
 import { assertKnownFlags } from './flag-validation.js';
+import { shouldStartTui } from './tui-launch.js';
 import {
   defaultTerminalWidth,
   extractGlobalFlags,
@@ -127,11 +127,7 @@ import {
   shouldUseColor,
 } from './output-mode.js';
 import { describeWarningsVerbose, summarizeWarnings } from './warning-summary.js';
-import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
-import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
-import { startTabbedDashboard } from './tabbed-dashboard.js';
-import type { TabbedDashboardOptions } from './tabbed-dashboard.js';
 
 export { computeDateRange };
 export { renderFocusReport, colorScore, colorDuration, colorDensity, colorProvider, colorStreak };
@@ -345,7 +341,6 @@ function buildHelpText(): string {
     '      --upload <target>   Upload rendered output, currently: gist',
     '  -L, --live-server       Start the interactive local dashboard',
     '      --wrapped-live      Start the AI Wrapped presentation in a browser',
-    '      --legacy            Open the classic interactive launcher instead of TUI',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
     '      --verbose           Show every skipped log entry and sync detail (any command)',
@@ -601,126 +596,6 @@ function normalizeCliArg(arg: string): string {
   return flagMap[arg] ?? arg;
 }
 
-export function buildInteractiveSummary(
-  cliArgs: Record<string, unknown>,
-  ok: boolean,
-  exitCode: number,
-): string {
-  if (!ok) {
-    return `Command exited with code ${exitCode}.`;
-  }
-
-  if (typeof cliArgs['output'] === 'string') {
-    const outputPath = cliArgs['output'];
-    const format = String(
-      cliArgs['format'] ?? inferFormatFromPath(outputPath) ?? 'output',
-    ).toUpperCase();
-    return `${format} written to ${outputPath}.`;
-  }
-
-  if (cliArgs['subcommand'] === 'explain') {
-    return 'Explain report generated.';
-  }
-
-  if (cliArgs['subcommand'] === 'focus') {
-    return 'Focus report generated.';
-  }
-
-  if (cliArgs['subcommand'] === 'nutrition') {
-    return 'Nutrition label generated.';
-  }
-
-  if (cliArgs['subcommand'] === 'cursor') {
-    return 'Cursor command completed.';
-  }
-
-  if (cliArgs['listProviders']) {
-    return 'Provider registry loaded.';
-  }
-
-  if (cliArgs['liveServer']) {
-    return 'Live dashboard stopped.';
-  }
-
-  if (cliArgs['wrappedLive']) {
-    return 'Wrapped live presentation stopped.';
-  }
-
-  if (cliArgs['compare']) {
-    return 'Compare report generated.';
-  }
-
-  const format = String(cliArgs['format'] ?? 'terminal');
-  if (format === 'terminal') {
-    return 'Terminal dashboard generated.';
-  }
-
-  return `${format.toUpperCase()} command finished successfully.`;
-}
-
-async function executeInteractiveCommand(
-  request: InteractiveRunRequest,
-): Promise<InteractiveExecutionResult> {
-  try {
-    const cliPath = process.argv[1];
-    if (!cliPath) {
-      return {
-        ok: false,
-        summary: 'Could not resolve the current tokenleak entrypoint.',
-        stdout: '',
-        stderr: 'Error: process.argv[1] is missing.',
-      };
-    }
-
-    const command = [
-      process.execPath,
-      cliPath,
-      ...(request.argv ?? buildCliArgTokens(request.args)),
-    ];
-
-    if (request.executionMode === 'inherit') {
-      const proc = Bun.spawn(command, {
-        stdin: 'inherit',
-        stdout: 'inherit',
-        stderr: 'inherit',
-      });
-      const exitCode = await proc.exited;
-      return {
-        ok: exitCode === 0,
-        summary: buildInteractiveSummary(request.args, exitCode === 0, exitCode),
-        stdout: '',
-        stderr: '',
-      };
-    }
-
-    const proc = Bun.spawn(command, {
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-
-    const [exitCode, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-
-    return {
-      ok: exitCode === 0,
-      summary: buildInteractiveSummary(request.args, exitCode === 0, exitCode),
-      stdout,
-      stderr,
-    };
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      summary: 'Interactive command failed before it could finish.',
-      stdout: '',
-      stderr: error instanceof Error ? `Error: ${error.message}` : `Error: ${String(error)}`,
-    };
-  }
-}
-
 export function normalizeCliArgv(argv: string[]): string[] {
   const normalized = argv.map(normalizeCliArg);
   const result: string[] = [];
@@ -820,7 +695,7 @@ function validateProviderSelection(
   }
 }
 
-async function selectAvailableProviders(
+export async function selectAvailableProviders(
   config: Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig,
 ): Promise<IProvider[]> {
   validateProviderSelection(config);
@@ -864,29 +739,6 @@ async function selectAvailableProviders(
   }
 
   return available;
-}
-
-export function resolveTabbedDashboardProviderConfig(
-  opts: Pick<TabbedDashboardOptions, 'providerNames'>,
-): Pick<ProviderLoadConfig, 'allProviders'> & ProviderFilterConfig {
-  return {
-    provider:
-      opts.providerNames && opts.providerNames.length > 0
-        ? opts.providerNames.join(',')
-        : undefined,
-    claude: false,
-    codex: false,
-    cursor: false,
-    pi: false,
-    openCode: false,
-    allProviders: false,
-  };
-}
-
-export async function resolveTabbedDashboardProviders(
-  opts: Pick<TabbedDashboardOptions, 'providerNames'>,
-): Promise<IProvider[]> {
-  return selectAvailableProviders(resolveTabbedDashboardProviderConfig(opts));
 }
 
 async function loadProviderData(config: ProviderLoadConfig): Promise<{
@@ -3581,11 +3433,6 @@ const main = defineCommand({
       description: 'Analyze usage and suggest cost-saving model switches',
       default: false,
     },
-    legacy: {
-      type: 'boolean',
-      description: 'Open the classic interactive launcher instead of TUI',
-      default: false,
-    },
   },
   async run({ args }) {
     try {
@@ -4122,35 +3969,7 @@ if (isDirectExecution) {
     handleError(error);
   }
 
-  if (
-    argv.includes('--legacy') &&
-    shouldStartInteractiveCli(
-      argv.filter((a) => a !== '--legacy'),
-      Boolean(process.stdin.isTTY),
-      Boolean(process.stdout.isTTY),
-    )
-  ) {
-    const launchTabbed = async (opts: TabbedDashboardOptions): Promise<void> => {
-      const scopedProviders = await resolveTabbedDashboardProviders(opts);
-
-      if (scopedProviders.length === 0) {
-        throw new TokenleakError('No provider data found');
-      }
-
-      await startTabbedDashboard(scopedProviders, opts);
-    };
-
-    await startInteractiveCli(
-      {
-        version: VERSION,
-        helpText: buildHelpText(),
-      },
-      executeInteractiveCommand,
-      launchTabbed,
-    );
-  } else if (
-    shouldStartInteractiveCli(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))
-  ) {
+  if (shouldStartTui(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
     try {
       const { main: startTui } = await import('@tokenleak/tui');
       await startTui();

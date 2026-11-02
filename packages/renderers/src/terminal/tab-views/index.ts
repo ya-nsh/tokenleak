@@ -1,15 +1,2 @@
-export { renderTabBar } from './tab-bar';
-export type { TimeRange, MetricTab } from './tab-bar';
-export { TIME_RANGES, METRIC_TABS } from './tab-bar';
-export { renderOverviewView } from './overview-view';
 export { renderCompareView } from './compare-view';
-export { renderProviderView } from './provider-view';
-export { renderDowView } from './dow-view';
-export { renderTodView } from './tod-view';
-export { renderSessionView } from './session-view';
-export { renderModelView } from './model-view';
-export { renderTokenView } from './token-view';
-export { renderCwdView } from './cwd-view';
-export { renderRoutingSimulatorView } from './routing-simulator-view';
-export { renderAgentWasteView } from './agent-waste-view';
-export { renderAgentBehaviorDiffView } from './agent-behavior-diff-view';
+export { renderModelEfficiencySection } from './model-view';
