@@ -9,7 +9,12 @@ export {
 export type { ModelPricing, PricingContext, PricingSource, ResolvedPricing } from './pricing';
 export { estimateCost, estimateCostBreakdown } from './cost';
 export type { CostBreakdown, CostContext } from './cost';
-export { getRemotePricingStatus, initPricing, resetPricingState } from './pricing-resolver';
+export {
+  cancelBackgroundPricingRefresh,
+  getRemotePricingStatus,
+  initPricing,
+  resetPricingState,
+} from './pricing-resolver';
 export type { RemotePricingStatus } from './pricing-resolver';
 export {
   PricingOverrideError,

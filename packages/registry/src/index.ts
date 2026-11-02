@@ -10,6 +10,7 @@ export {
   estimateCost,
   estimateCostBreakdown,
   initPricing,
+  cancelBackgroundPricingRefresh,
   getRemotePricingStatus,
   resetPricingState,
   PricingOverrideError,

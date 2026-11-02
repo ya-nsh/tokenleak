@@ -1,23 +1,19 @@
-interface FlushableStream {
-  write(chunk: string, callback: (error?: Error | null) => void): boolean;
-  writableLength?: number;
-}
+import { cancelBackgroundPricingRefresh } from '@tokenleak/registry';
 
-/** Resolve once everything already written to `stream` has been handed to the OS. */
-export function flushStream(stream: FlushableStream): Promise<void> {
-  if (stream.writableLength === 0) return Promise.resolve();
-  // Writes complete in order, so an empty write's callback fires after the rest.
-  return new Promise((resolve) => {
-    stream.write('', () => resolve());
-  });
-}
+/** Upper bound for a stray handle (socket, timer) to hold a finished command open. */
+const FORCED_EXIT_GRACE_MS = 10_000;
 
 /**
- * Exit after stdout and stderr drain. `process.exit()` drops whatever is
- * still buffered for a pipe, which cut `tokenleak --format json | jq`
- * off at exactly 128 KB.
+ * Finish a command with `code` without truncating piped output.
+ *
+ * `process.exit()` drops whatever stdout has not handed to the pipe yet, and
+ * Bun gives no reliable "flushed" signal for pipes. So instead this sets the
+ * exit code, stops background work, and lets the caller return: the process
+ * exits once the event loop (including pending stdout) drains. An unref'd
+ * timer forces the exit if a stray handle never closes.
  */
-export async function exitAfterFlush(code: number): Promise<never> {
-  await Promise.all([flushStream(process.stdout), flushStream(process.stderr)]);
-  process.exit(code);
+export function finishCommand(code: number): void {
+  process.exitCode = code;
+  cancelBackgroundPricingRefresh();
+  setTimeout(() => process.exit(code), FORCED_EXIT_GRACE_MS).unref();
 }
