@@ -3,15 +3,30 @@ export const REGISTRY_VERSION = '0.2.0';
 export {
   normalizeModelName,
   MODEL_PRICING,
+  buildPricingTable,
   getModelPricing,
+  resolveModelPricing,
   TOKENS_PER_MILLION,
   estimateCost,
   estimateCostBreakdown,
   initPricing,
+  getRemotePricingStatus,
   resetPricingState,
+  PricingOverrideError,
+  getPricingOverridePath,
+  loadPricingOverrides,
+  parsePricingOverrides,
 } from './models';
 
-export type { ModelPricing, CostBreakdown } from './models';
+export type {
+  ModelPricing,
+  CostBreakdown,
+  CostContext,
+  PricingContext,
+  PricingSource,
+  ResolvedPricing,
+  RemotePricingStatus,
+} from './models';
 
 export type { IProvider } from './provider';
 export { ProviderRegistry } from './registry';

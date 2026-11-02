@@ -7,6 +7,8 @@
  */
 
 const DATE_SUFFIX_PATTERN = /-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
+/** Copilot and some gateways spell `claude-opus-5-5` as `claude-opus-5.5`. */
+const DOTTED_CLAUDE_VERSION = /^claude-(opus|sonnet|haiku|fable|mythos)-(\d+)\.(\d+)(?=$|-)/;
 
 /**
  * Normalizes a model name by stripping a trailing `-YYYYMMDD` date suffix.
@@ -17,7 +19,11 @@ const DATE_SUFFIX_PATTERN = /-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
  * normalizeModelName('')                          // => ''
  */
 export function normalizeModelName(model: string): string {
-  const normalized = model.trim().replace(/^openai\//, '').replace(DATE_SUFFIX_PATTERN, '');
+  const normalized = model
+    .trim()
+    .replace(/^openai\//, '')
+    .replace(DATE_SUFFIX_PATTERN, '')
+    .replace(DOTTED_CLAUDE_VERSION, 'claude-$1-$2-$3');
   return normalized === 'gpt-5.6' ? 'gpt-5.6-sol' : normalized;
 }
 
