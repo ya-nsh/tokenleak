@@ -3,8 +3,11 @@ import { ONE_DAY_MS, dateToUtcMs } from '../date-utils';
 
 /**
  * Calculates current and longest streaks of consecutive days with usage.
- * Days must be sorted by date. A gap of 1+ days resets the streak.
- * Current streak counts back from the most recent day.
+ * A gap of 1+ days resets the streak; repeated dates count once.
+ *
+ * The current streak is still alive when the last active day is the
+ * reference date or the day before it: today is not over, so a streak
+ * should not read 0 at 00:01 just because today has no usage yet.
  */
 export function calculateStreaks(
   daily: DailyUsage[],
@@ -29,6 +32,9 @@ export function calculateStreaks(
     const curr = dateToUtcMs(sorted[i]!.date);
     const diff = curr - prev;
 
+    if (diff === 0) {
+      continue;
+    }
     if (diff === ONE_DAY_MS) {
       currentRun++;
     } else {
@@ -42,7 +48,8 @@ export function calculateStreaks(
 
   const referenceMs = dateToUtcMs(referenceDate);
   const lastActiveMs = dateToUtcMs(sorted[sorted.length - 1]!.date);
-  if (lastActiveMs !== referenceMs) {
+  const sinceLastActive = referenceMs - lastActiveMs;
+  if (sinceLastActive !== 0 && sinceLastActive !== ONE_DAY_MS) {
     return { current: 0, longest };
   }
 
@@ -52,6 +59,7 @@ export function calculateStreaks(
     const curr = dateToUtcMs(sorted[i]!.date);
     const prev = dateToUtcMs(sorted[i - 1]!.date);
 
+    if (curr === prev) continue;
     if (curr - prev === ONE_DAY_MS) {
       current++;
     } else {
