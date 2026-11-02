@@ -1,3 +1,4 @@
+import { localDateOfTimestamp } from '@tokenleak/core';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -129,7 +130,7 @@ function extractDate(createdAt: string | number): string | null {
     return null;
   }
 
-  return date.toISOString().slice(0, 10);
+  return localDateOfTimestamp(date);
 }
 
 function toTimestampMillis(createdAt: string | number): number | null {

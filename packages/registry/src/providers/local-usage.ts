@@ -8,7 +8,7 @@ import type {
   ProviderWarning,
   UsageEvent,
 } from '@tokenleak/core';
-import { mergeServiceTiers } from '@tokenleak/core';
+import { mergeServiceTiers, localDateOfTimestamp } from '@tokenleak/core';
 import { resolveModelIdentity } from '../models/normalizer';
 import {
   addUnknownPricingWarnings,
@@ -109,7 +109,12 @@ export function objectValue(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
 }
 
+/** The user's local calendar day for a timestamp (see localDateOfTimestamp). */
 export function extractDate(timestamp: string): string | null {
+  return localDateOfTimestamp(timestamp);
+}
+
+function datePrefix(timestamp: string): string | null {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(timestamp);
   return match ? match[1]! : null;
 }
@@ -118,7 +123,8 @@ export function timestampToIso(value: unknown): string | null {
   if (typeof value === 'string') {
     const parsed = Date.parse(value);
     if (!Number.isFinite(parsed)) return null;
-    const date = extractDate(value);
+    // Reject impossible calendar dates such as 2026-02-30 written in the string.
+    const date = datePrefix(value);
     if (date) {
       const midnight = Date.parse(`${date}T00:00:00Z`);
       if (!Number.isFinite(midnight) || new Date(midnight).toISOString().slice(0, 10) !== date) return null;

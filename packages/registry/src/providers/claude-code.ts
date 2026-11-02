@@ -1,3 +1,4 @@
+import { localDateOfTimestamp } from '@tokenleak/core';
 import { existsSync } from 'fs';
 import { dirname, join, relative, sep } from 'path';
 import { homedir } from 'os';
@@ -126,7 +127,7 @@ function extractUsage(record: unknown): UsageRecord | null {
 
   const millis = Date.parse(timestamp);
   if (!Number.isFinite(millis)) return null;
-  const date = new Date(millis).toISOString().slice(0, 10);
+  const date = localDateOfTimestamp(millis)!;
 
   const cacheCreation = u['cache_creation'];
   const longTtl =
@@ -357,7 +358,7 @@ export class ClaudeCodeProvider implements IProvider {
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<UsageRecord>(
-      'claude-code-v6',
+      'claude-code-v7',
       this.baseDir,
       isCachedUsageRecord,
     );
