@@ -11,6 +11,22 @@ export function isValidDate(dateStr: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dateStr;
 }
 
+const RELATIVE_DAYS: Readonly<Record<string, number>> = { today: 0, yesterday: -1 };
+
+/**
+ * Resolve a single-day argument (`2026-03-10`, `today`, `yesterday`) for
+ * commands like explain and replay, with an error that says what was wrong.
+ */
+export function resolveDayArgument(command: string, value: string): string {
+  const relative = RELATIVE_DAYS[value.toLowerCase()];
+  if (relative !== undefined) return shiftDateStringLocal(getTodayLocal(), relative);
+  if (isValidDate(value)) return value;
+  const reason = DATE_FORMAT.test(value) ? 'is not a real calendar date' : 'is not in YYYY-MM-DD format';
+  throw new TokenleakError(
+    `${command}: "${value}" ${reason}. Use YYYY-MM-DD, "today", or "yesterday".`,
+  );
+}
+
 /** Compute the date range from CLI-style inputs. */
 export function computeDateRange(args: {
   since?: string;
