@@ -57,10 +57,24 @@ export function clusterPrompts(
     totalCost: number;
     totalTokens: number;
     /** Highest-cost members seen so far, kept as a length-capped min-heap-like list. */
-    topMembers: Array<{ prompt: string; cost: number }>;
+    topMembers: TopMember[];
   }
 
   const clusters: WorkingCluster[] = [];
+  // Every assistant message in a turn repeats the same prompt. Remember where
+  // each prompt landed so repeats skip the bigram scan over every cluster.
+  const clusterByPromptKey = new Map<string, WorkingCluster>();
+  // sampleKey runs regexes over prompts of up to 2,000 chars; compute it once per text.
+  const sampleKeys = new Map<string, string>();
+  const keyFor = (prompt: string): string => {
+    let key = sampleKeys.get(prompt);
+    if (key === undefined) {
+      key = sampleKey(prompt);
+      sampleKeys.set(prompt, key);
+    }
+    return key;
+  };
+  const clusterByPromptText = new Map<string, WorkingCluster>();
 
   for (const [index, event] of withPrompts.entries()) {
     const promptId = event.promptId?.trim() || event.turnId?.trim();
@@ -68,6 +82,23 @@ export function clusterPrompts(
       ? JSON.stringify([event.provider, event.sessionId, promptId])
       : JSON.stringify(['event', index]);
     const prompt = event.prompt!.trim();
+
+    const known = clusterByPromptKey.get(promptKey) ?? clusterByPromptText.get(prompt);
+    if (known) {
+      known.promptKeys.add(promptKey);
+      known.count = known.promptKeys.size;
+      known.events.push(event);
+      known.totalCost += event.cost;
+      known.totalTokens += event.totalTokens;
+      if (event.cost > known.canonicalCost) {
+        known.canonicalPrompt = prompt;
+        known.canonicalCost = event.cost;
+      }
+      insertTopMember(known.topMembers, prompt, keyFor(prompt), event.cost);
+      clusterByPromptKey.set(promptKey, known);
+      continue;
+    }
+
     const signature = tokenBigrams(prompt);
     if (signature.size === 0) {
       // Prompts made only of short tokens (e.g. "go", "ok") produce no bigrams.
@@ -96,9 +127,11 @@ export function clusterPrompts(
         c.canonicalCost = event.cost;
       }
       for (const bigram of signature) c.signature.add(bigram);
-      insertTopMember(c.topMembers, prompt, event.cost);
+      insertTopMember(c.topMembers, prompt, keyFor(prompt), event.cost);
+      clusterByPromptKey.set(promptKey, c);
+      clusterByPromptText.set(prompt, c);
     } else {
-      clusters.push({
+      const created: WorkingCluster = {
         promptKeys: new Set([promptKey]),
         events: [event],
         canonicalPrompt: prompt,
@@ -107,8 +140,11 @@ export function clusterPrompts(
         count: 1,
         totalCost: event.cost,
         totalTokens: event.totalTokens,
-        topMembers: [{ prompt, cost: event.cost }],
-      });
+        topMembers: [{ prompt, cost: event.cost, key: keyFor(prompt) }],
+      };
+      clusters.push(created);
+      clusterByPromptKey.set(promptKey, created);
+      clusterByPromptText.set(prompt, created);
     }
   }
 
@@ -124,9 +160,17 @@ export function clusterPrompts(
     .sort((a, b) => b.totalCost - a.totalCost);
 }
 
+interface TopMember {
+  prompt: string;
+  cost: number;
+  /** sampleKey(prompt), stored so duplicates are found without re-normalizing. */
+  key: string;
+}
+
 function insertTopMember(
-  topMembers: Array<{ prompt: string; cost: number }>,
+  topMembers: TopMember[],
   prompt: string,
+  key: string,
   cost: number,
 ): void {
   // Keep topMembers sorted by cost descending, deduped by the compacted prompt
@@ -137,9 +181,8 @@ function insertTopMember(
   // not two.
   //
   // At these sizes (max 3 entries) a linear scan is cheaper than a heap.
-  const key = sampleKey(prompt);
   for (let i = 0; i < topMembers.length; i++) {
-    if (sampleKey(topMembers[i]!.prompt) === key) {
+    if (topMembers[i]!.key === key) {
       if (cost > topMembers[i]!.cost) {
         // Swap in the higher-cost duplicate and re-sort this one entry.
         topMembers.splice(i, 1);
@@ -150,13 +193,13 @@ function insertTopMember(
   }
   for (let i = 0; i < topMembers.length; i++) {
     if (cost > topMembers[i]!.cost) {
-      topMembers.splice(i, 0, { prompt, cost });
+      topMembers.splice(i, 0, { prompt, cost, key });
       if (topMembers.length > SAMPLE_PROMPT_COUNT) topMembers.length = SAMPLE_PROMPT_COUNT;
       return;
     }
   }
   if (topMembers.length < SAMPLE_PROMPT_COUNT) {
-    topMembers.push({ prompt, cost });
+    topMembers.push({ prompt, cost, key });
   }
 }
 
@@ -165,7 +208,7 @@ function sampleKey(prompt: string): string {
 }
 
 function buildSamplePrompts(
-  topMembers: Array<{ prompt: string; cost: number }>,
+  topMembers: TopMember[],
 ): string[] {
   const seen = new Set<string>();
   const samples: string[] = [];
