@@ -194,3 +194,45 @@ describe('clusterPrompts', () => {
     expect(loose.length).toBe(1);
   });
 });
+
+describe('clusterPrompts repeated turns', () => {
+  const base = {
+    provider: 'claude-code',
+    date: '2026-05-01',
+    model: 'claude-opus-5-5',
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 2,
+    cost: 1,
+    sessionId: 's1',
+  };
+
+  it('every assistant message of one turn lands in the same cluster as one prompt', () => {
+    const prompt = 'refactor the billing module and add tests for the edge cases';
+    const events = Array.from({ length: 50 }, (_, i) => ({
+      ...base,
+      timestamp: `2026-05-01T10:${String(i).padStart(2, '0')}:00.000Z`,
+      prompt,
+      promptId: 'user:1',
+    }));
+    const clusters = clusterPrompts(events);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(1);
+    expect(clusters[0]!.totalCost).toBe(50);
+  });
+
+  it('identical prompt text in different turns clusters together', () => {
+    const prompt = 'run the full test suite and fix any failures you find';
+    const events = ['user:1', 'user:2', 'user:3'].map((promptId, i) => ({
+      ...base,
+      timestamp: `2026-05-01T1${i}:00:00.000Z`,
+      prompt,
+      promptId,
+    }));
+    const clusters = clusterPrompts(events);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(3);
+  });
+});

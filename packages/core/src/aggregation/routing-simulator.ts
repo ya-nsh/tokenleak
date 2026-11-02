@@ -215,8 +215,10 @@ export function buildRoutingSimulationReport(
   }
 
   const matchedCount = candidates.length;
+  // One pass to index events; the old per-candidate find() was O(candidates × events).
+  const eventsById = new Map(events.map((event, index) => [eventId(event, index), event] as const));
   for (const candidate of candidates) {
-    const event = events.find((entry, index) => eventId(entry, index) === candidate.eventId);
+    const event = eventsById.get(candidate.eventId);
     if (event) {
       candidate.confidence = confidenceFor(event, matchedCount, candidate.reasons);
     }
