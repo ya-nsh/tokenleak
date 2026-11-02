@@ -21,8 +21,8 @@ import type {
   UsageEvent,
   WasteReport,
 } from '@tokenleak/core';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import {
   aggregate,
   analyzeEfficiency,
@@ -79,8 +79,10 @@ import {
 import type { AppState } from './state.js';
 import { WINDOW_DAYS } from './state.js';
 
-const TUI_CACHE_VERSION = 2;
-const TUI_CACHE_FILENAME = 'tui-data-v2.json';
+// v3: snapshots from before current-model pricing showed costs as Unknown.
+const TUI_CACHE_VERSION = 3;
+const TUI_CACHE_FILENAME = `tui-data-v${TUI_CACHE_VERSION}.json`;
+const TUI_CACHE_FILE_PATTERN = /^tui-data-v\d+\.json$/;
 const scopedWindowCache = new WeakMap<TuiData, Map<string, ScopedWindowData>>();
 
 export interface TimeWindowData {
@@ -201,6 +203,29 @@ export function readCachedTuiData(): TuiData | null {
   }
 }
 
+/** Delete snapshots written by older TUI versions next to the current one. */
+export function removeSupersededTuiCaches(currentPath: string): string[] {
+  const removed: string[] = [];
+  const directory = dirname(currentPath);
+  const current = basename(currentPath);
+  let names: string[];
+  try {
+    names = readdirSync(directory);
+  } catch {
+    return removed;
+  }
+  for (const name of names) {
+    if (name === current || !TUI_CACHE_FILE_PATTERN.test(name)) continue;
+    try {
+      rmSync(join(directory, name), { force: true });
+      removed.push(name);
+    } catch {
+      // Best effort only.
+    }
+  }
+  return removed;
+}
+
 export function writeCachedTuiData(data: TuiData): void {
   const path = getTuiDataCachePath();
   const tmpPath = `${path}.tmp-${process.pid}`;
@@ -213,6 +238,7 @@ export function writeCachedTuiData(data: TuiData): void {
     };
     writeFileSync(tmpPath, `${JSON.stringify(envelope)}\n`, 'utf8');
     renameSync(tmpPath, path);
+    removeSupersededTuiCaches(path);
   } catch {
     try {
       rmSync(tmpPath, { force: true });
