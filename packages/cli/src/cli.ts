@@ -123,7 +123,24 @@ import {
   formatUsd,
   redactWasteReportForExport,
 } from '@tokenleak/core';
-import { assertKnownFlags } from './flag-validation.js';
+import { assertKnownFlags, assertNoStrayPositional } from './flag-validation.js';
+
+/** Subcommands dispatched before the main command, for typo suggestions. */
+const SUBCOMMANDS = [
+  'behavior-diff',
+  'commons',
+  'cursor',
+  'explain',
+  'focus',
+  'nutrition',
+  'pricing',
+  'receipts',
+  'replay',
+  'simulate-routing',
+  'statusline',
+  'usage',
+  'waste',
+] as const;
 import { shouldStartTui } from './tui-launch.js';
 import { finishCommand } from './exit.js';
 import {
@@ -4029,6 +4046,8 @@ async function dispatchCli(): Promise<void> {
   } else {
     try {
       await validateCommandFlags(main, argv, 'tokenleak');
+      const mainArgs = typeof main.args === 'function' ? await main.args() : await main.args;
+      assertNoStrayPositional(argv, (mainArgs ?? {}) as ArgsDef, 'tokenleak', SUBCOMMANDS);
     } catch (error: unknown) {
       handleError(error);
     }

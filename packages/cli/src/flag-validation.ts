@@ -60,6 +60,58 @@ export function suggestFlag(unknown: string, known: Iterable<string>): string | 
   return best;
 }
 
+/**
+ * The first bare word that is neither a flag nor the value of a string flag.
+ * The main command takes no positionals, so a stray word is almost always a
+ * mistyped subcommand (`tokenleak explian`) that would otherwise silently
+ * render the default dashboard.
+ */
+export function findStrayPositional(argv: readonly string[], args: ArgsDef): string | undefined {
+  const takesValue = new Set<string>();
+  for (const [name, def] of Object.entries(args)) {
+    if (def.type !== 'string' && def.type !== 'enum') continue;
+    takesValue.add(`--${name}`);
+    takesValue.add(`--${kebab(name)}`);
+    const aliases = 'alias' in def && def.alias !== undefined ? [def.alias].flat() : [];
+    for (const alias of aliases) takesValue.add(alias.length === 1 ? `-${alias}` : `--${alias}`);
+  }
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === '--') return undefined;
+    if (arg.startsWith('-') && !/^-\d/.test(arg)) {
+      if (!arg.includes('=') && takesValue.has(arg)) i++;
+      continue;
+    }
+    return arg;
+  }
+  return undefined;
+}
+
+/** Throw for a stray word, suggesting the closest subcommand. */
+export function assertNoStrayPositional(
+  argv: readonly string[],
+  args: ArgsDef,
+  command: string,
+  subcommands: readonly string[],
+): void {
+  const stray = findStrayPositional(argv, args);
+  if (stray === undefined) return;
+  let suggestion: string | undefined;
+  let best = MAX_SUGGESTION_DISTANCE + 1;
+  for (const candidate of subcommands) {
+    const distance = editDistance(stray, candidate);
+    if (distance < best) {
+      best = distance;
+      suggestion = candidate;
+    }
+  }
+  throw new TokenleakError(
+    `Unknown command "${stray}" for \`${command}\`.` +
+      (suggestion ? ` Did you mean \`${command} ${suggestion}\`?` : '') +
+      `\nRun \`${command} --help\` to see every command.`,
+  );
+}
+
 /** The first flag-shaped argument that `known` does not contain. */
 export function findUnknownFlag(argv: readonly string[], known: ReadonlySet<string>): string | undefined {
   for (const arg of argv) {

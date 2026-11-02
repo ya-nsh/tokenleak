@@ -980,6 +980,12 @@ describe('CLI invocation', () => {
     expect(await new Response(proc.stderr).text()).toContain('Unknown flag "--colour"');
   });
 
+  test('a mistyped subcommand fails instead of rendering the dashboard', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'explian'], { stdout: 'pipe', stderr: 'pipe' });
+    expect(await proc.exited).toBe(1);
+    expect(await new Response(proc.stderr).text()).toContain('Did you mean `tokenleak explain`?');
+  });
+
   test('--verbose is accepted by every command', async () => {
     const proc = Bun.spawn(['bun', cliPath, 'pricing', '--help', '--verbose'], {
       stdout: 'pipe',
