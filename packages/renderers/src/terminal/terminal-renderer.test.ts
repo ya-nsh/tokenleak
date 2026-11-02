@@ -259,7 +259,7 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('No provider activity in the selected range.');
   });
 
-  it('appends compare data for terminal compare runs', async () => {
+  it('leads with compare data for terminal compare runs', async () => {
     const deltas: CompareDeltas = {
       tokens: 15000,
       cost: 1.25,
@@ -297,6 +297,8 @@ describe('TerminalRenderer', () => {
     expect(result).toContain('Overview');
     expect(result).toContain('Compare');
     expect(result).toContain('Model Mix Shift');
+    // The comparison is what --compare asked for; it must not trail the dashboard.
+    expect(result.indexOf('Compare')).toBeLessThan(result.indexOf('Overview'));
   });
 
   it('keeps compare data visible in compact mode', async () => {

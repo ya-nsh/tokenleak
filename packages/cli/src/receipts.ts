@@ -116,6 +116,7 @@ export function buildReceiptsHelpText(): string {
     '      --pi                Only include Pi',
     '      --open-code         Only include OpenCode',
     '      --all-providers     Ignore provider filters and use every available provider',
+    '  -w, --width <n>         Terminal receipt width (default: terminal width)',
     '      --top <n>           Show top N line items (default: 12)',
     '      --clipboard         Copy rendered receipt to the clipboard (terminal/svg/json)',
     '      --open              Open the generated file (requires --output)',

@@ -9,12 +9,13 @@ import { renderModelEfficiencySection } from './tab-views/model-view';
 
 const MIN_COMPACT_WIDTH = 32;
 
+/** Compare is what `--compare` asked for, so it leads instead of trailing the dashboard. */
 function appendCompareSection(rendered: string, output: TokenleakOutput, options: RenderOptions): string {
   if (!output.more?.compare) {
     return rendered;
   }
 
-  return `${rendered}\n\n${renderCompareView(output, options.width, options.noColor)}`;
+  return `${renderCompareView(output, options.width, options.noColor)}\n\n${rendered}`;
 }
 
 function appendCostCompletenessWarning(rendered: string, output: TokenleakOutput): string {

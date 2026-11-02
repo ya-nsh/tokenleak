@@ -25,8 +25,12 @@ export function parseUsageArgs(args: string[]) {
       refresh = true;
       continue;
     }
+    // Quota output is plain text, so color flags shared by every command are no-ops here.
+    if (arg === '--no-color' || arg === '--noColor') continue;
     if (!['--format', '--provider', '--output', '-o'].includes(arg))
-      throw new Error(`Unknown usage option: ${arg}`);
+      throw new Error(
+        `Unknown flag "${arg}" for \`tokenleak usage\`. Run \`tokenleak usage --help\` for usage.`,
+      );
     const value = args[++i];
     if (!value || value.startsWith('-')) throw new Error(`Missing value for ${arg}`);
     if (arg === '--format') format = value;

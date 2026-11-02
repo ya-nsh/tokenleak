@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { runUsage } from './usage.js';
 import { defineCommand, runMain } from 'citty';
+import type { ArgsDef } from 'citty';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import {
@@ -96,7 +97,7 @@ import type { IRenderer } from '@tokenleak/renderers';
 
 import { loadConfig } from './config.js';
 import { buildDefaultOptimization, loadCompareTokenleakData, loadTokenleakData } from './data-loader.js';
-import { computeDateRange } from './date-range.js';
+import { computeDateRange, resolveDayArgument } from './date-range.js';
 import { loadEnvOverrides } from './env.js';
 import {
   buildCursorHelpText,
@@ -116,6 +117,15 @@ import {
 } from './receipts.js';
 import { buildCliArgTokens } from './flags.js';
 import { buildPricingReport, renderPricingReport } from './pricing-report.js';
+import { assertKnownFlags } from './flag-validation.js';
+import {
+  defaultTerminalWidth,
+  extractGlobalFlags,
+  isVerbose,
+  setVerbose,
+  shouldUseColor,
+} from './output-mode.js';
+import { describeWarningsVerbose, summarizeWarnings } from './warning-summary.js';
 import type { InteractiveExecutionResult, InteractiveRunRequest } from './interactive.js';
 import { shouldStartInteractiveCli, startInteractiveCli } from './interactive.js';
 import { copyToClipboard, openFile, uploadToGist } from './sharing/index.js';
@@ -336,6 +346,7 @@ function buildHelpText(): string {
     '      --legacy            Open the classic interactive launcher instead of TUI',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
+    '      --verbose           Show every skipped log entry and sync detail (any command)',
     '      --help              Show this help',
     '      --version           Show version information',
     '',
@@ -819,12 +830,13 @@ async function selectAvailableProviders(
   }
   const cursorSync = await shouldSyncCursorForRun(config);
   if (cursorSync.error) {
-    if (hasCursorUsageCache()) {
-      process.stderr.write(`Cursor sync failed, using cached data: ${cursorSync.error}\n`);
-    } else if (requestedCursor) {
+    if (requestedCursor && !hasCursorUsageCache()) {
       throw new TokenleakError(cursorSync.error);
-    } else {
-      process.stderr.write(`Cursor sync skipped: ${cursorSync.error}\n`);
+    }
+    // Only interrupt the user about Cursor when they asked for Cursor.
+    if (requestedCursor || isVerbose()) {
+      const fallback = hasCursorUsageCache() ? 'using cached data' : 'skipping Cursor';
+      process.stderr.write(`Cursor sync failed, ${fallback}: ${cursorSync.error}\n`);
     }
   }
 
@@ -941,28 +953,10 @@ function collectProviderWarnings(providers: ProviderData[]): Array<{ provider: s
   );
 }
 
-function emitProviderWarnings(providers: ProviderData[], label: string = 'Warning'): void {
-  for (const { provider, warning } of collectProviderWarnings(providers)) {
-    if (warning.kind === 'unknown-pricing') {
-      const plural = warning.count === 1 ? 'event has' : 'events have';
-      process.stderr.write(
-        `${label}: ${provider} ${warning.count} ${plural} no verified pricing for model "${warning.file}"; cost totals are incomplete.\n`,
-      );
-      continue;
-    }
-
-    if (warning.kind === 'provider-load') {
-      process.stderr.write(
-        `${label}: ${provider} failed to load; data from this provider is omitted.\n`,
-      );
-      continue;
-    }
-
-    const plural = warning.count === 1 ? 'entry' : 'entries';
-    process.stderr.write(
-      `${label}: ${provider} skipped ${warning.count} ${warning.kind} ${plural} in ${warning.file}\n`,
-    );
-  }
+function emitProviderWarnings(...providerLists: ProviderData[][]): void {
+  const warnings = providerLists.flatMap((providers) => collectProviderWarnings(providers));
+  const lines = isVerbose() ? describeWarningsVerbose(warnings) : summarizeWarnings(warnings);
+  for (const line of lines) process.stderr.write(`${line}\n`);
 }
 
 /** Infer format from output file extension. */
@@ -1041,8 +1035,8 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
     theme: 'dark',
     days: DEFAULT_DAYS,
     output: null,
-    width: 80,
-    noColor: false,
+    width: defaultTerminalWidth(),
+    noColor: !shouldUseColor(),
     noInsights: false,
     more: false,
     claude: false,
@@ -1113,6 +1107,9 @@ export function resolveConfig(cliArgs: Record<string, unknown>): {
   }
   if (cliArgs['noColor'] !== undefined) {
     result.noColor = cliArgs['noColor'] as boolean;
+  } else if (result.output !== null && !shouldUseColor({ isTTY: false })) {
+    // A file is never a terminal: keep escape codes out of saved reports.
+    result.noColor = true;
   }
   if (cliArgs['noInsights'] !== undefined) {
     result.noInsights = cliArgs['noInsights'] as boolean;
@@ -1244,6 +1241,9 @@ export function resolveFocusConfig(cliArgs: Record<string, unknown>): FocusConfi
   }
   if (cliArgs['noColor'] !== undefined) {
     result.noColor = cliArgs['noColor'] as boolean;
+  } else if (result.output !== null && !shouldUseColor({ isTTY: false })) {
+    // A file is never a terminal: keep escape codes out of saved reports.
+    result.noColor = true;
   }
   if (cliArgs['provider'] !== undefined) {
     result.provider = cliArgs['provider'] as string;
@@ -1812,7 +1812,7 @@ async function loadOptimizationInput(config: ReturnType<typeof resolveConfig>): 
     days: config.days,
   });
   const { providerDataList } = await loadProviderDataForRange(config, dateRange);
-  emitProviderWarnings(providerDataList, 'Warning');
+  emitProviderWarnings(providerDataList);
   return { dateRange, providers: providerDataList };
 }
 
@@ -2012,7 +2012,7 @@ function parseOptimizationArgs(argv: string[]): Record<string, unknown> {
         cliArgs['noColor'] = true;
         break;
       default:
-        throw new TokenleakError(`Unknown optimization flag "${arg}"`);
+        throw new TokenleakError(`Unknown flag "${arg}". Run the command with --help for usage.`);
     }
   }
   return cliArgs;
@@ -2032,7 +2032,7 @@ async function runBehaviorDiff(cliArgs: Record<string, unknown>): Promise<void> 
   });
   const available = await selectAvailableProviders({ ...config, provider: undefined });
   const { providerDataList } = await loadProviderDataForRange({ ...config, provider: undefined }, dateRange, available);
-  emitProviderWarnings(providerDataList, 'Warning');
+  emitProviderWarnings(providerDataList);
   const events = providerDataList.flatMap((provider) => provider.events ?? []);
   const report = buildAgentBehaviorDiffReport(events, dateRange, selectors[0], selectors[1]);
   const rendered = format === 'json'
@@ -2139,8 +2139,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   // Handle --compare mode.
   if (config.compare) {
     const compareResult = await loadCompareTokenleakData(available, dateRange, config.compare);
-    emitProviderWarnings(compareResult.currentData, 'Warning');
-    emitProviderWarnings(compareResult.previousData, 'Warning');
+    emitProviderWarnings(compareResult.currentData, compareResult.previousData);
 
     if (config.more && (config.format === 'png' || config.format === 'svg')) {
       const renderer = getRenderer(config.format);
@@ -2204,7 +2203,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     process.stderr.write(`Loading usage data (${dateRange.since} to ${dateRange.until})...\n`);
   }
   const { providerDataList } = await loadProviderDataForRange(config, dateRange, available);
-  emitProviderWarnings(providerDataList, 'Warning');
+  emitProviderWarnings(providerDataList);
 
   if (config.wrappedLive) {
     const totalEvents = providerDataList.reduce((s, p) => s + (p.events?.length ?? 0), 0);
@@ -2415,24 +2414,14 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   }
 }
 
-function isValidDateArgument(date: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return false;
-  }
-
-  const parsed = new Date(`${date}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-}
-
 function parseExplainArgs(argv: string[]): { date: string; cliArgs: Record<string, unknown> } {
   if (argv.length === 0 || argv[0]?.startsWith('-')) {
-    throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+    throw new TokenleakError(
+      'tokenleak explain requires a <date> argument: YYYY-MM-DD, "today", or "yesterday"',
+    );
   }
 
-  const date = argv[0]!;
-  if (!isValidDateArgument(date)) {
-    throw new TokenleakError('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
-  }
+  const date = resolveDayArgument('tokenleak explain', argv[0]!);
 
   const cliArgs: Record<string, unknown> = {};
   let index = 1;
@@ -2526,10 +2515,7 @@ export function parseReplayArgs(argv: string[]): { date: string; cliArgs: Record
   let dateExplicit = false;
 
   if (argv.length > 0 && !argv[0]!.startsWith('-')) {
-    date = argv[0]!;
-    if (!isValidDateArgument(date)) {
-      throw new TokenleakError('tokenleak replay date must be in YYYY-MM-DD format');
-    }
+    date = resolveDayArgument('tokenleak replay', argv[0]!);
     dateExplicit = true;
   }
 
@@ -2990,7 +2976,7 @@ async function runReplay(date: string, cliArgs: Record<string, unknown>): Promis
   }
 
   const replayOutput = await loadTokenleakData(available, replayRange);
-  emitProviderWarnings(replayOutput.providers, 'Warning');
+  emitProviderWarnings(replayOutput.providers);
   const report = buildReplayReport(replayOutput.providers, date);
 
   if (recordPath !== null) {
@@ -3151,7 +3137,7 @@ async function runExplain(date: string, cliArgs: Record<string, unknown>): Promi
   }
 
   const explainOutput = await loadTokenleakData(available, explainRange);
-  emitProviderWarnings(explainOutput.providers, 'Warning');
+  emitProviderWarnings(explainOutput.providers);
   const report = buildExplainReport(explainOutput.providers, date);
   const rendered =
     format === 'json'
@@ -3224,6 +3210,17 @@ export function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
         cliArgs['provider'] = argv[index + 1]!;
         index += 2;
         break;
+      case '--width':
+      case '-w': {
+        if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
+        const width = Number(argv[index + 1]!);
+        if (!Number.isInteger(width) || width <= 0) {
+          throw new TokenleakError('--width must be a positive integer');
+        }
+        cliArgs['width'] = width;
+        index += 2;
+        break;
+      }
       case '--top': {
         if (argv[index + 1] === undefined) throw new TokenleakError(`${arg} requires a value`);
         const parsed = Number(argv[index + 1]!);
@@ -3279,7 +3276,9 @@ export function parseReceiptsArgs(argv: string[]): Record<string, unknown> {
         index += 2;
         break;
       default:
-        throw new TokenleakError(`Unknown receipts flag "${arg}"`);
+        throw new TokenleakError(
+          `Unknown flag "${arg}" for \`tokenleak receipts\`. Run \`tokenleak receipts --help\` for usage.`,
+        );
     }
   }
 
@@ -3376,7 +3375,7 @@ async function runReceipts(cliArgs: Record<string, unknown>): Promise<void> {
   }
 
   const data = await loadTokenleakData(available, range);
-  emitProviderWarnings(data.providers, 'Warning');
+  emitProviderWarnings(data.providers);
   const events = collectEventsForReceipt(data.providers);
   const receipt = buildReceipt(events, range, topLines !== undefined ? { topLines } : {});
 
@@ -3821,6 +3820,16 @@ const nutritionMain = defineCommand({
   },
 });
 
+/** citty ignores unknown flags; check them against the command's own definition. */
+async function validateCommandFlags(
+  command: { args?: unknown },
+  argv: readonly string[],
+  name: string,
+): Promise<void> {
+  const resolved = typeof command.args === 'function' ? await command.args() : await command.args;
+  assertKnownFlags(argv, (resolved ?? {}) as ArgsDef, name);
+}
+
 // Only run when executed directly, not when imported by tests
 const isDirectExecution =
   typeof Bun !== 'undefined'
@@ -3829,7 +3838,9 @@ const isDirectExecution =
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
 if (isDirectExecution) {
-  const normalizedArgv = normalizeCliArgv(process.argv.slice(2));
+  const globals = extractGlobalFlags(process.argv.slice(2));
+  if (globals.verbose) setVerbose(true);
+  const normalizedArgv = normalizeCliArgv(globals.argv);
   const argv = normalizedArgv;
 
   if (argv[0] === 'usage') {
@@ -3926,6 +3937,7 @@ if (isDirectExecution) {
     }
 
     try {
+      await validateCommandFlags(focusMain, focusArgv, 'tokenleak focus');
       await initPricing();
     } catch (error: unknown) {
       handleError(error);
@@ -4020,6 +4032,7 @@ if (isDirectExecution) {
     }
 
     try {
+      await validateCommandFlags(nutritionMain, nutritionArgv, 'tokenleak nutrition');
       await initPricing();
     } catch (error: unknown) {
       handleError(error);
@@ -4122,6 +4135,11 @@ if (isDirectExecution) {
       handleError(error);
     }
   } else {
+    try {
+      await validateCommandFlags(main, argv, 'tokenleak');
+    } catch (error: unknown) {
+      handleError(error);
+    }
     await initPricing();
     await runMain(main);
   }

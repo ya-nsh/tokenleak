@@ -1,3 +1,4 @@
+import { defaultTerminalWidth, shouldUseColor } from './output-mode';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import {
   buildInteractiveSummary,
@@ -496,8 +497,8 @@ describe('resolveConfig', () => {
     expect(config.format).toBe('terminal');
     expect(config.theme).toBe('dark');
     expect(config.days).toBe(90);
-    expect(config.width).toBe(80);
-    expect(config.noColor).toBe(false);
+    expect(config.width).toBe(defaultTerminalWidth());
+    expect(config.noColor).toBe(!shouldUseColor());
     expect(config.noInsights).toBe(false);
     expect(config.more).toBe(false);
     expect(config.output).toBeNull();
@@ -1265,7 +1266,35 @@ describe('CLI invocation', () => {
     const stderr = await new Response(proc.stderr).text();
 
     expect(exitCode).toBe(1);
-    expect(stderr).toContain('tokenleak explain requires a <date> argument in YYYY-MM-DD format');
+    expect(stderr).toContain('"not-a-date" is not in YYYY-MM-DD format');
+  });
+
+  test('unknown flags exit 1, suggest the closest flag, and print usage', async () => {
+    const proc = Bun.spawn(['bun', cliPath, '--day', '30'], { stdout: 'pipe', stderr: 'pipe' });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('Unknown flag "--day"');
+    expect(stderr).toContain('Did you mean "--days"?');
+    expect(stderr).toContain('Usage: tokenleak [flags]');
+  });
+
+  test('subcommands built on citty reject unknown flags too', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'focus', '--bogus'], { stdout: 'pipe', stderr: 'pipe' });
+    const exitCode = await proc.exited;
+    const stderr = await new Response(proc.stderr).text();
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('Unknown flag "--bogus" for `tokenleak focus`');
+  });
+
+  test('--verbose is accepted by every command', async () => {
+    const proc = Bun.spawn(['bun', cliPath, 'pricing', '--help', '--verbose'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(await proc.exited).toBe(0);
   });
 });
 

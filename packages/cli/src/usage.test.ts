@@ -43,3 +43,8 @@ test('JSON output works without any historical logs and preserves per-provider f
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('usage accepts the shared --no-color flag and names unknown flags', () => {
+  expect(parseUsageArgs(['--no-color', '--json']).format).toBe('json');
+  expect(() => parseUsageArgs(['--bogus'])).toThrow('Unknown flag "--bogus" for `tokenleak usage`');
+});

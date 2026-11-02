@@ -141,8 +141,9 @@ tokenleak -o report.json
 tokenleak -o heatmap.svg
 tokenleak -o card.png
 
-# Explain one day's usage
+# Explain one day's usage (dates also accept "today" and "yesterday")
 tokenleak explain 2026-03-10
+tokenleak explain yesterday
 tokenleak explain 2026-03-10 --format json
 
 # Replay a day's session timeline
@@ -465,7 +466,14 @@ tokenleak --no-insights
 
 # Add expanded analytics to terminal/image/json output
 tokenleak --more
+
+# Show every skipped log entry and sync detail (works with any command)
+tokenleak --verbose
 ```
+
+Terminal output follows your terminal: width defaults to the terminal's columns (40–140), and color is used only when stdout is a TTY. Piped or redirected output is plain text. `NO_COLOR=1` disables color everywhere; `FORCE_COLOR=1` keeps it when piping.
+
+Unknown or misspelled flags fail with exit code 1 and suggest the closest flag, so `tokenleak --day 30` no longer silently shows 90 days.
 
 With `--more`, Tokenleak surfaces:
 
