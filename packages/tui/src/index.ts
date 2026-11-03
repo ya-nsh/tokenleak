@@ -16,6 +16,7 @@ import type { TuiData } from './lib/data.js';
 import { createDataEngine } from './lib/engine.js';
 import type { DataEngine } from './lib/engine.js';
 import type { ReportKind, ReportResults } from './lib/engine-core.js';
+import { createReportTask } from './lib/report-task.js';
 import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader, buildSubTabBar } from './panels/header.js';
@@ -210,23 +211,24 @@ function dataEngine(): DataEngine {
   return engine;
 }
 
-/**
- * A view task that asks the engine for one report of the selected window and
- * hands it to `assign`, unless the data was reloaded while it was computing.
- */
+/** A view task that fetches one report of the selected window for the view keyed `key`. */
 function requestReport<K extends ReportKind>(
   state: AppState,
+  key: string,
   kind: K,
   assign: (report: ReportResults[K]) => void,
   date: string | null = null,
 ): () => Promise<void> {
-  return async () => {
-    const data = state.data;
-    const report = await dataEngine().report({ kind, window: state.selectedWindowIndex, date });
-    if (state.data !== data) return;
-    if (report === null) throw new Error('no data for this window');
-    assign(report);
-  };
+  return createReportTask(
+    {
+      report: (request) => dataEngine().report(request),
+      currentData: () => state.data,
+      currentKey: () => getSelectedViewTaskKey(state),
+    },
+    key,
+    { kind, window: state.selectedWindowIndex, date },
+    assign,
+  );
 }
 
 function nutritionWindowKey(state: AppState): string | null {
@@ -300,7 +302,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     case 'matrix':
       if (hasWindowData && state.matrixPage > 0 && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'matrix');
-        return deferredPanelForTask(state, renderer, key, 'Matrix', requestReport(state, 'more', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Matrix', requestReport(state, key, 'more', (report) => {
           state.cachedMoreStats = report;
         }));
       }
@@ -311,7 +313,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'advisor');
-        return deferredPanelForTask(state, renderer, key, 'Advisor', requestReport(state, 'savings', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Advisor', requestReport(state, key, 'savings', (report) => {
           state.cachedSavingsReport = report;
         }));
       }
@@ -322,7 +324,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedFocusReport) {
         const key = getSelectedViewTaskKey(state, 'focus');
-        return deferredPanelForTask(state, renderer, key, 'Focus Sessions', requestReport(state, 'focus', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Focus Sessions', requestReport(state, key, 'focus', (report) => {
           state.cachedFocusReport = report;
         }));
       }
@@ -334,7 +336,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       ensureExplainDate(state);
       if (!state.cachedExplainReport || state.cachedExplainReport.date !== state.explainDate) {
         const key = getSelectedViewTaskKey(state, 'explain');
-        return deferredPanelForTask(state, renderer, key, 'Explain', requestReport(state, 'explain', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Explain', requestReport(state, key, 'explain', (report) => {
           state.cachedExplainReport = report;
         }, state.explainDate));
       }
@@ -345,7 +347,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedCompareOutput) {
         const key = getSelectedViewTaskKey(state, 'compare');
-        return deferredPanelForTask(state, renderer, key, 'Compare', requestReport(state, 'compare', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Compare', requestReport(state, key, 'compare', (report) => {
           state.cachedCompareOutput = report;
         }));
       }
@@ -370,7 +372,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedReplayReport || state.cachedReplayReport.date !== state.replayDate) {
         const key = getSelectedViewTaskKey(state, 'replay');
-        return deferredPanelForTask(state, renderer, key, 'Replay', requestReport(state, 'replay', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Replay', requestReport(state, key, 'replay', (report) => {
           state.cachedReplayReport = report;
         }, state.replayDate));
       }
@@ -393,8 +395,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedNutritionReport) {
         const key = getSelectedViewTaskKey(state, 'nutrition');
-        const loadNutrition = requestReport(state, 'nutrition', (report) => {
-          if (getSelectedViewTaskKey(state, 'nutrition') !== key) return;
+        const loadNutrition = requestReport(state, key, 'nutrition', (report) => {
           state.cachedNutritionReport = report;
           const signalKey = nutritionWindowKey(state);
           if (signalKey) {
@@ -419,7 +420,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     case 'wrapped': {
       if (hasWindowData && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'wrapped');
-        return deferredPanelForTask(state, renderer, key, 'Wrapped', requestReport(state, 'more', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Wrapped', requestReport(state, key, 'more', (report) => {
           state.cachedMoreStats = report;
         }));
       }
@@ -446,7 +447,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedReceipt) {
         const key = getSelectedViewTaskKey(state, 'receipts');
-        return deferredPanelForTask(state, renderer, key, 'Receipts', requestReport(state, 'receipt', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Receipts', requestReport(state, key, 'receipt', (report) => {
           state.cachedReceipt = report;
         }));
       }
@@ -465,7 +466,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedRoutingSimulationReport) {
         const key = getSelectedViewTaskKey(state, 'simulator');
-        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', requestReport(state, 'routing', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', requestReport(state, key, 'routing', (report) => {
           state.cachedRoutingSimulationReport = report;
         }));
       }
@@ -481,7 +482,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'waste');
-        return deferredPanelForTask(state, renderer, key, 'Waste Signals', requestReport(state, 'savings', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Waste Signals', requestReport(state, key, 'savings', (report) => {
           state.cachedSavingsReport = report;
         }));
       }
@@ -497,7 +498,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedBehaviorDiffReport) {
         const key = getSelectedViewTaskKey(state, 'behavior');
-        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', requestReport(state, 'behavior', (report) => {
+        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', requestReport(state, key, 'behavior', (report) => {
           state.cachedBehaviorDiffReport = report;
         }));
       }
@@ -882,12 +883,11 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
   }
   if (!state.data) return; // still booting; nothing to render yet
   const data = state.data;
+  const window = state.selectedWindowIndex;
   try {
     // The live site runs in the engine and never writes to stdout/stderr, so it cannot corrupt the TUI.
-    const site = await dataEngine().call('openLiveSite', {
-      replay: { window: state.selectedWindowIndex, date: state.replayDate },
-    });
-    if (state.data !== data || !site.replay || !site.urls.replay) return;
+    const site = await dataEngine().call('openLiveSite', { replay: { window, date: state.replayDate } });
+    if (state.data !== data || state.selectedWindowIndex !== window || !site.replay || !site.urls.replay) return;
     state.replayDate = site.replay.date;
     state.cachedReplayReport = site.replay.report;
     state.replayLiveServerPort = site.port;
