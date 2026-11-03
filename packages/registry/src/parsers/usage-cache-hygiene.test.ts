@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { UsageFileCache, pruneUsageCacheDirectory } from './usage-cache';
+import { Database } from 'bun:sqlite';
+import { UsageFileCache, pruneRetiredJsonCaches } from './usage-cache';
 
 const HEX = 'a'.repeat(64);
 const OTHER_HEX = 'b'.repeat(64);
@@ -32,42 +33,78 @@ function touch(name: string, ageMs: number): void {
   utimesSync(path, time, time);
 }
 
-describe('pruneUsageCacheDirectory', () => {
-  const keep = { family: 'claude-code', version: '6', fileName: `claude-code-v6-${HEX}.json` };
-
-  test('removes other versions, legacy files, old temps, and long-unused roots', () => {
-    touch(keep.fileName, 0);
-    touch(`claude-code-v5-${HEX}.json`, 0);
-    touch(`claude-code-v4-${OTHER_HEX}.json`, 0);
+describe('pruneRetiredJsonCaches', () => {
+  test('removes every pre-SQLite JSON cache and old temp files', () => {
+    touch(`claude-code-v6-${HEX}.json`, 0);
+    touch(`codex-v4-${OTHER_HEX}.json`, 0);
     touch(`${OTHER_HEX}.json`, 0);
     touch(`claude-code-v6-${HEX}.json.1234.tmp`, 2 * 60 * 60 * 1_000);
-    touch(`claude-code-v6-${OTHER_HEX}.json`, 40 * DAY_MS);
 
-    const removed = pruneUsageCacheDirectory(cacheDir, keep).sort();
+    const removed = pruneRetiredJsonCaches(cacheDir).sort();
 
     expect(removed).toEqual(
       [
         `${OTHER_HEX}.json`,
-        `claude-code-v4-${OTHER_HEX}.json`,
-        `claude-code-v5-${HEX}.json`,
+        `claude-code-v6-${HEX}.json`,
         `claude-code-v6-${HEX}.json.1234.tmp`,
-        `claude-code-v6-${OTHER_HEX}.json`,
+        `codex-v4-${OTHER_HEX}.json`,
       ].sort(),
     );
-    expect(readdirSync(cacheDir)).toEqual([keep.fileName]);
+    expect(readdirSync(cacheDir)).toEqual([]);
   });
 
-  test('keeps other families, recent temps, and recently used roots', () => {
-    touch(`codex-v4-${HEX}.json`, 0);
-    touch(`claude-code-v6-${OTHER_HEX}.json`, 2 * DAY_MS);
+  test('keeps the store, recent temps and unrelated files', () => {
+    touch('usage.sqlite', 0);
     touch(`claude-code-v6-${HEX}.json.99.tmp`, 60_000);
-    touch(`claude-code-vision-v1-${HEX}.json`, 0);
+    touch('notes.json', 0);
 
-    expect(pruneUsageCacheDirectory(cacheDir, keep)).toEqual([]);
+    expect(pruneRetiredJsonCaches(cacheDir)).toEqual([]);
   });
 
   test('a missing directory is a no-op', () => {
-    expect(pruneUsageCacheDirectory(join(dir, 'nope'), keep)).toEqual([]);
+    expect(pruneRetiredJsonCaches(join(dir, 'nope'))).toEqual([]);
+  });
+});
+
+describe('store pruning', () => {
+  const valid = (value: unknown) => typeof value === 'object' && value !== null;
+  const cacheKeys = (): string[] => {
+    const db = new Database(join(cacheDir, 'usage.sqlite'));
+    try {
+      return (db.query('SELECT family || \'@\' || version FROM caches ORDER BY 1').values() as [string][]).map(
+        ([key]) => key,
+      );
+    } finally {
+      db.close();
+    }
+  };
+  const fill = async (namespace: string, root: string) => {
+    const source = join(dir, 'session.jsonl');
+    writeFileSync(source, 'x');
+    const cache = new UsageFileCache<object>(namespace, root, valid);
+    await cache.read(source, async () => ({ records: [{}], warnings: [] }));
+    await cache.save();
+  };
+
+  test('drops other parser versions of the same provider but keeps other providers', async () => {
+    await fill('claude-code-v1', dir);
+    await fill('codex-v1', dir);
+    await fill('claude-code-v2', dir);
+    expect(cacheKeys()).toEqual(['claude-code@2', 'codex@1']);
+  });
+
+  test('drops roots of the same provider unused for 30 days', async () => {
+    await fill('claude-code-v1', join(dir, 'old-root'));
+    const db = new Database(join(cacheDir, 'usage.sqlite'));
+    db.query('UPDATE caches SET last_used = ?').run(Date.now() - 31 * DAY_MS);
+    db.close();
+    await fill('claude-code-v1', join(dir, 'new-root'));
+    const check = new Database(join(cacheDir, 'usage.sqlite'));
+    const roots = (check.query('SELECT COUNT(*) AS n FROM caches').get() as { n: number }).n;
+    const entries = (check.query('SELECT COUNT(*) AS n FROM entries').get() as { n: number }).n;
+    check.close();
+    expect(roots).toBe(1);
+    expect(entries).toBe(1);
   });
 });
 
@@ -83,8 +120,9 @@ describe('prompt packing', () => {
     await writer.read(source, async () => ({ records, warnings: [] }));
     await writer.save();
 
-    const file = readdirSync(cacheDir).find((name) => name.startsWith('test-v1-'))!;
-    const raw = readFileSync(join(cacheDir, file), 'utf8');
+    const db = new Database(join(cacheDir, 'usage.sqlite'));
+    const { payload: raw } = db.query('SELECT payload FROM entries').get() as { payload: string };
+    db.close();
     expect(raw.split('refactor the parser').length - 1).toBe(50);
 
     const reader = new UsageFileCache<{ id: number; prompt?: string; promptId?: string }>('test-v1', dir, valid);

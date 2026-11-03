@@ -53,7 +53,7 @@ the next snapshot. Parse/oversize warnings are retained; failed reads are retrie
 Missing or invalid JSON snapshots fall back to parsing. Writes use unique temporary
 files, atomic rename and private permissions; persistence failures are nonfatal.
 
-- Default usage cache: `~/.cache/tokenleak/usage`.
+- Default usage cache: `~/.cache/tokenleak/usage/usage.sqlite` (see "SQLite usage store" below).
 - `TOKENLEAK_USAGE_CACHE_DIR` chooses another cache directory.
 - `TOKENLEAK_USAGE_CACHE=0` bypasses usage caching for diagnosis.
 - `TOKENLEAK_CURSOR_SYNC_INTERVAL_MS=0` forces automatic Cursor sync on every run.
@@ -111,3 +111,39 @@ Post-integration validation: **1,179 tests passed, 1 skipped, 0 failed**, and al
 ten workspace build/type-check tasks passed. Both original review reproductions
 now retain correct behavior, with regression coverage for repeated invalid-cache
 loads and credential replacement during a pending request.
+
+## SQLite usage store
+
+The per-root JSON snapshots were replaced by one SQLite database,
+`usage.sqlite`, in the same directory. Each source file is one row holding its
+stamp, its extracted records and warnings, and optional resume data. An
+unchanged file costs one row lookup, and a save writes only changed rows. A
+growing session therefore no longer rewrites the whole cache, which was about
+70 MB for Claude Code on the audit machine. JSON snapshots from earlier
+versions are deleted on the next save.
+
+Claude Code transcripts are also read incrementally. A parse records the byte
+offset after its last newline-terminated line, the parser state at that point
+(the last user prompt and its sequence number), and SHA-256 hashes of the first
+and last 4 KiB of the consumed prefix. On the next read, a file with the same
+device and inode, at least that many bytes, and matching hashes is parsed only
+from that offset. A shrunk, replaced or rewritten file is reparsed in full, as
+before. Records from an unterminated final line are returned, but they are
+counted separately and read again on resume.
+
+`entries` is an ordinary rowid table with a unique `(cache_key, file)` key.
+Payloads average over 100 KiB, and a `WITHOUT ROWID` layout made each lookup
+5 to 10 times slower. The database uses WAL mode and a 2 s busy timeout so
+concurrent tokenleak processes can share it. A corrupt database is deleted and
+rebuilt once. An unwritable location disables caching.
+
+Measured on the Claude Code history alone (51k events, 545 transcripts), six
+loads 2 s apart while one session kept writing:
+
+| | cold | warm while a session is live |
+|---|---|---|
+| JSON snapshots | 6.2 s | 513–609 ms (255 ms once idle) |
+| SQLite store | 7.3 s | 274–356 ms |
+
+Resumed, warm and uncached parses were deep-equal on 25 real transcripts
+truncated mid-line, then completed by appending.
