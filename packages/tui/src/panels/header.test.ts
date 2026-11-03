@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { CliRenderer } from '@opentui/core';
+import type { AppState } from '../lib/state.js';
 import { createInitialState } from '../lib/state.js';
-import { buildHeader, buildSubTabBar } from './header.js';
+import { buildHeader, buildSubTabBar, filterChipText } from './header.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -120,5 +121,30 @@ describe('buildSubTabBar', () => {
     const text = collectTextContent(buildSubTabBar(state, { width: 50 } as CliRenderer)).join('');
     expect(text).toContain('Receipts');
     expect(text).not.toContain('U: quotas');
+  });
+});
+
+describe('filterChipText', () => {
+  const withFilter = (filter: { provider?: string; model?: string }) => {
+    const state = createInitialState();
+    state.filter = filter;
+    state.data = { filterOptions: { providers: [{ key: 'claude-code', label: 'Claude Code' }], models: [] } } as unknown as AppState['data'];
+    return state;
+  };
+
+  test('is empty without a filter', () => {
+    expect(filterChipText(createInitialState(), 80)).toBe('');
+  });
+
+  test('names the provider by label and the model, with the clear key', () => {
+    expect(filterChipText(withFilter({ provider: 'claude-code', model: 'opus' }), 80)).toBe('◆ Claude Code › opus  x:clear');
+    expect(filterChipText(withFilter({ model: 'opus' }), 80)).toBe('◆ opus  x:clear');
+  });
+
+  test('shortens to the budget and degrades to a marker', () => {
+    const text = filterChipText(withFilter({ provider: 'claude-code', model: 'claude-opus-5-5' }), 20);
+    expect(text.length).toBeLessThanOrEqual(20);
+    expect(text.endsWith('x:clear')).toBe(true);
+    expect(filterChipText(withFilter({ model: 'opus' }), 6)).toBe('◆');
   });
 });

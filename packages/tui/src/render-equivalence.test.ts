@@ -90,6 +90,7 @@ describe('patched frames', () => {
     states.push(stateFor('overview', 1, (s) => (s.palette = { query: '', selected: 3 })));
     states.push(stateFor('overview', 1, (s) => (s.palette = { query: 'rcpt', selected: 0 })));
     states.push(stateFor('overview', 1, (s) => (s.palette = { query: 'zzzz', selected: 0 })));
+    states.push(stateFor('overview', 1, (s) => (s.filter = { provider: 'codex', model: 'claude-haiku-5-5' })));
 
     for (const order of [states, [...states].reverse()]) {
       for (const state of order) {
