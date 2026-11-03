@@ -3,19 +3,23 @@ import { TokenleakError } from './errors.js';
 import { assertKnownFlags } from './flag-validation.js';
 import { buildVersionText } from './report-output.js';
 
-function normalizeCliArg(arg: string): string {
-  const flagMap: Record<string, string> = {
-    '--all-providers': '--allProviders',
-    '--list-providers': '--listProviders',
-    '--open-code': '--openCode',
-    '--live-server': '--liveServer',
-    '--wrapped-live': '--wrappedLive',
-    '--no-color': '--noColor',
-    '--no-insights': '--noInsights',
-    '--include-prompts': '--includePrompts',
-  };
+/**
+ * Kebab-case flags citty only knows in camelCase. A Map, not an object
+ * literal, so argv words like `constructor` cannot hit Object.prototype.
+ */
+const CAMEL_CASE_FLAGS: ReadonlyMap<string, string> = new Map([
+  ['--all-providers', '--allProviders'],
+  ['--list-providers', '--listProviders'],
+  ['--open-code', '--openCode'],
+  ['--live-server', '--liveServer'],
+  ['--wrapped-live', '--wrappedLive'],
+  ['--no-color', '--noColor'],
+  ['--no-insights', '--noInsights'],
+  ['--include-prompts', '--includePrompts'],
+]);
 
-  return flagMap[arg] ?? arg;
+function normalizeCliArg(arg: string): string {
+  return CAMEL_CASE_FLAGS.get(arg) ?? arg;
 }
 
 export function normalizeCliArgv(argv: string[]): string[] {

@@ -19,6 +19,7 @@ describe('subcommand dispatch', () => {
   // Each subcommand answers --help without loading provider data.
   const HELP_MARKERS: Array<[string, string]> = [
     ['behavior-diff', 'tokenleak behavior-diff'],
+    ['explain', 'tokenleak explain'],
     ['commons', 'tokenleak commons'],
     ['cursor', 'tokenleak cursor'],
     ['focus', 'tokenleak focus'],
@@ -52,6 +53,25 @@ describe('subcommand dispatch', () => {
     expect(exitCode).toBe(1);
     expect(stderr).toContain('Missing value for --severity');
   });
+
+  test('explain answers --help after a date too, and still requires a date otherwise', async () => {
+    const withDate = await runCli(['explain', '2026-01-01', '--help']);
+    expect(withDate.exitCode).toBe(0);
+    expect(withDate.stdout).toContain('tokenleak explain');
+
+    const missing = await runCli(['explain']);
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stderr).toContain('requires a <date> argument');
+  });
+
+  test.each(['constructor', 'toString', '__proto__'])(
+    'a prototype name like %p is an unknown command, not a crash',
+    async (word) => {
+      const { exitCode, stderr } = await runCli([word]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain(`Unknown command "${word}"`);
+    },
+  );
 
   test('a misspelled subcommand is rejected with a suggestion', async () => {
     const { exitCode, stderr } = await runCli(['wste']);

@@ -10,7 +10,7 @@ import {
   validateProviderSelection,
 } from '../providers.js';
 import { resolveConfig, resolveTerminalJsonFormat } from '../report-options.js';
-import { printInfoFlag } from '../args.js';
+import { infoFlagsFromArgv, printInfoFlag } from '../args.js';
 import { initPricing } from '@tokenleak/registry';
 
 export function parseExplainArgs(argv: string[]): {
@@ -142,8 +142,9 @@ export async function runExplain(date: string, cliArgs: Record<string, unknown>)
 
 /** `tokenleak explain <date>`: `argv` is everything after the subcommand name. */
 export async function explainCommand(argv: string[]): Promise<void> {
+  // Before parsing: `explain --help` has no date, and the date is required.
+  if (printInfoFlag(infoFlagsFromArgv(argv), buildExplainHelpText)) return;
   const { date, cliArgs } = parseExplainArgs(argv);
-  if (printInfoFlag(cliArgs, buildExplainHelpText)) return;
   await initPricing();
   await runExplain(date, cliArgs);
 }
