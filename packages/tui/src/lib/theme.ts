@@ -1,17 +1,25 @@
-import { createTextAttributes } from '@opentui/core';
+import { RGBA, createTextAttributes } from '@opentui/core';
 
-/** Bloomberg-style color palette */
+/**
+ * The palette every view draws with. Muted, high-contrast tones on a deep
+ * neutral background; the names describe roles in the original palette
+ * (green for volume, amber for money, red for warnings).
+ */
 export const COLORS = {
-  bg: '#0a0a0a',
-  bgPanel: '#111111',
-  green: '#00ff00',
-  amber: '#ffb900',
-  cyan: '#00bcd4',
-  red: '#ff4444',
-  white: '#e0e0e0',
-  dimWhite: '#888888',
-  magenta: '#ff66ff',
-  blue: '#4488ff',
+  bg: '#0d1117',
+  bgPanel: '#161b22',
+  green: '#3fb950',
+  amber: '#e3b341',
+  cyan: '#39c5cf',
+  red: '#f85149',
+  white: '#e6edf3',
+  dimWhite: '#7d8590',
+  magenta: '#d2a8ff',
+  blue: '#58a6ff',
+  /** Panel borders and rules that should recede. */
+  border: '#30363d',
+  /** Folded "everything else" series in charts. */
+  muted: '#484f58',
 } as const;
 
 /** Pre-computed text attributes */
@@ -48,14 +56,14 @@ export const PROVIDER_COLORS: Record<string, string> = {
 
 /** Model colors for chart segments (8 distinct colors) */
 export const MODEL_COLORS = [
-  '#ffb900', // amber
-  '#00bcd4', // cyan
-  '#ff66ff', // magenta
-  '#4488ff', // blue
-  '#00ff00', // green
-  '#ff4444', // red
-  '#22c55e', // emerald
-  '#8b5cf6', // purple
+  '#e3b341', // amber
+  '#39c5cf', // cyan
+  '#d2a8ff', // lavender
+  '#58a6ff', // blue
+  '#3fb950', // green
+  '#f78166', // coral
+  '#56d364', // mint
+  '#a371f7', // purple
 ] as const;
 
 /** Pre-computed dim text attributes */
@@ -72,4 +80,16 @@ const CYCLE_COLORS = [
 
 export function getProviderColor(providerName: string, index: number): string {
   return PROVIDER_COLORS[providerName] ?? CYCLE_COLORS[index % CYCLE_COLORS.length] ?? COLORS.green;
+}
+
+const rgbaCache = new Map<string, RGBA>();
+
+/** A shared RGBA for a hex colour, for styled text built every frame. */
+export function rgba(hex: string): RGBA {
+  let color = rgbaCache.get(hex);
+  if (!color) {
+    color = RGBA.fromHex(hex);
+    rgbaCache.set(hex, color);
+  }
+  return color;
 }

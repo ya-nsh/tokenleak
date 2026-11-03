@@ -11,7 +11,7 @@ import {
 import { computeAchievements } from '@tokenleak/renderers';
 import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
-import { getDailyForWindow, deriveReceiptLines, buildTokenleakOutput } from './lib/data.js';
+import { deriveReceiptLines, buildTokenleakOutput } from './lib/data.js';
 import type { TuiData } from './lib/data.js';
 import { createDataEngine } from './lib/engine.js';
 import type { DataEngine } from './lib/engine.js';
@@ -22,9 +22,7 @@ import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader, buildSubTabBar } from './panels/header.js';
 import { adjacentView, groupOfView, viewForKey } from './lib/views.js';
-import { createChartPanel } from './panels/chart-panel.js';
-import { createStatsRow } from './panels/stats-row.js';
-import { createModelList } from './panels/model-list.js';
+import { createOverview, overviewLayout, tableListRows } from './panels/overview.js';
 import { buildStatusBar } from './panels/status-bar.js';
 import { createMatrixView } from './panels/bloomberg.js';
 import { advisorVisibleItems, createAdvisorPanel } from './panels/advisor.js';
@@ -268,7 +266,6 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   }
 
   const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
-  const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
   const hasWindowData = Boolean(state.data?.windows[state.selectedWindowIndex]);
 
   if (state.selectedView === 'quotas') {
@@ -286,13 +283,17 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   }
 
   switch (state.selectedView) {
-    case 'overview':
-      return Box(
-        { flexDirection: 'column', width: '100%', flexGrow: 1 },
-        createChartPanel(state, daily),
-        createStatsRow(state, windowStats),
-        createModelList(state, windowStats, renderer.terminalWidth),
-      );
+    case 'overview': {
+      // The savings line is fetched in the background; the dashboard draws without it.
+      const savingsKey = getSelectedViewTaskKey(state, 'overview');
+      const savingsPending = hasWindowData && !state.cachedSavingsReport && !state.viewTasks.errors[savingsKey];
+      if (savingsPending) {
+        scheduleViewTask(state, renderer, savingsKey, 'savings', requestReport(state, savingsKey, 'savings', (report) => {
+          state.cachedSavingsReport = report;
+        }));
+      }
+      return createOverview(state, renderer.width, viewHeight(state, renderer), savingsPending);
+    }
     case 'matrix':
       if (hasWindowData && state.matrixPage > 0 && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'matrix');
@@ -1514,7 +1515,9 @@ export async function main(): Promise<void> {
       if (state.selectedView === 'overview') {
         const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats;
         const modelCount = (windowStats?.allModels ?? windowStats?.topModels)?.length ?? 0;
-        const visibleCount = 10;
+        const longestTable = Math.max(modelCount, state.data?.providers.length ?? 0);
+        const tableRows = overviewLayout(renderer.width, viewHeight(state, renderer), longestTable).tableRows;
+        const visibleCount = tableListRows(modelCount, tableRows);
         const maxOffset = Math.max(0, modelCount - visibleCount);
         if (state.modelScrollOffset < maxOffset) {
           state.modelScrollOffset++;

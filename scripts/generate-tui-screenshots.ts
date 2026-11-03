@@ -1,39 +1,25 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { Box, TextAttributes } from '@opentui/core';
+import { TextAttributes } from '@opentui/core';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { CapturedFrame, CapturedSpan } from '@opentui/core/types';
 import type { CliRenderer } from '@opentui/core';
-import type { TokenleakOutput } from '@tokenleak/core';
-import { computeAchievements } from '@tokenleak/renderers';
-import { SCHEMA_VERSION } from '../packages/core/dist/index.js';
-import { buildHeader, buildSubTabBar } from '../packages/tui/dist/panels/header.js';
-import { createChartPanel } from '../packages/tui/dist/panels/chart-panel.js';
-import { createStatsRow } from '../packages/tui/dist/panels/stats-row.js';
-import { createModelList } from '../packages/tui/dist/panels/model-list.js';
-import { buildStatusBar } from '../packages/tui/dist/panels/status-bar.js';
-import { createMatrixView } from '../packages/tui/dist/panels/bloomberg.js';
-import { createAdvisorPanel } from '../packages/tui/dist/panels/advisor.js';
-import { createFocusPanel } from '../packages/tui/dist/panels/focus.js';
-import { createExplainPanel } from '../packages/tui/dist/panels/explain.js';
-import { createComparePanel } from '../packages/tui/dist/panels/compare.js';
-import { createExportPanel } from '../packages/tui/dist/panels/export.js';
-import { createWrappedPanel } from '../packages/tui/dist/panels/wrapped.js';
+import { buildLayout } from '../packages/tui/dist/index.js';
 import {
   loadAllData,
-  getDailyForWindow,
   ensureSavingsReport,
   ensureFocusReport,
   ensureExplainReport,
   ensureCompareOutput,
   ensureMoreStats,
 } from '../packages/tui/dist/lib/data.js';
-import { createInitialState, WINDOW_DAYS } from '../packages/tui/dist/lib/state.js';
+import { createInitialState } from '../packages/tui/dist/lib/state.js';
 import type { AppState, ViewMode } from '../packages/tui/dist/lib/state.js';
 import { COLORS } from '../packages/tui/dist/lib/theme.js';
 
-const OUTPUT_DIR = join(process.cwd(), 'docs');
+/** Where PNGs go; set TOKENLEAK_SCREENSHOT_DIR to keep docs/ untouched. */
+const OUTPUT_DIR = process.env['TOKENLEAK_SCREENSHOT_DIR'] ?? join(process.cwd(), 'docs');
 const SCREEN_WIDTH = 152;
 const SCREEN_HEIGHT = 44;
 const CELL_WIDTH = 8.6;
@@ -73,110 +59,13 @@ const VIEW_CAPTURES: ViewCapture[] = [
   { mode: 'wrapped', output: 'tui-wrapped.png', title: 'Wrapped' },
 ];
 
-function clearRoot(renderer: CliRenderer): void {
-  const children = renderer.root.getChildren();
-  for (const child of children) {
-    renderer.root.remove(child.id);
-  }
-}
-
-function buildTokenleakOutput(state: AppState): TokenleakOutput | null {
-  if (!state.data || state.data.windows.length === 0) {
-    return null;
-  }
-
-  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
-  if (!windowStats) {
-    return null;
-  }
-
-  const days = WINDOW_DAYS[state.selectedWindowIndex];
-  const today = new Date().toISOString().slice(0, 10);
-  const dateRange = days && days > 0
-    ? {
-        since: (() => {
-          const date = new Date();
-          date.setDate(date.getDate() - (days - 1));
-          return date.toISOString().slice(0, 10);
-        })(),
-        until: today,
-      }
-    : state.data.dateRange;
-
-  const output: TokenleakOutput = {
-    schemaVersion: SCHEMA_VERSION,
-    generated: new Date().toISOString(),
-    dateRange,
-    providers: state.data.providers,
-    aggregated: windowStats,
-  };
-
-  const more = ensureMoreStats(state);
-  if (more) {
-    (output as TokenleakOutput & { more?: unknown }).more = more;
-  }
-
-  return output;
-}
-
-function buildContent(state: AppState): ReturnType<typeof Box> {
-  const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
-  const daily = state.data ? getDailyForWindow(state.data, state.selectedWindowIndex) : [];
-
-  switch (state.selectedView) {
-    case 'overview':
-      return Box(
-        { flexDirection: 'column', width: '100%', flexGrow: 1 },
-        createChartPanel(state, daily),
-        createStatsRow(state, windowStats),
-        createModelList(state, windowStats),
-      );
-    case 'matrix':
-      return createMatrixView(state);
-    case 'advisor':
-      return createAdvisorPanel(state, ensureSavingsReport(state));
-    case 'focus':
-      return createFocusPanel(state, ensureFocusReport(state));
-    case 'explain':
-      return createExplainPanel(ensureExplainReport(state), state.explainDate);
-    case 'compare':
-      return createComparePanel(state, ensureCompareOutput(state));
-    case 'export':
-      return createExportPanel(state);
-    case 'wrapped': {
-      const output = buildTokenleakOutput(state);
-      const achievements = output ? computeAchievements(output) : [];
-      const providers = state.data?.providers.map((provider) => ({
-        displayName: provider.displayName,
-        totalTokens: provider.totalTokens,
-        totalCost: provider.totalCost,
-      })) ?? [];
-      return createWrappedPanel(
-        windowStats,
-        achievements,
-        providers,
-        state.wrappedScrollOffset,
-        ensureMoreStats(state),
-      );
-    }
-    default:
-      return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
-  }
-}
-
-function buildLayout(state: AppState, renderer: CliRenderer) {
-  return Box(
-    {
-      flexDirection: 'column',
-      width: '100%',
-      height: '100%',
-      backgroundColor: COLORS.bg,
-    },
-    buildHeader(state, renderer),
-    buildSubTabBar(state, renderer),
-    buildContent(state),
-    buildStatusBar(state),
-  );
+/** Builds every report a capture shows up front, so no view waits on the engine. */
+function prepareReports(state: AppState): void {
+  ensureSavingsReport(state);
+  ensureFocusReport(state);
+  ensureExplainReport(state);
+  ensureCompareOutput(state);
+  ensureMoreStats(state);
 }
 
 function escapeXml(value: string): string {
@@ -208,6 +97,25 @@ function getTextOpacity(span: CapturedSpan): number {
   return isDim ? Math.max(0.45, alpha * 0.72) : alpha;
 }
 
+/** Fill fraction of each lower-eighth block, drawn as a rect so stacks read like a terminal. */
+const LOWER_BLOCKS: Record<string, number> = { '▁': 1, '▂': 2, '▃': 3, '▄': 4, '▅': 5, '▆': 6, '▇': 7, '█': 8 };
+/** Fill fraction of each left-eighth block (share bars). */
+const LEFT_BLOCKS: Record<string, number> = { '▏': 1, '▎': 2, '▍': 3, '▌': 4, '▋': 5, '▊': 6, '▉': 7 };
+
+function renderBlockChar(char: string, x: number, y: number, fg: string): string | null {
+  const lower = LOWER_BLOCKS[char];
+  if (lower !== undefined) {
+    const height = (CELL_HEIGHT * lower) / 8;
+    // Half a pixel of overlap hides seams between neighbouring cells.
+    return `<rect x="${x.toFixed(2)}" y="${(y + CELL_HEIGHT - height).toFixed(2)}" width="${(CELL_WIDTH + 0.5).toFixed(2)}" height="${(height + 0.5).toFixed(2)}" fill="${fg}" />`;
+  }
+  const left = LEFT_BLOCKS[char];
+  if (left !== undefined) {
+    return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${((CELL_WIDTH * left) / 8 + 0.5).toFixed(2)}" height="${CELL_HEIGHT + 0.5}" fill="${fg}" />`;
+  }
+  return null;
+}
+
 function renderLine(line: CapturedFrame['lines'][number], y: number): string {
   let xCells = 0;
   const parts: string[] = [];
@@ -218,17 +126,26 @@ function renderLine(line: CapturedFrame['lines'][number], y: number): string {
     const bg = rgbaToCss(span.bg);
     const fg = rgbaToCss(span.fg);
     const fontWeight = (span.attributes & TextAttributes.BOLD) !== 0 ? 700 : 500;
-    const safeText = escapeXml(sanitizeDisplayText(span.text));
 
     parts.push(
       `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${spanWidth.toFixed(2)}" height="${CELL_HEIGHT}" fill="${bg}" />`,
     );
 
-    if (span.text.trim().length > 0 || span.text.includes(' ')) {
+    // Draw cell by cell so box-drawing and block glyphs sit on the grid
+    // regardless of the font's advance width.
+    const chars = [...span.text];
+    chars.forEach((char, index) => {
+      const cellX = x + index * CELL_WIDTH;
+      const block = renderBlockChar(char, cellX, y, fg);
+      if (block) {
+        parts.push(block);
+        return;
+      }
+      if (char.trim().length === 0) return;
       parts.push(
-        `<text x="${x.toFixed(2)}" y="${(y + (CELL_HEIGHT * 0.76)).toFixed(2)}" fill="${fg}" fill-opacity="${getTextOpacity(span).toFixed(3)}" font-family="SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13.5" font-weight="${fontWeight}" xml:space="preserve">${safeText}</text>`,
+        `<text x="${cellX.toFixed(2)}" y="${(y + (CELL_HEIGHT * 0.76)).toFixed(2)}" fill="${fg}" fill-opacity="${getTextOpacity(span).toFixed(3)}" font-family="SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13.5" font-weight="${fontWeight}" textLength="${CELL_WIDTH.toFixed(2)}" lengthAdjust="spacingAndGlyphs">${escapeXml(sanitizeDisplayText(char))}</text>`,
       );
-    }
+    });
 
     xCells += span.width;
   }
@@ -267,7 +184,7 @@ function frameToSvg(frame: CapturedFrame, title: string): string {
 }
 
 async function captureView(renderer: CliRenderer, state: AppState, _title: string): Promise<CapturedFrame> {
-  clearRoot(renderer);
+  for (const child of renderer.root.getChildren()) child.destroyRecursively();
   renderer.root.add(buildLayout(state, renderer));
   renderer.requestRender();
   await renderer.loop();
@@ -310,6 +227,7 @@ async function main(): Promise<void> {
       };
 
       capture.configure?.(state);
+      prepareReports(state);
 
       const frame = await captureView(renderer, state, capture.title);
       const svg = frameToSvg(frame, capture.title);
