@@ -1,13 +1,8 @@
 import { describe, test, expect, afterEach } from 'bun:test';
 import { defaultTerminalWidth, shouldUseColor } from './output-mode';
+import { normalizeCliArgv } from './args';
 import {
-  resolveConfig,
   resolveFocusConfig,
-  selectAvailableProviders,
-  computeDateRange,
-  inferFormatFromPath,
-  normalizeCliArgv,
-  run,
   runFocus,
   renderFocusReport,
   colorScore,
@@ -15,7 +10,11 @@ import {
   colorDensity,
   colorProvider,
   colorStreak,
-} from './cli';
+} from './commands/focus';
+import { run } from './commands/report';
+import { computeDateRange } from './date-range';
+import { selectAvailableProviders } from './providers';
+import { resolveConfig, inferFormatFromPath } from './report-options';
 import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
