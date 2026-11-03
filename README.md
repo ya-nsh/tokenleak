@@ -68,7 +68,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **Overview** — heatmap, stats, providers, and top models
 - **Quotas** — live subscription limits for Claude, Codex, and Copilot
 - **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
-- **Advisor** — model efficiency recommendations, projected savings, and waste-pattern recipes
+- **Advisor** — savings recommendations with the projected monthly bill
 - **Focus** — deep-work session rankings scored by active time (breaks over 30 min excluded), density, and streaks
 - **Explain** — narrative day-by-day usage breakdown
 - **Compare** — side-by-side period comparison with deltas
@@ -78,7 +78,7 @@ In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard wi
 - **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
 - **Receipts** — itemized spend by prompt behavior
 - **Sim** — what routing short tasks to cheaper models would have saved
-- **Waste** — deterministic waste signals with evidence
+- **Waste** — the same savings findings as an evidence table
 - **Diff** — compare providers, models, or projects side by side
 
 On narrow terminals the tab bar shows the views around the active one (`‹` / `›` mark the rest) and footer hints drop by priority, so `q:quit` and `?:keys` are always visible.
@@ -231,7 +231,7 @@ tokenleak behavior-diff --provider claude-code,codex --days 30
 - `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI at `/replay` on the [local live server](#live-server) — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
 - `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.
-- `tokenleak waste` detects deterministic waste signals such as context drag, repeated prompt clusters, model churn, cache misses, and premium models used for small tasks.
+- `tokenleak waste` lists the savings findings with evidence: cheaper-model routes, cache misses and unreused writes, growing context, repeated prompt clusters, model churn, low-yield sessions, and spend patterns.
 - `tokenleak behavior-diff` compares cohorts such as provider-vs-provider or model-vs-model and emits deterministic takeaways for engineering teams.
 
 ### Status line
@@ -441,9 +441,9 @@ tokenleak --wrapped-live --provider claude-code,codex
 
 Wrapped Live is the `/wrapped` page of the [local live server](#live-server), which starts on `http://localhost:3333` and moves to the next free port if `3333` is taken. The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
 
-### Model Efficiency Advisor
+### Savings advisor
 
-Analyze your usage patterns and get actionable recommendations for reducing costs:
+One savings engine produces every recommendation. `--advisor`, `tokenleak waste`, the TUI Advisor and Waste views, and the MCP `get_efficiency_advice` and `get_agent_waste` tools are all views of the same report:
 
 ```bash
 # Run the advisor (last 90 days by default)
@@ -453,15 +453,12 @@ tokenleak --advisor
 tokenleak --advisor --days 30 --claude
 ```
 
-The advisor detects optimization opportunities:
+- **Model routing** — events the routing simulator re-priced on a cheaper sibling model (short outputs, quick lookups), grouped per model route. The savings are the per-event re-pricing, the same numbers `tokenleak simulate-routing` lists event by event.
+- **Cache** — per-provider low hit rates, priced at that provider's own input and cache-read rates, and cache writes that are never read back
+- **Sessions** — context that keeps growing, repeated prompt clusters, model churn, and long sessions with low output per dollar
+- **Spend patterns** — one model above 85% of spend, a rising cost trend, and burst days. These carry no savings estimate; they point at where to look.
 
-- **Model downgrades** — identifies expensive models used for short outputs and suggests cheaper alternatives with concrete $/month savings
-- **Cache optimization** — flags low cache hit rates and poor reuse ratios
-- **Usage patterns** — warns about model concentration risk, cost trend increases, and burst days
-
-In the TUI Advisor view, the same screen also includes **Waste Patterns**: deterministic findings such as context drag, burst spikes, wasted cache writes, and model-switch churn. Each finding includes severity, evidence, estimated savings where defensible, and a concrete local recipe for what to try next.
-
-Each recommendation includes current cost, projected cost, monthly savings, and a confidence level (high/medium/low). The advisor is also available as a `get_efficiency_advice` tool in the MCP server.
+Each recommendation has a severity, a confidence level, evidence, savings over the window and per month where they can be estimated, and a recipe for what to try next. Findings can overlap, so the total is capped at your current cost. `--advisor` shows the projected monthly bill; `tokenleak waste` shows the evidence table and filters with `--severity`. Both print the same JSON with `--format json`.
 
 ### Themes
 
@@ -528,7 +525,7 @@ JSON exports (files, `--clipboard`, `--upload gist`) omit captured prompt text b
 
 ### TUI dashboard (default)
 
-In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 15 views with keyboard and mouse navigation. The Advisor view includes both savings recommendations and waste-pattern recipes.
+In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 15 views with keyboard and mouse navigation. The Advisor and Waste views show the same savings report.
 
 Latest OpenTUI screenshots from the current dashboard build:
 
@@ -617,7 +614,7 @@ Subcommands:
 | `--upload` |  |  | Upload output to a service. Supported: `gist` |
 | `--live-server` | `-L` | `false` | Alias for `tokenleak serve`, announcing the dashboard |
 | `--wrapped-live` |  | `false` | Alias for `tokenleak serve`, announcing AI Wrapped |
-| `--advisor` |  | `false` | Run the model efficiency advisor |
+| `--advisor` |  | `false` | Show the savings report as advice with the projected monthly bill |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |
 | `--version` |  |  | Print version information |
