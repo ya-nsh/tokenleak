@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInitialState } from './state';
 import type { TuiData } from './data';
+import { READY_CURSOR_STATUS, makeEvents, makeProvider, makeTuiData as makeUsageData } from './__fixtures__/usage';
 import {
+  buildTuiData,
   getScopedWindowData,
   getDailyForWindow,
   getTuiDataCachePath,
@@ -86,7 +88,7 @@ describe('TUI data cache', () => {
     mkdirSync(dirname(cachePath), { recursive: true });
     writeFileSync(
       cachePath,
-      JSON.stringify({ version: 3, generatedAt: new Date().toISOString(), data }),
+      JSON.stringify({ version: 4, generatedAt: new Date().toISOString(), data }),
       'utf8',
     );
 
@@ -255,5 +257,37 @@ describe('getDailyForWindow', () => {
     } as unknown as TuiData;
 
     expect(getDailyForWindow(data, 0)).toBe(daily);
+  });
+});
+
+describe('buildTuiData', () => {
+  test('starts the ALL window at the first day with usage', () => {
+    const data = makeUsageData('2026-11-03');
+    const all = data.windows.at(-1)!;
+    expect(all.label).toBe('ALL');
+    expect(all.dateRange).toEqual({ since: '2026-10-23', until: '2026-11-03' });
+    expect(data.dateRange).toEqual(all.dateRange);
+  });
+
+  test('trailing windows keep their fixed spans, including across a month boundary', () => {
+    const data = buildTuiData(
+      [makeProvider('claude-code', 'Claude Code', makeEvents('claude-code', '2026-11-03', 40))],
+      READY_CURSOR_STATUS,
+      '2026-11-03',
+    );
+    expect(data.windows.map((window) => window.dateRange.since)).toEqual([
+      '2026-11-03',
+      '2026-10-28',
+      '2026-10-05',
+      '2026-08-06',
+      '2026-09-25',
+    ]);
+    expect(data.windows[2]!.daily?.every((day) => day.date >= '2026-10-05')).toBe(true);
+  });
+
+  test('empty provider data yields no windows and a range ending today', () => {
+    const data = buildTuiData([], READY_CURSOR_STATUS, '2026-11-03');
+    expect(data.windows).toEqual([]);
+    expect(data.dateRange.until).toBe('2026-11-03');
   });
 });

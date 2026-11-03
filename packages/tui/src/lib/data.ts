@@ -76,7 +76,8 @@ import type { AppState } from './state.js';
 import { WINDOW_DAYS } from './state.js';
 
 // v3: snapshots from before current-model pricing showed costs as Unknown.
-const TUI_CACHE_VERSION = 3;
+// v4: the ALL window starts at the first day with usage, not the 2020 load floor.
+const TUI_CACHE_VERSION = 4;
 const TUI_CACHE_FILENAME = `tui-data-v${TUI_CACHE_VERSION}.json`;
 const TUI_CACHE_FILE_PATTERN = /^tui-data-v\d+\.json$/;
 /** Start of the ALL window: earlier than any supported tool's logs. */
@@ -332,6 +333,9 @@ export function buildTuiData(
 
   const allMerged = mergeProviderData(providers);
   const allTimeStats = aggregate(allMerged, today);
+  // ALL spans the user's own history, not the loader's 2020 floor: exports and
+  // heatmaps sized from the floor were years wide and mostly empty.
+  const usageRange: DateRange = { since: allMerged[0]?.date ?? today, until: today };
   const windows: TimeWindowData[] = [];
 
   for (const { label, days } of WINDOW_CONFIGS) {
@@ -346,7 +350,7 @@ export function buildTuiData(
     label: 'ALL',
     days: 0,
     stats: allTimeStats,
-    dateRange: allTimeRange,
+    dateRange: usageRange,
     daily: allMerged,
     nutritionOutcomeSignals: [],
   });
@@ -355,7 +359,7 @@ export function buildTuiData(
     providers,
     allTimeStats,
     windows,
-    dateRange: allTimeRange,
+    dateRange: usageRange,
     mergedDaily: allMerged,
     cursorSetupStatus,
   };

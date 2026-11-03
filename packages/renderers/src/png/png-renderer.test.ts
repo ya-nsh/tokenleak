@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PngRenderer } from './png-renderer';
+import { renderTerminalCardSvg } from './terminal-card';
+import { SHARP_MAX_DIMENSION, rasterDensity, svgSize } from './raster-density';
 import sharp from 'sharp';
 import {
   createOutput,
@@ -59,5 +61,15 @@ describe('PngRenderer', () => {
     const metadata = await sharp(result).metadata();
 
     expect(metadata.width).toBeGreaterThanOrEqual(2000);
+  });
+
+  it('rasterises a multi-year card below full density so sharp accepts it', () => {
+    // Rendering this card at 432 DPI would exceed sharp's 32,767 px limit.
+    const output = { ...createOutput(), dateRange: { since: '2020-01-01', until: '2026-11-03' } };
+    const svg = renderTerminalCardSvg(output, createRenderOptions({ format: 'png' }));
+    const size = svgSize(svg)!;
+    const density = rasterDensity(svg, 432);
+    expect(density).toBeLessThan(432);
+    expect(Math.ceil((size.width * density) / 72)).toBeLessThanOrEqual(SHARP_MAX_DIMENSION);
   });
 });
