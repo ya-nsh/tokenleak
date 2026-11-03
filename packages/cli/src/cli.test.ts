@@ -19,13 +19,7 @@ import { loadConfig } from './config';
 import { loadEnvOverrides } from './env';
 import { TokenleakError } from './errors';
 import { shouldStartTui } from './tui-launch';
-import {
-  readFileSync,
-  existsSync,
-  cpSync,
-  mkdtempSync,
-  rmSync,
-} from 'node:fs';
+import { readFileSync, existsSync, cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Database } from 'bun:sqlite';
@@ -87,6 +81,18 @@ describe('inferFormatFromPath', () => {
 });
 
 describe('normalizeCliArgv', () => {
+  test('maps kebab-case flags to camelCase and leaves other words alone', () => {
+    expect(normalizeCliArgv(['--no-color', '--all-providers'])).toEqual([
+      '--noColor',
+      '--allProviders',
+    ]);
+    expect(normalizeCliArgv(['constructor', 'toString', '__proto__'])).toEqual([
+      'constructor',
+      'toString',
+      '__proto__',
+    ]);
+  });
+
   test('keeps comma-separated provider list as a single argument when spaced', () => {
     const argv = normalizeCliArgv(['--provider', 'claude,', 'codex', '--format', 'json']);
     expect(argv).toEqual(['--provider', 'claude, codex', '--format', 'json']);
@@ -442,7 +448,9 @@ describe('run', () => {
     const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-cli-'));
     const dbPath = join(root, 'sqlite.db');
     const db = new Database(dbPath);
-    db.run('CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)');
+    db.run(
+      'CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)',
+    );
     db.run("INSERT INTO messages VALUES ('m1', 'hf:org/model', 1, 1, 1770724800000, 's1')");
     db.close();
     const previousEnv = process.env;
@@ -461,7 +469,9 @@ describe('run', () => {
     const root = mkdtempSync(join(tmpdir(), 'tokenleak-synthetic-default-cli-'));
     const dbPath = join(root, 'sqlite.db');
     const db = new Database(dbPath);
-    db.run('CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)');
+    db.run(
+      'CREATE TABLE messages (id TEXT, model TEXT, input_tokens INTEGER, output_tokens INTEGER, timestamp INTEGER, session_id TEXT)',
+    );
     db.run("INSERT INTO messages VALUES ('m1', 'hf:org/model', 1, 1, 1770724800000, 's1')");
     db.close();
     const previousEnv = process.env;
@@ -628,13 +638,27 @@ describe('CLI invocation', () => {
 
     try {
       const waste = Bun.spawn(
-        ['bun', cliPath, 'waste', '--format', 'json', '--provider', 'pi', '--since', '2020-01-01', '--severity', 'low'],
+        [
+          'bun',
+          cliPath,
+          'waste',
+          '--format',
+          'json',
+          '--provider',
+          'pi',
+          '--since',
+          '2020-01-01',
+          '--severity',
+          'low',
+        ],
         { stdout: 'pipe', stderr: 'pipe', env },
       );
       expect(await waste.exited).toBe(0);
       const report = JSON.parse(await new Response(waste.stdout).text());
       expect(Array.isArray(report.recommendations)).toBe(true);
-      expect(report.recommendations.every((r: { severity: string }) => r.severity === 'low')).toBe(true);
+      expect(report.recommendations.every((r: { severity: string }) => r.severity === 'low')).toBe(
+        true,
+      );
     } finally {
       cleanup();
     }
@@ -645,11 +669,24 @@ describe('CLI invocation', () => {
 
     try {
       const run = async (args: string[]) => {
-        const proc = Bun.spawn(['bun', cliPath, ...args, '--format', 'json', '--provider', 'pi', '--since', '2020-01-01'], {
-          stdout: 'pipe',
-          stderr: 'pipe',
-          env,
-        });
+        const proc = Bun.spawn(
+          [
+            'bun',
+            cliPath,
+            ...args,
+            '--format',
+            'json',
+            '--provider',
+            'pi',
+            '--since',
+            '2020-01-01',
+          ],
+          {
+            stdout: 'pipe',
+            stderr: 'pipe',
+            env,
+          },
+        );
         expect(await proc.exited).toBe(0);
         return JSON.parse(await new Response(proc.stdout).text());
       };
@@ -668,11 +705,14 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const simulate = Bun.spawn(['bun', cliPath, 'simulate-routing', '--format', 'json', '--provider', 'pi'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const simulate = Bun.spawn(
+        ['bun', cliPath, 'simulate-routing', '--format', 'json', '--provider', 'pi'],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const simulateExit = await simulate.exited;
       const simulateStdout = await new Response(simulate.stdout).text();
       expect(simulateExit).toBe(0);
@@ -871,12 +911,26 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--format', 'json', '--provider', 'pi',
-        '--since', '2026-03-10', '--until', '2026-03-11'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        [
+          'bun',
+          cliPath,
+          'focus',
+          '--format',
+          'json',
+          '--provider',
+          'pi',
+          '--since',
+          '2026-03-10',
+          '--until',
+          '2026-03-11',
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
       const parsed = JSON.parse(stdout);
@@ -896,12 +950,24 @@ describe('CLI invocation', () => {
     const { env, cleanup } = createProviderFixtureEnv();
 
     try {
-      const proc = Bun.spawn(['bun', cliPath, 'focus', '--provider', 'pi',
-        '--since', '2026-03-10', '--until', '2026-03-11'], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env,
-      });
+      const proc = Bun.spawn(
+        [
+          'bun',
+          cliPath,
+          'focus',
+          '--provider',
+          'pi',
+          '--since',
+          '2026-03-10',
+          '--until',
+          '2026-03-11',
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      );
       const exitCode = await proc.exited;
       const stdout = await new Response(proc.stdout).text();
 
@@ -998,7 +1064,10 @@ describe('CLI invocation', () => {
   });
 
   test('subcommands built on citty reject unknown flags too', async () => {
-    const proc = Bun.spawn(['bun', cliPath, 'focus', '--bogus'], { stdout: 'pipe', stderr: 'pipe' });
+    const proc = Bun.spawn(['bun', cliPath, 'focus', '--bogus'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const exitCode = await proc.exited;
     const stderr = await new Response(proc.stderr).text();
 
@@ -1007,7 +1076,10 @@ describe('CLI invocation', () => {
   });
 
   test('statusline --help documents the Claude Code status line setup', async () => {
-    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--help'], { stdout: 'pipe', stderr: 'pipe' });
+    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--help'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const stdout = await new Response(proc.stdout).text();
     expect(await proc.exited).toBe(0);
     expect(stdout).toContain('"statusLine"');
@@ -1015,7 +1087,10 @@ describe('CLI invocation', () => {
   });
 
   test('statusline rejects unknown flags', async () => {
-    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--colour'], { stdout: 'pipe', stderr: 'pipe' });
+    const proc = Bun.spawn(['bun', cliPath, 'statusline', '--colour'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     expect(await proc.exited).toBe(1);
     expect(await new Response(proc.stderr).text()).toContain('Unknown flag "--colour"');
   });
@@ -1287,4 +1362,3 @@ describe('renderFocusReport', () => {
     expect(colorProvider('claude-code', 'hi', true)).toBe('hi');
   });
 });
-
