@@ -1,3 +1,4 @@
+import type { ViewGroupId } from './views.js';
 import type {
   QuotaSnapshot,
   AgentBehaviorDiffReport,
@@ -49,6 +50,8 @@ export interface AppState {
   quotasScrollOffset: number;
   selectedWindowIndex: number; // 0=1D, 1=7D, 2=30D, 3=90D, 4=ALL
   selectedView: ViewMode;
+  /** The sub-tab last shown in each group, so a group key returns to it. */
+  lastViewByGroup: Partial<Record<ViewGroupId, ViewMode>>;
   isLoading: boolean;
   loadError: string | null;
   data: TuiData | null;
@@ -134,6 +137,7 @@ export function createInitialState(): AppState {
     quotasScrollOffset: 0,
     selectedWindowIndex: DEFAULT_WINDOW_INDEX,
     selectedView: 'overview',
+    lastViewByGroup: {},
     isLoading: true,
     loadError: null,
     data: null,
