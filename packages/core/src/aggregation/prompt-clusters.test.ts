@@ -236,3 +236,101 @@ describe('clusterPrompts repeated turns', () => {
     expect(clusters[0]!.count).toBe(3);
   });
 });
+
+describe('clusterPrompts candidate index', () => {
+  it('breaks similarity ties toward the earliest cluster', () => {
+    const clusters = clusterPrompts(
+      [
+        makeEvent({ prompt: 'alpha beta gamma', cost: 1 }),
+        makeEvent({ prompt: 'delta epsilon zeta', cost: 1 }),
+        // Shares three shingles with each earlier prompt: Jaccard 3/9 against both.
+        makeEvent({ prompt: 'alpha beta delta epsilon', cost: 0.5 }),
+      ],
+      { similarityThreshold: 0.1 },
+    );
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0]!.canonicalPrompt).toBe('alpha beta gamma');
+    expect(clusters[0]!.count).toBe(2);
+    expect(clusters[1]!.count).toBe(1);
+  });
+
+  it('matches prompts against shingles a cluster gained from later members', () => {
+    const clusters = clusterPrompts(
+      [
+        makeEvent({ prompt: 'alpha beta gamma delta', cost: 3 }),
+        makeEvent({ prompt: 'alpha beta gamma omega', cost: 2 }),
+        // Jaccard 1/11 against the first prompt alone, 3/11 once "omega" joined.
+        makeEvent({ prompt: 'gamma omega theta', cost: 1 }),
+      ],
+      { similarityThreshold: 0.2 },
+    );
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(3);
+  });
+
+  it('merges prompts with no shared shingles when the threshold is zero', () => {
+    const clusters = clusterPrompts(
+      [makeEvent({ prompt: 'alpha beta' }), makeEvent({ prompt: 'gamma delta' })],
+      { similarityThreshold: 0 },
+    );
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(2);
+  });
+
+  it('keeps turns with and without a session id apart', () => {
+    const clusters = clusterPrompts(
+      [
+        makeEvent({ prompt: 'alpha beta gamma', promptId: 'p1', sessionId: '' }),
+        makeEvent({ prompt: 'alpha beta gamma', promptId: 'p1' }),
+      ],
+    );
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.count).toBe(2);
+  });
+
+  it('partitions prompts exactly like a scan over every cluster', () => {
+    const vocabulary = ['fix', 'lint', 'test', 'build', 'deploy', 'refactor', 'billing', 'auth', 'cache', 'docs'];
+    let seed = 7;
+    const random = (): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const prompts = Array.from({ length: 40 }, (_, i) => {
+      const words = Array.from({ length: 2 + Math.floor(random() * 4) }, () =>
+        vocabulary[Math.floor(random() * vocabulary.length)]!,
+      );
+      return `${words.join(' ')} step${i}`;
+    });
+
+    for (const threshold of [0.1, 0.2, 0.3]) {
+      // Reference: scan every cluster, keep the first strictly-best match.
+      const reference: { signature: Set<string>; members: number[] }[] = [];
+      prompts.forEach((prompt, i) => {
+        const signature = tokenBigrams(prompt);
+        let best: { cluster: (typeof reference)[number]; sim: number } | null = null;
+        for (const cluster of reference) {
+          let shared = 0;
+          for (const shingle of signature) if (cluster.signature.has(shingle)) shared++;
+          const sim = shared / (signature.size + cluster.signature.size - shared);
+          if (sim >= threshold && (best === null || sim > best.sim)) best = { cluster, sim };
+        }
+        if (best) {
+          best.cluster.members.push(i);
+          for (const shingle of signature) best.cluster.signature.add(shingle);
+        } else {
+          reference.push({ signature, members: [i] });
+        }
+      });
+
+      // Cost 2^i makes each cluster's total cost an exact bitmask of its members.
+      const events = prompts.map((prompt, i) => makeEvent({ prompt, cost: 2 ** i }));
+      const actual = clusterPrompts(events, { similarityThreshold: threshold })
+        .map((cluster) => cluster.totalCost)
+        .sort((a, b) => a - b);
+      const expected = reference
+        .map((cluster) => cluster.members.reduce((sum, i) => sum + 2 ** i, 0))
+        .sort((a, b) => a - b);
+      expect(actual).toEqual(expected);
+    }
+  });
+});
