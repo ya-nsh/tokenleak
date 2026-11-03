@@ -23,7 +23,8 @@ function chipWidth(state: AppState): number {
 /** Hints for the active view; priority 0 survives longest. */
 function viewHints(state: AppState): Hint[] {
   const viewSpecific: Record<string, string[]> = {
-    overview: ['j/k:scroll', 's:sort'],
+    // Overview tables show their own (j/k) hint when they scroll.
+    overview: ['f:filter', 's:sort'],
     matrix: ['[/]:page'],
     explain: ['h/l:date'],
     replay: ['h/l:date', 'j/k:select', 'enter/space:toggle'],

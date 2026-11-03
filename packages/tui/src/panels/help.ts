@@ -78,6 +78,8 @@ export function createHelpPanel() {
         ]),
         ...helpSection('ACTIONS', [
           ['s', 'Cost / tokens (Overview chart, lists)'],
+          ['f', 'Filter to a provider or model (Overview)'],
+          ['x', 'Clear the filter'],
           ['r', 'Refresh data'],
           ['o', 'Open browser replay (any view)'],
           ['c', 'Open Cursor setup'],
