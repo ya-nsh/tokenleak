@@ -79,6 +79,8 @@ import { WINDOW_DAYS } from './state.js';
 const TUI_CACHE_VERSION = 3;
 const TUI_CACHE_FILENAME = `tui-data-v${TUI_CACHE_VERSION}.json`;
 const TUI_CACHE_FILE_PATTERN = /^tui-data-v\d+\.json$/;
+/** Start of the ALL window: earlier than any supported tool's logs. */
+const ALL_TIME_SINCE = '2020-01-01';
 const scopedWindowCache = new WeakMap<TuiData, Map<string, ScopedWindowData>>();
 
 export interface TimeWindowData {
@@ -291,15 +293,31 @@ export async function loadAllData(options: LoadAllDataOptions = {}): Promise<Tui
   const today = todayStr();
 
   // Load all-time data (use a very wide range)
-  const allTimeRange: DateRange = { since: '2020-01-01', until: today };
-  const results = await registry.loadAll(allTimeRange);
+  const results = await registry.loadAll({ since: ALL_TIME_SINCE, until: today });
 
   const providers: ProviderData[] = results
     .filter((r) => r.data !== null)
     .map((r) => r.data as ProviderData);
 
+  return buildTuiData(providers, cursorSetupStatus, today);
+}
+
+/** Trailing windows the TUI offers besides ALL, in display order. */
+const WINDOW_CONFIGS = [
+  { label: '1D', days: 1 },
+  { label: '7D', days: 7 },
+  { label: '30D', days: 30 },
+  { label: '90D', days: 90 },
+] as const;
+
+/** Merges provider data and aggregates every time window ending on `today`. */
+export function buildTuiData(
+  providers: ProviderData[],
+  cursorSetupStatus: CursorSetupStatus,
+  today: string = todayStr(),
+): TuiData {
+  const allTimeRange: DateRange = { since: ALL_TIME_SINCE, until: today };
   if (providers.length === 0) {
-    // Return empty data structure
     const emptyDaily = mergeProviderData([]);
     const emptyStats = aggregate(emptyDaily, today);
     return {
@@ -314,26 +332,16 @@ export async function loadAllData(options: LoadAllDataOptions = {}): Promise<Tui
 
   const allMerged = mergeProviderData(providers);
   const allTimeStats = aggregate(allMerged, today);
-
-  // Compute time-window aggregations by filtering daily data
-  const windowConfigs = [
-    { label: '1D', days: 1 },
-    { label: '7D', days: 7 },
-    { label: '30D', days: 30 },
-    { label: '90D', days: 90 },
-  ];
-
   const windows: TimeWindowData[] = [];
 
-  for (const { label, days } of windowConfigs) {
-    const since = daysAgoStr(days - 1); // trailing N days including today
+  for (const { label, days } of WINDOW_CONFIGS) {
+    const since = shiftDateStringLocal(today, -(days - 1)); // trailing N days including today
     const dateRange: DateRange = { since, until: today };
     const filtered = allMerged.filter((d) => d.date >= since && d.date <= today);
     const stats = aggregate(filtered, today, dateRange);
     windows.push({ label, days, stats, dateRange, daily: filtered, nutritionOutcomeSignals: [] });
   }
 
-  // Add all-time window
   windows.push({
     label: 'ALL',
     days: 0,
