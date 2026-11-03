@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseReplayArgs } from './cli';
+import { parseReplayArgs } from './commands/replay';
 import { TokenleakError } from './errors';
 
 describe('parseReplayArgs', () => {

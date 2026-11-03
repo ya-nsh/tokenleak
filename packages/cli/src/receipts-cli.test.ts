@@ -3,7 +3,7 @@ import {
   parseReceiptsArgs,
   inferReceiptsFormat,
   validateReceiptsShareFlags,
-} from './cli';
+} from './commands/receipts';
 import { TokenleakError } from './errors';
 
 describe('parseReceiptsArgs', () => {
