@@ -14,7 +14,12 @@ import {
   saveCursorCredentials,
   validateCursorSession,
 } from '@tokenleak/registry';
-import { computeAchievements, startReplayLiveServer } from '@tokenleak/renderers';
+import {
+  buildReplayLiveDataProvider,
+  computeAchievements,
+  startLiveSite,
+} from '@tokenleak/renderers';
+import type { LiveSite, LiveSiteContent } from '@tokenleak/renderers';
 import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
 import {
@@ -75,7 +80,6 @@ import {
   toggleReplayPlayback,
 } from './lib/replay-playback.js';
 import {
-  buildReplayLiveDataProvider,
   keepReplaySelectionVisible,
   moveReplayOverviewSelection,
   resetReplayDataInteraction,
@@ -697,7 +701,7 @@ function resetReplayPanelState(state: AppState): void {
 }
 
 function resetReplayDataState(state: AppState): void {
-  resetReplayDataInteraction(state, stopReplayPlaybackTimer, stopReplayLiveServer);
+  resetReplayDataInteraction(state, stopReplayPlaybackTimer, stopLiveSite);
 }
 
 function stopReplayPlaybackTimer(): void {
@@ -847,9 +851,19 @@ function pauseReplayPlaybackIfRunning(state: AppState): void {
   }
 }
 
-// ── In-process replay live server (launched via global `o` keypress) ──
+// ── In-process live site: replay (global `o`) and AI Wrapped (export `l`) share one server ──
 
-let replayLiveServerStop: (() => void) | null = null;
+let liveSite: LiveSite | null = null;
+
+/** Start the live site, or add `content` to the one already running. */
+async function ensureLiveSite(content: LiveSiteContent): Promise<LiveSite> {
+  if (liveSite) {
+    liveSite.update(content);
+    return liveSite;
+  }
+  liveSite = await startLiveSite(content);
+  return liveSite;
+}
 
 const OS_OPEN_COMMANDS: Record<string, string> = {
   darwin: 'open',
@@ -869,9 +883,9 @@ function openUrlInBrowser(url: string): void {
 }
 
 async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Promise<void> {
-  // Idempotent — second press just re-opens the browser to the existing server.
-  if (state.replayLiveServerPort !== null) {
-    openUrlInBrowser(`http://localhost:${state.replayLiveServerPort}/`);
+  // Idempotent — second press just re-opens the browser to the existing page.
+  if (state.replayLiveServerPort !== null && liveSite) {
+    openUrlInBrowser(liveSite.url('replay'));
     return;
   }
   if (!state.data) return; // still booting; nothing to render yet
@@ -881,14 +895,11 @@ async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Prom
   state.replayDate = replayLiveData.initialDate;
   state.cachedReplayReport = replayLiveData.initialReport;
   try {
-    // silent: true suppresses the server's stderr "Replay live at..." line,
-    // which would otherwise corrupt the full-screen TUI render and make
-    // the terminal look frozen until the user hits another key.
-    const { port, stop } = await startReplayLiveServer(replayLiveData, { silent: true });
-    state.replayLiveServerPort = port;
-    replayLiveServerStop = stop;
+    // The live site never writes to stdout/stderr, so it cannot corrupt the TUI.
+    const site = await ensureLiveSite({ replay: replayLiveData });
+    state.replayLiveServerPort = site.port;
     render(state, renderer);
-    openUrlInBrowser(`http://localhost:${port}/`);
+    openUrlInBrowser(site.url('replay'));
   } catch {
     // best-effort. The TUI render path doesn't have an error toast yet —
     // failing silently is safer than dumping to stderr (would corrupt
@@ -911,10 +922,11 @@ function handleGlobalReplayBrowserKey(
   return true;
 }
 
-function stopReplayLiveServer(state: AppState): void {
-  if (replayLiveServerStop !== null) {
-    try { replayLiveServerStop(); } catch { /* noop */ }
-    replayLiveServerStop = null;
+/** Stop the live site; its pages were built from data that is about to change or go away. */
+function stopLiveSite(state: AppState): void {
+  if (liveSite !== null) {
+    try { liveSite.stop(); } catch { /* noop */ }
+    liveSite = null;
   }
   state.replayLiveServerPort = null;
 }
@@ -1336,9 +1348,8 @@ async function handleExport(
       state.exportStatus = 'Starting live server...';
       render(state, renderer);
 
-      const { startWrappedLiveServer } = await import('@tokenleak/renderers');
-      const { port } = await startWrappedLiveServer(output);
-      state.exportStatus = `Live server running at http://localhost:${port} (Ctrl+C to stop)`;
+      const site = await ensureLiveSite({ wrapped: output });
+      state.exportStatus = `AI Wrapped live at ${site.url('wrapped')} (stops when you quit)`;
     } else if (key === 'a') {
       state.exportStatus = 'Copying LLM prompt...';
       render(state, renderer);
@@ -1710,7 +1721,7 @@ export async function main(): Promise<void> {
 
     // q: quit
     if (sequence === 'q') {
-      stopReplayLiveServer(state);
+      stopLiveSite(state);
       renderer.destroy();
       process.exit(0);
     }

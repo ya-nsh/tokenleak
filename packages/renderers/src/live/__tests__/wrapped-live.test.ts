@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'bun:test';
-import { startWrappedLiveServer } from '../wrapped-live-server';
+import { startLiveSite } from '../site';
 import { generateWrappedLiveHtml } from '../wrapped-live-template';
 import {
   createOutput,
@@ -140,7 +140,7 @@ describe('generateWrappedLiveHtml', () => {
   });
 });
 
-describe('startWrappedLiveServer', () => {
+describe('live site wrapped page', () => {
   const cleanups: (() => void)[] = [];
 
   afterEach(() => {
@@ -150,31 +150,31 @@ describe('startWrappedLiveServer', () => {
     cleanups.length = 0;
   });
 
-  it('starts and responds with 200 on /', async () => {
+  it('starts and responds with 200 on /wrapped', async () => {
     const output = createOutput({ more: createMoreStats() });
-    const { port, stop } = await startWrappedLiveServer(output, { port: 0 });
+    const { port, stop } = await startLiveSite({ wrapped: output }, { port: 0 });
     cleanups.push(stop);
 
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/wrapped`);
     expect(res.status).toBe(200);
   });
 
   it('responds with content-type text/html', async () => {
     const output = createOutput({ more: createMoreStats() });
-    const { port, stop } = await startWrappedLiveServer(output, { port: 0 });
+    const { port, stop } = await startLiveSite({ wrapped: output }, { port: 0 });
     cleanups.push(stop);
 
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/wrapped`);
     const contentType = res.headers.get('content-type') ?? '';
     expect(contentType).toContain('text/html');
   });
 
   it('HTML contains slide structure', async () => {
     const output = createOutput({ more: createMoreStats() });
-    const { port, stop } = await startWrappedLiveServer(output, { port: 0 });
+    const { port, stop } = await startLiveSite({ wrapped: output }, { port: 0 });
     cleanups.push(stop);
 
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/wrapped`);
     const html = await res.text();
 
     expect(html).toContain('id="s0"');
@@ -184,15 +184,15 @@ describe('startWrappedLiveServer', () => {
 
   it('shuts down cleanly', async () => {
     const output = createOutput({ more: createMoreStats() });
-    const { port, stop } = await startWrappedLiveServer(output, { port: 0 });
+    const { port, stop } = await startLiveSite({ wrapped: output }, { port: 0 });
 
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/wrapped`);
     expect(res.status).toBe(200);
 
     stop();
 
     try {
-      await fetch(`http://localhost:${port}/`);
+      await fetch(`http://localhost:${port}/wrapped`);
     } catch {
       // Expected: connection refused
     }
@@ -200,10 +200,10 @@ describe('startWrappedLiveServer', () => {
 
   it('port fallback works when default port is taken', async () => {
     const output = createOutput({ more: createMoreStats() });
-    const { port: port1, stop: stop1 } = await startWrappedLiveServer(output, { port: 19877 });
+    const { port: port1, stop: stop1 } = await startLiveSite({ wrapped: output }, { port: 19877 });
     cleanups.push(stop1);
 
-    const { port: port2, stop: stop2 } = await startWrappedLiveServer(output, { port: 19877 });
+    const { port: port2, stop: stop2 } = await startLiveSite({ wrapped: output }, { port: 19877 });
     cleanups.push(stop2);
 
     expect(port1).toBe(19877);

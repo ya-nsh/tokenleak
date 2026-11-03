@@ -1,11 +1,13 @@
 import type { ReplayReport } from '@tokenleak/core';
-import type { ReplayHeatmapEntry } from './replay-live-server';
+import type { ReplayHeatmapEntry } from './replay-data';
 
 export interface ReplayLiveHtmlOptions {
   /** Optional heatmap to render above the cost odometer for date navigation. */
   heatmap?: ReplayHeatmapEntry[];
   /** Date to mark as active in the heatmap. Defaults to the report's date. */
   initialDate?: string;
+  /** Path the page is served at; heatmap links navigate to `<basePath>?date=X`. Defaults to `/`. */
+  basePath?: string;
 }
 
 function esc(s: string): string {
@@ -54,12 +56,16 @@ const HEATMAP_DAYS = 91; // 13 weeks × 7 days
 
 /**
  * Render the GitHub-style heatmap above the cost odometer for in-page date
- * navigation. Each cell is an `<a>` so clicks just navigate to `/?date=X`
+ * navigation. Each cell is an `<a>` so clicks just navigate to `<basePath>?date=X`
  * — no JS required.
  *
  * Layout: 7 rows (Sun-Sat) × 13-14 cols (weeks), latest day on the right.
  */
-function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string): string {
+function renderHeatmapSection(
+  entries: ReplayHeatmapEntry[],
+  activeDate: string,
+  basePath: string,
+): string {
   const byDate = new Map<string, ReplayHeatmapEntry>();
   for (const e of entries) byDate.set(e.date, e);
 
@@ -115,7 +121,7 @@ function renderHeatmapSection(entries: ReplayHeatmapEntry[], activeDate: string)
       if (c.tokens === 0) {
         return `<span class="${klass.join(' ')}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></span>`;
       }
-      return `<a class="${klass.join(' ')}" href="/?date=${esc(c.date)}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></a>`;
+      return `<a class="${klass.join(' ')}" href="${esc(basePath)}?date=${esc(c.date)}" title="${esc(tooltip)}" data-date="${esc(c.date)}" style="${style}"></a>`;
     })
     .join('');
 
@@ -1434,7 +1440,7 @@ header.bar .meta strong {
       <span>${report.flowBlocks.length} flow blocks</span>
     </div>
   </header>
-  ${heatmap ? renderHeatmapSection(heatmap, activeDate) : ''}
+  ${heatmap ? renderHeatmapSection(heatmap, activeDate, options.basePath ?? '/') : ''}
   ${isEmpty ? emptyBody : mainBody}
 </div>
 <script>window.__REPLAY__ = ${escScript(safeReport)};</script>

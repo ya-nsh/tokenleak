@@ -17,6 +17,7 @@ import { nutritionCommand } from './commands/nutrition.js';
 import { pricingCommand } from './commands/pricing.js';
 import { receiptsCommand } from './commands/receipts.js';
 import { replayCommand } from './commands/replay.js';
+import { serveCommand } from './commands/serve.js';
 import { buildHelpText, main } from './commands/report.js';
 import { simulateRoutingCommand } from './commands/simulate-routing.js';
 import { statuslineCommand } from './commands/statusline.js';
@@ -42,6 +43,7 @@ const SUBCOMMANDS: ReadonlyMap<string, SubcommandHandler> = new Map([
   ['pricing', pricingCommand],
   ['receipts', receiptsCommand],
   ['replay', replayCommand],
+  ['serve', serveCommand],
   ['simulate-routing', simulateRoutingCommand],
   ['statusline', statuslineCommand],
   ['usage', runUsage],
