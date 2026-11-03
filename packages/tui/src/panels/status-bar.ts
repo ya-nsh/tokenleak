@@ -39,6 +39,7 @@ function viewHints(state: AppState): Hint[] {
     behavior: ['j/k:scroll'],
   };
   return [
+    { text: '/:go to', priority: 0 },
     { text: '1-6:group', priority: 1 },
     { text: '←→:tab', priority: 2 },
     { text: 'tab/⇧tab:period', priority: 3 },

@@ -66,6 +66,7 @@ export function createHelpPanel() {
       Box(
         { flexDirection: 'column', flexGrow: 1 },
         ...helpSection('NAVIGATION', [
+          ['/ : Ctrl+K', 'Go to any view or action'],
           ['1-6', 'Switch group'],
           ['1-6 again', 'Next tab in the group'],
           ['\u2192 / \u2190', 'Next / prev tab (all groups)'],
@@ -76,7 +77,7 @@ export function createHelpPanel() {
           ['[ / ]', 'Matrix page (in Matrix)'],
         ]),
         ...helpSection('ACTIONS', [
-          ['s', 'Toggle sort mode'],
+          ['s', 'Cost / tokens (Overview chart, lists)'],
           ['r', 'Refresh data'],
           ['o', 'Open browser replay (any view)'],
           ['c', 'Open Cursor setup'],

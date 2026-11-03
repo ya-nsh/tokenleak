@@ -21,8 +21,11 @@ import { reconcileChildren } from './lib/reconcile.js';
 import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader, buildSubTabBar } from './panels/header.js';
-import { adjacentView, groupOfView, viewForKey } from './lib/views.js';
+import { VIEW_GROUPS, adjacentView, groupOfView, viewForKey } from './lib/views.js';
 import { createOverview, overviewLayout, tableListRows } from './panels/overview.js';
+import { createPalettePanel } from './panels/palette.js';
+import { PALETTE_OPEN_KEYS, paletteInput } from './lib/palette.js';
+import type { PaletteEntry } from './lib/palette.js';
 import { buildStatusBar } from './panels/status-bar.js';
 import { createMatrixView } from './panels/bloomberg.js';
 import { advisorVisibleItems, createAdvisorPanel } from './panels/advisor.js';
@@ -263,6 +266,10 @@ function buildContent(state: AppState, renderer: CliRenderer) {
   // Help overlay takes priority
   if (state.showHelp) {
     return createHelpPanel();
+  }
+
+  if (state.palette) {
+    return createPalettePanel(state.palette, paletteEntries(state), renderer.width, viewHeight(state, renderer));
   }
 
   const windowStats = state.data?.windows[state.selectedWindowIndex]?.stats ?? null;
@@ -1024,6 +1031,101 @@ function handleViewSwitch(mode: ViewMode): void {
   render(currentState, currentRenderer);
 }
 
+const EXPORT_COMMANDS = {
+  'export-png': 'p',
+  'export-wrapped': 'w',
+  'live-wrapped': 'l',
+  'llm-prompt': 'a',
+} as const;
+
+/** Everything the palette can run: every view, every period and the global actions. */
+function paletteEntries(state: AppState): PaletteEntry[] {
+  const views = VIEW_GROUPS.flatMap((group) =>
+    group.views.map((view): PaletteEntry => ({
+      id: `view:${view.mode}`,
+      title: group.views.length > 1 ? `${group.label} › ${view.label}` : view.label,
+      group: 'View',
+      hint: group.key,
+      keywords: view.mode,
+    })),
+  );
+  const periods = WINDOW_LABELS.map((label, index): PaletteEntry => ({
+    id: `window:${index}`,
+    title: label === 'ALL' ? 'All time' : `Last ${label.replace('D', ' days').replace(/^1 days$/, 'day')}`,
+    group: 'Period',
+    hint: index === state.selectedWindowIndex ? 'current' : 'tab',
+    keywords: label,
+  }));
+  const actions: PaletteEntry[] = [
+    { id: 'action:sort', title: `Show ${state.sortMode === 'cost' ? 'tokens' : 'cost'} in charts and lists`, group: 'Action', hint: 's', keywords: 'sort metric toggle' },
+    { id: 'action:refresh', title: 'Refresh usage data', group: 'Action', hint: 'r', keywords: 'reload' },
+    { id: 'action:export-png', title: 'Save dashboard PNG', group: 'Export', hint: '6 p', keywords: 'image share' },
+    { id: 'action:export-wrapped', title: 'Save AI Wrapped PNG', group: 'Export', hint: '6 w', keywords: 'image share' },
+    { id: 'action:live-wrapped', title: 'Open AI Wrapped in the browser', group: 'Export', hint: '6 l', keywords: 'live web' },
+    { id: 'action:llm-prompt', title: 'Copy LLM analysis prompt', group: 'Export', hint: '6 a', keywords: 'clipboard ai' },
+    { id: 'action:replay-browser', title: 'Open interactive replay in the browser', group: 'Action', hint: 'o', keywords: 'web timeline' },
+    { id: 'action:cursor', title: 'Connect Cursor', group: 'Action', hint: 'c', keywords: 'login token setup' },
+    { id: 'action:help', title: 'Keyboard shortcuts', group: 'Help', hint: '?', keywords: 'keys' },
+    { id: 'action:quit', title: 'Quit tokenleak', group: 'Action', hint: 'q', keywords: 'exit' },
+  ];
+  return [...views, ...periods, ...actions];
+}
+
+function selectWindow(state: AppState, index: number): void {
+  if (state.selectedWindowIndex === index) return;
+  state.selectedWindowIndex = index;
+  state.modelScrollOffset = 0;
+  invalidateWindowCaches(state);
+}
+
+/** Runs the palette entry `id`; the palette is already closed. */
+function runPaletteCommand(id: string, state: AppState, renderer: CliRenderer): void {
+  const [kind, value] = id.split(':') as [string, string];
+  if (kind === 'view') {
+    handleViewSwitch(value as ViewMode);
+    return;
+  }
+  if (kind === 'window') {
+    selectWindow(state, Number(value));
+  } else if (value in EXPORT_COMMANDS) {
+    handleViewSwitch('export');
+    void handleExport(EXPORT_COMMANDS[value as keyof typeof EXPORT_COMMANDS], state, renderer);
+    return;
+  } else if (value === 'sort') {
+    state.sortMode = state.sortMode === 'cost' ? 'tokens' : 'cost';
+  } else if (value === 'refresh') {
+    void reloadAllData(state, renderer);
+  } else if (value === 'replay-browser') {
+    void launchReplayBrowser(state, renderer);
+  } else if (value === 'cursor') {
+    tryOpenCursorSetup(state, renderer);
+  } else if (value === 'help') {
+    state.showHelp = true;
+  } else if (value === 'quit') {
+    renderer.destroy();
+    process.exit(0);
+  }
+  render(state, renderer);
+}
+
+/** Routes keys to the open palette; returns false when it is closed. */
+function handlePaletteInput(sequence: string, state: AppState, renderer: CliRenderer): boolean {
+  if (!state.palette) return false;
+  const result = paletteInput(state.palette, sequence, paletteEntries(state), isEscapeKeySequence);
+  if (result.kind === 'ignore') return true;
+  if (result.kind === 'update') {
+    state.palette = result.state;
+  } else {
+    state.palette = null;
+    if (result.kind === 'run') {
+      runPaletteCommand(result.id, state, renderer);
+      return true;
+    }
+  }
+  render(state, renderer);
+  return true;
+}
+
 /** The whole screen for `state`: header, tab bar, active view and status bar. */
 export function buildLayout(state: AppState, renderer: CliRenderer) {
   const cursorBanner = buildCursorBanner(state);
@@ -1403,6 +1505,16 @@ export async function main(): Promise<void> {
     // Global [o] interactive replay launcher — must run before any
     // view-specific handlers so the footer CTA works on every view.
     if (handleGlobalReplayBrowserKey(sequence, state, renderer)) {
+      return true;
+    }
+
+    if (handlePaletteInput(sequence, state, renderer)) {
+      return true;
+    }
+
+    if (PALETTE_OPEN_KEYS.has(sequence) && !state.showHelp) {
+      state.palette = { query: '', selected: 0 };
+      render(state, renderer);
       return true;
     }
 
