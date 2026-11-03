@@ -229,9 +229,9 @@ export function generateHtml(output: TokenleakOutput, options: RenderOptions): s
         <span class="model-pct">${esc(formatCost(optimization.routingSimulation?.estimatedSavings ?? 0))}</span>
       </div>
       <div class="model-row">
-        <span class="model-name">Waste signals</span>
-        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.agentWaste?.summary.totalSignals ?? 0) * 8))}%"></div></div>
-        <span class="model-pct">${optimization.agentWaste?.summary.totalSignals ?? 0}</span>
+        <span class="model-name">Savings findings</span>
+        <div class="model-bar-track"><div class="model-bar-fill" style="width:${Math.min(100, Math.max(2, (optimization.savings?.summary.totalRecommendations ?? 0) * 8))}%"></div></div>
+        <span class="model-pct">${optimization.savings?.summary.totalRecommendations ?? 0}</span>
       </div>
       <div class="model-row">
         <span class="model-name">${esc(optimization.behaviorDiff?.baseline.selector.label ?? 'Baseline')} vs ${esc(optimization.behaviorDiff?.comparison.selector.label ?? 'Compare')}</span>

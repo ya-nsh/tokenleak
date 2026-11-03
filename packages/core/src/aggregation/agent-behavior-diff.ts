@@ -7,7 +7,7 @@ import type {
   UsageEvent,
 } from '../types';
 import { buildSessionRollups } from './analytics';
-import { buildAgentWasteReport } from './agent-waste';
+import { buildSavingsReport } from '../savings/savings';
 
 const METHOD =
   'Agent behavior diff v1: deterministic cohort comparison across providers, models, projects, repos, date ranges, and task styles.';
@@ -60,7 +60,8 @@ function modelSwitchesPerSession(events: UsageEvent[]): number {
 
 function metricsFor(events: UsageEvent[], dateRange: DateRange): BehaviorCohortMetrics {
   const sessions = buildSessionRollups(events);
-  const waste = buildAgentWasteReport([], events, dateRange);
+  // Behaviour only: no providers means no cache or spend findings, no pricing means no routing.
+  const waste = buildSavingsReport({ providers: [], events, dateRange, pricing: {} });
   const input = events.reduce((sum, event) => sum + event.inputTokens, 0);
   const output = events.reduce((sum, event) => sum + event.outputTokens, 0);
   const read = events.reduce((sum, event) => sum + event.cacheReadTokens, 0);
@@ -69,8 +70,8 @@ function metricsFor(events: UsageEvent[], dateRange: DateRange): BehaviorCohortM
   const cost = events.reduce((sum, event) => sum + event.cost, 0);
   const activeDays = new Set(events.map((event) => event.date)).size;
   const durationSessions = sessions.filter((session) => session.durationMs !== null);
-  const estimatedSavings = waste.signals
-    .map((signal) => signal.estimatedSavings)
+  const estimatedSavings = waste.recommendations
+    .map((recommendation) => recommendation.estimatedSavings)
     .filter((value): value is number => value !== null);
 
   return {
@@ -84,7 +85,7 @@ function metricsFor(events: UsageEvent[], dateRange: DateRange): BehaviorCohortM
     cacheHitRate: input + read + write > 0 ? read / (input + read + write) : 0,
     cacheReuseRatio: write > 0 ? read / write : null,
     modelSwitchesPerSession: modelSwitchesPerSession(events),
-    wasteSignals: waste.signals.length,
+    wasteSignals: waste.recommendations.length,
     highSeverityWasteSignals: waste.summary.highSeverity,
     estimatedWasteSavings: estimatedSavings.length > 0 ? estimatedSavings.reduce((sum, value) => sum + value, 0) : null,
     averageSessionDurationMs: durationSessions.length > 0

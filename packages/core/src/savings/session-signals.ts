@@ -22,6 +22,8 @@ const CONTEXT_DRAG_LATE_TOKENS = 150_000;
 const CONTEXT_DRAG_GROWTH = 2;
 /** Share of the extra context a compaction or fresh session would remove. */
 const CONTEXT_DRAG_SAVINGS_FRACTION = 0.5;
+/** Quoted prompts in evidence are cut to one line of this many characters. */
+const MAX_QUOTED_PROMPT_CHARS = 80;
 /** Prompts clustered at least this many times count as a retry loop. */
 const PROMPT_REPEAT_COUNT = 3;
 const MAX_PROMPT_REPEAT_CLUSTERS = 5;
@@ -52,6 +54,14 @@ export function groupBySession(events: readonly UsageEvent[]): Map<string, Usage
     sessions.set(key, list);
   }
   return sessions;
+}
+
+/** A prompt as one short line for evidence text; pasted prompts can run to pages. */
+function quotePrompt(prompt: string): string {
+  const line = prompt.replace(/\s+/g, ' ').trim();
+  return line.length <= MAX_QUOTED_PROMPT_CHARS
+    ? line
+    : `${line.slice(0, MAX_QUOTED_PROMPT_CHARS - 1)}\u2026`;
 }
 
 function chronological(events: readonly UsageEvent[]): UsageEvent[] {
@@ -139,7 +149,7 @@ function detectPromptRepeats(events: readonly UsageEvent[], warnings: string[]):
           eventCount: cluster.count,
           tokens: cluster.totalTokens,
           cost: cluster.totalCost,
-          reason: `${cluster.count} similar prompts clustered around "${cluster.canonicalPrompt}".`,
+          reason: `${cluster.count} similar prompts clustered around "${quotePrompt(cluster.canonicalPrompt)}".`,
         },
         recipes: [
           recipe(

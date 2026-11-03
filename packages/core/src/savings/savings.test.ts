@@ -386,6 +386,20 @@ describe('session findings', () => {
     expect(flagged[0]!.evidence.reason).toStartWith('app: 60 active minutes produced');
   });
 
+  test('quotes a repeated prompt as one short line', () => {
+    const long = `fix the flaky test\n\n${'with a lot of pasted context '.repeat(20)}`;
+    const repeat = report([
+      event({ prompt: long }),
+      event({ prompt: long }),
+      event({ prompt: long }),
+    ]).recommendations.find((r) => r.kind === 'prompt-repeat');
+    const quoted = repeat!.evidence.reason.match(/"(.*)"/)![1]!;
+    expect(quoted).not.toContain('\n');
+    expect(quoted.length).toBeLessThanOrEqual(80);
+    expect(quoted).toStartWith('fix the flaky test with a lot');
+    expect(quoted).toEndWith('\u2026');
+  });
+
   test('skips prompt signals and says why when prompts were not captured', () => {
     const result = report([
       event({ prompt: undefined }),

@@ -28,14 +28,12 @@ import {
   readCachedTuiData,
   writeCachedTuiData,
   getDailyForWindow,
-  ensureAdvisorReport,
+  ensureSavingsReport,
   ensureFocusReport,
   ensureExplainReport,
   ensureCompareOutput,
   ensureMoreStats,
   ensureReplayReport,
-  ensureWasteReport,
-  ensureAgentWasteReport,
   ensureRoutingSimulationReport,
   ensureAgentBehaviorDiffReport,
   ensureNutritionReport,
@@ -302,16 +300,15 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       return createMatrixView(state);
     case 'advisor':
       if (!hasWindowData) {
-        return createAdvisorPanel(state, null, null);
+        return createAdvisorPanel(state, null);
       }
-      if (!state.cachedAdvisorReport || !state.cachedWasteReport) {
+      if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'advisor');
         return deferredPanelForTask(state, renderer, key, 'Advisor', () => {
-          ensureAdvisorReport(state);
-          ensureWasteReport(state);
+          ensureSavingsReport(state);
         });
       }
-      return createAdvisorPanel(state, state.cachedAdvisorReport, state.cachedWasteReport);
+      return createAdvisorPanel(state, state.cachedSavingsReport);
     case 'focus':
       if (!hasWindowData) {
         return createFocusPanel(state, null);
@@ -474,14 +471,14 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       if (!hasWindowData) {
         return createWastePanel(null);
       }
-      if (!state.cachedAgentWasteReport) {
+      if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'waste');
         return deferredPanelForTask(state, renderer, key, 'Waste Signals', () => {
-          ensureAgentWasteReport(state);
+          ensureSavingsReport(state);
         });
       }
       return createWastePanel(
-        state.cachedAgentWasteReport,
+        state.cachedSavingsReport,
         state.wasteScrollOffset,
         getPanelContentWidth(renderer, WASTE_MAX_CONTENT_WIDTH),
       );
@@ -1072,17 +1069,15 @@ function render(state: AppState, renderer: CliRenderer): void {
 
 /** Null caches that depend on the selected window */
 function invalidateWindowCaches(state: AppState): void {
-  state.cachedAdvisorReport = null;
+  state.cachedSavingsReport = null;
   state.cachedCompareOutput = null;
   state.cachedFocusReport = null;
   state.cachedExplainReport = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
-  state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
   state.cachedRoutingSimulationReport = null;
-  state.cachedAgentWasteReport = null;
   state.cachedBehaviorDiffReport = null;
   resetReceiptsInteraction(state);
   state.receiptsSortMode = 'cost';
@@ -1095,17 +1090,15 @@ function invalidateWindowCaches(state: AppState): void {
 
 /** Null all caches (used on refresh) */
 function invalidateAllCaches(state: AppState): void {
-  state.cachedAdvisorReport = null;
+  state.cachedSavingsReport = null;
   state.cachedFocusReport = null;
   state.cachedExplainReport = null;
   state.cachedCompareOutput = null;
   state.cachedMoreStats = null;
   state.cachedReplayReport = null;
-  state.cachedWasteReport = null;
   state.cachedNutritionReport = null;
   state.cachedReceipt = null;
   state.cachedRoutingSimulationReport = null;
-  state.cachedAgentWasteReport = null;
   state.cachedBehaviorDiffReport = null;
   resetReplayDataState(state);
   resetReceiptsInteraction(state);
@@ -1186,10 +1179,7 @@ const SCROLLABLE_VIEWS = new Set<ViewMode>([
 function getScrollableItemCount(state: AppState): number {
   switch (state.selectedView) {
     case 'advisor':
-      return (
-        (state.cachedAdvisorReport?.recommendations.length ?? 0) +
-        (state.cachedWasteReport?.findings.length ?? 0)
-      );
+      return state.cachedSavingsReport?.recommendations.length ?? 0;
     case 'focus':
       return Math.min(state.cachedFocusReport?.entries.length ?? 0, 20);
     case 'compare':
@@ -1206,7 +1196,7 @@ function getScrollableItemCount(state: AppState): number {
     case 'simulator':
       return state.cachedRoutingSimulationReport?.candidates.length ?? 0;
     case 'waste':
-      return state.cachedAgentWasteReport?.signals.length ?? 0;
+      return state.cachedSavingsReport?.recommendations.length ?? 0;
     case 'behavior':
       return 12;
     default:

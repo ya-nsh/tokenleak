@@ -1,13 +1,13 @@
-import type { AdvisorReport, AdvisorRecommendation } from '@tokenleak/core';
+import type { SavingsRecommendation, SavingsReport } from '@tokenleak/core';
 import { describePricingGap } from '@tokenleak/core';
 import { bold256, bold, dim } from './colors';
 import { stripAnsi } from './layout';
 
-const COLOR_TITLE = 68;    // steel blue / cyan
-const COLOR_SAVINGS = 71;  // sage green
-const COLOR_HIGH = 71;     // green for high confidence
-const COLOR_MEDIUM = 179;  // amber for medium confidence
-const COLOR_LOW = 140;     // lavender for low confidence
+const COLOR_TITLE = 68; // steel blue / cyan
+const COLOR_SAVINGS = 71; // sage green
+const COLOR_HIGH = 71; // green for high confidence
+const COLOR_MEDIUM = 179; // amber for medium confidence
+const COLOR_LOW = 140; // lavender for low confidence
 
 function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
@@ -19,14 +19,17 @@ function formatPercent(ratio: number): string {
 
 function confidenceColor(confidence: 'high' | 'medium' | 'low'): number {
   switch (confidence) {
-    case 'high': return COLOR_HIGH;
-    case 'medium': return COLOR_MEDIUM;
-    case 'low': return COLOR_LOW;
+    case 'high':
+      return COLOR_HIGH;
+    case 'medium':
+      return COLOR_MEDIUM;
+    case 'low':
+      return COLOR_LOW;
   }
 }
 
 function renderRecommendation(
-  rec: AdvisorRecommendation,
+  rec: SavingsRecommendation,
   width: number,
   noColor: boolean,
 ): string[] {
@@ -42,38 +45,30 @@ function renderRecommendation(
   const title = bold256(`${icon} ${rec.title}`, COLOR_TITLE, noColor);
   lines.push(`${indent}${title}`);
 
-  // Description - wrap to width
-  const descLines = wrapText(rec.description, contentWidth - 2);
-  for (const line of descLines) {
+  // What was observed, then what to do about it - wrapped to width
+  const action = rec.recipes[0];
+  const description = action ? `${rec.evidence.reason} ${action.title}.` : rec.evidence.reason;
+  for (const line of wrapText(description, contentWidth - 2)) {
     lines.push(`${indent}   ${dim(line, noColor)}`);
   }
-
-  // Cost line (only for recommendations with cost data)
-  if (rec.currentCost > 0 || rec.projectedCost > 0) {
-    const current = bold(`${formatDollars(rec.currentCost)}/mo`, noColor);
-    const projected = bold256(`${formatDollars(rec.projectedCost)}/mo`, COLOR_SAVINGS, noColor);
-    lines.push(`${indent}   Current cost: ${current}  ->  Projected: ${projected}`);
+  if (action?.command) {
+    lines.push(`${indent}   ${dim(`$ ${action.command}`, noColor)}`);
   }
 
-  // Savings line
-  if (rec.monthlySavings > 0) {
-    const savingsText = bold256(`${formatDollars(rec.monthlySavings)}/mo`, COLOR_SAVINGS, noColor);
-    let reductionText = '';
-    if (rec.currentCost > 0) {
-      reductionText = ` (${formatPercent(rec.monthlySavings / rec.currentCost)} reduction)`;
-    }
-    const savingsLine = `Savings: ${savingsText}${reductionText}`;
-    const badgeStr = bold256(badge, badgeColor, noColor);
-
-    // Right-align badge
-    const savingsPlain = stripAnsi(savingsLine);
-    const badgePlain = stripAnsi(badgeStr);
-    const gap = Math.max(1, contentWidth - 2 - savingsPlain.length - badgePlain.length);
+  const badgeStr = bold256(badge, badgeColor, noColor);
+  const badgePlain = stripAnsi(badgeStr);
+  const monthlySavings = rec.monthlySavings ?? 0;
+  if (monthlySavings > 0) {
+    const savingsText = bold256(`${formatDollars(monthlySavings)}/mo`, COLOR_SAVINGS, noColor);
+    // Share of the usage this recommendation covers, not of the whole bill.
+    const share =
+      rec.estimatedSavings !== null && rec.evidence.cost > 0
+        ? ` (${formatPercent(rec.estimatedSavings / rec.evidence.cost)} of that usage)`
+        : '';
+    const savingsLine = `Savings: ${savingsText}${share}`;
+    const gap = Math.max(1, contentWidth - 2 - stripAnsi(savingsLine).length - badgePlain.length);
     lines.push(`${indent}   ${savingsLine}${' '.repeat(gap)}${badgeStr}`);
   } else {
-    // Just show badge right-aligned
-    const badgeStr = bold256(badge, badgeColor, noColor);
-    const badgePlain = stripAnsi(badgeStr);
     const gap = Math.max(1, contentWidth - 2 - badgePlain.length);
     lines.push(`${indent}   ${' '.repeat(gap)}${badgeStr}`);
   }
@@ -103,14 +98,9 @@ function wrapText(text: string, maxWidth: number): string[] {
   return lines.length > 0 ? lines : [''];
 }
 
-function renderBox(
-  title: string,
-  subtitle: string,
-  width: number,
-  noColor: boolean,
-): string[] {
+function renderBox(title: string, subtitle: string, width: number, noColor: boolean): string[] {
   const innerWidth = Math.max(20, width - 4);
-  const top = `  \u250C${ '\u2500'.repeat(innerWidth)}\u2510`;
+  const top = `  \u250C${'\u2500'.repeat(innerWidth)}\u2510`;
   const bottom = `  \u2514${'\u2500'.repeat(innerWidth)}\u2518`;
 
   const titleStr = bold256(`  ${title}`, COLOR_TITLE, noColor);
@@ -125,18 +115,20 @@ function renderBox(
 }
 
 /**
- * Render an AdvisorReport as a terminal string with ANSI colors.
+ * Render the savings report as model-efficiency advice: each recommendation
+ * with its monthly savings, then the projected monthly bill.
  */
 export function renderAdvisorView(
-  report: AdvisorReport,
+  report: SavingsReport,
   options: { width: number; noColor: boolean },
 ): string {
   const { width, noColor } = options;
   const lines: string[] = [];
 
   // Header box
-  const subtitle = `Analyzed ${report.analyzedDays} days \u00B7 ${report.analyzedEvents.toLocaleString()} events`;
-  lines.push(...renderBox('Model Efficiency Advisor', subtitle, width, noColor));
+  const { summary } = report;
+  const subtitle = `Analyzed ${summary.analyzedDays} days \u00B7 ${summary.analyzedEvents.toLocaleString()} events`;
+  lines.push(...renderBox('Savings Advisor', subtitle, width, noColor));
 
   const pricingGap = describePricingGap(report);
   if (pricingGap) {
@@ -184,26 +176,23 @@ export function renderAdvisorView(
   const projectedLabel = '  Optimized projected monthly cost';
   const savingsLabel = '  Total potential savings';
 
-  const currentVal = bold(formatDollars(report.totalCurrentMonthlyCost), noColor);
-  const projectedVal = bold256(formatDollars(report.totalProjectedMonthlyCost), COLOR_SAVINGS, noColor);
+  const monthlySavings = summary.monthlySavings ?? 0;
+  const currentVal = bold(formatDollars(summary.currentMonthlyCost), noColor);
+  const projectedVal = bold256(
+    formatDollars(Math.max(0, summary.currentMonthlyCost - monthlySavings)),
+    COLOR_SAVINGS,
+    noColor,
+  );
 
   let savingsVal: string;
-  if (report.totalCurrentMonthlyCost > 0) {
-    const pct = formatPercent(report.totalMonthlySavings / report.totalCurrentMonthlyCost);
-    savingsVal = bold256(
-      `${formatDollars(report.totalMonthlySavings)}/mo (${pct})`,
-      COLOR_SAVINGS,
-      noColor,
-    );
+  if (summary.currentMonthlyCost > 0) {
+    const pct = formatPercent(monthlySavings / summary.currentMonthlyCost);
+    savingsVal = bold256(`${formatDollars(monthlySavings)}/mo (${pct})`, COLOR_SAVINGS, noColor);
   } else {
-    savingsVal = bold256(`${formatDollars(report.totalMonthlySavings)}/mo`, COLOR_SAVINGS, noColor);
+    savingsVal = bold256(`${formatDollars(monthlySavings)}/mo`, COLOR_SAVINGS, noColor);
   }
 
-  const labelWidth = Math.max(
-    currentLabel.length,
-    projectedLabel.length,
-    savingsLabel.length,
-  );
+  const labelWidth = Math.max(currentLabel.length, projectedLabel.length, savingsLabel.length);
 
   lines.push(`${currentLabel.padEnd(labelWidth)}  ${currentVal}`);
   lines.push(`${projectedLabel.padEnd(labelWidth)}  ${projectedVal}`);

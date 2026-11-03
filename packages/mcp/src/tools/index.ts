@@ -8,10 +8,9 @@ import { handleGetDailyUsage } from './get-daily-usage.js';
 import { handleGetCostBreakdown } from './get-cost-breakdown.js';
 import { handleGetStreaksAndHabits } from './get-streaks-and-habits.js';
 import { handleComparePeriods } from './compare-periods.js';
-import { handleGetEfficiencyAdvice } from './get-efficiency-advice.js';
+import { handleGetSavings } from './get-savings.js';
 import { handleGetReceiptLines } from './get-receipt-lines.js';
 import { handleGetRoutingSimulation } from './get-routing-simulation.js';
-import { handleGetAgentWaste } from './get-agent-waste.js';
 import { handleGetAgentBehaviorDiff } from './get-agent-behavior-diff.js';
 
 const behaviorSelectorSchema = z.object({
@@ -99,14 +98,15 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_efficiency_advice',
-    'Analyze token usage patterns and suggest cost-saving model switches and optimizations. Returns actionable recommendations with projected savings.',
+    'Savings recommendations ranked by severity and estimated savings: cheaper-model routing, cache, session (context drag, retries, model churn) and spend patterns, each with evidence, monthly savings and a recipe. Same report as get_agent_waste.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 30)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
       until: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
       provider: z.string().optional().describe('Filter to a specific provider by name'),
+      severity: z.enum(['all', 'high', 'medium', 'low']).optional().describe('Optional severity filter'),
     },
-    async (args) => handleGetEfficiencyAdvice(args, registry),
+    async (args) => handleGetSavings(args, registry),
   );
 
   server.tool(
@@ -143,7 +143,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
 
   server.tool(
     'get_agent_waste',
-    'Detect agent waste signals such as context drag, repeated prompts, model churn, and cache waste.',
+    'Agent waste findings such as context drag, repeated prompts, model churn, and cache waste. Same savings report as get_efficiency_advice.',
     {
       days: z.number().optional().describe('Number of days to look back (default: 30)'),
       since: z.string().optional().describe('Start date in YYYY-MM-DD format'),
@@ -151,7 +151,7 @@ export function registerTools(server: McpServer, registry: ProviderRegistry): vo
       provider: z.string().optional().describe('Filter to a specific provider by name'),
       severity: z.enum(['all', 'high', 'medium', 'low']).optional().describe('Optional severity filter'),
     },
-    async (args) => handleGetAgentWaste(args, registry),
+    async (args) => handleGetSavings(args, registry),
   );
 
   server.tool(

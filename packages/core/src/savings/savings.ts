@@ -7,10 +7,7 @@ import type {
   UsageEvent,
 } from '../types';
 import { inclusiveDaySpan } from '../date-utils';
-import {
-  buildRoutingSimulationReport,
-  type RoutingModelPricing,
-} from '../aggregation/routing-simulator';
+import { buildRoutingSimulationReport, type RoutingModelPricing } from './routing-simulator';
 import { sessionKey } from '../aggregation/session-identity';
 import { detectCacheFindings } from './cache-signals';
 import { detectRoutingFindings } from './routing-signals';

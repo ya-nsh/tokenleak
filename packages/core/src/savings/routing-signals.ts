@@ -52,7 +52,7 @@ export function detectRoutingFindings(routing: RoutingSimulationReport): Finding
         tokens,
         cost: currentCost,
         reason:
-          `${candidates.length} events (${rules.join(', ').toLowerCase()}) cost ${formatUsd(currentCost)} ` +
+          `${candidates.length.toLocaleString('en-US')} events (${rules.join(', ').toLowerCase()}) cost ${formatUsd(currentCost)} ` +
           `on ${group.fromModel} and would have cost ${formatUsd(currentCost - savings)} on ${group.toModel}.`,
       },
       recipes: [

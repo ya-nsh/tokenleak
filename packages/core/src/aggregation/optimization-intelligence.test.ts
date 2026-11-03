@@ -2,14 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import type {
   BehaviorCohortSelector,
   DateRange,
-  ProviderData,
   UsageEvent,
 } from '../types';
 import {
   buildAgentBehaviorDiffReport,
-  buildAgentWasteReport,
-  buildRoutingSimulationReport,
 } from './index';
+import { buildRoutingSimulationReport } from '../savings/routing-simulator';
 
 const range: DateRange = { since: '2026-05-01', until: '2026-05-07' };
 
@@ -40,29 +38,6 @@ function event(overrides: Partial<UsageEvent>): UsageEvent {
     durationMs: 120_000,
     prompt: 'fix the lint error',
     ...overrides,
-  };
-}
-
-function provider(events: UsageEvent[]): ProviderData {
-  return {
-    provider: 'claude-code',
-    displayName: 'Claude Code',
-    colors: { primary: '#fff', secondary: '#ddd', gradient: ['#fff', '#ddd'] },
-    totalTokens: events.reduce((sum, e) => sum + e.totalTokens, 0),
-    totalCost: events.reduce((sum, e) => sum + e.cost, 0),
-    daily: [
-      {
-        date: '2026-05-02',
-        inputTokens: events.reduce((sum, e) => sum + e.inputTokens, 0),
-        outputTokens: events.reduce((sum, e) => sum + e.outputTokens, 0),
-        cacheReadTokens: events.reduce((sum, e) => sum + e.cacheReadTokens, 0),
-        cacheWriteTokens: events.reduce((sum, e) => sum + e.cacheWriteTokens, 0),
-        totalTokens: events.reduce((sum, e) => sum + e.totalTokens, 0),
-        cost: events.reduce((sum, e) => sum + e.cost, 0),
-        models: [],
-      },
-    ],
-    events,
   };
 }
 
@@ -97,108 +72,6 @@ describe('buildRoutingSimulationReport', () => {
     expect(report.affectedEvents).toBe(0);
     expect(report.warnings.some((w) => w.includes('negative token counts'))).toBe(true);
     expect(report.warnings.some((w) => w.includes('No downgrade path'))).toBe(true);
-  });
-});
-
-describe('buildAgentWasteReport', () => {
-  test('detects context drag, prompt repeats, model churn, and cache waste with evidence', () => {
-    const events = [
-      event({ sessionId: 's1', model: 'claude-3-opus', inputTokens: 30_000, outputTokens: 500, totalTokens: 31_000, prompt: 'fix flaky tests' }),
-      event({ sessionId: 's1', model: 'claude-3.5-sonnet', inputTokens: 28_000, outputTokens: 400, totalTokens: 28_900, prompt: 'fix flaky tests again' }),
-      event({ sessionId: 's1', model: 'claude-3-opus', inputTokens: 29_000, outputTokens: 300, totalTokens: 29_800, prompt: 'fix flaky tests please' }),
-      event({ sessionId: 's1', model: 'claude-3.5-sonnet', inputTokens: 25_000, outputTokens: 300, totalTokens: 25_800, prompt: 'fix flaky tests' }),
-    ];
-    const report = buildAgentWasteReport([provider(events)], events, range);
-
-    expect(report.summary.totalSignals).toBeGreaterThanOrEqual(2);
-    // Four short turns with steady context are normal agentic work, not drag.
-    expect(report.signals.map((s) => s.kind)).not.toContain('context-drag');
-    expect(report.signals.map((s) => s.kind)).toContain('prompt-repeat');
-    expect(report.signals.map((s) => s.kind)).toContain('model-churn');
-    expect(report.signals[0]?.evidence.reason).toBeTruthy();
-    expect(report.signals[0]?.recipes[0]?.detail).toBeTruthy();
-  });
-
-  test('flags context drag only when late requests carry far more context than early ones', () => {
-    const turn = (index: number, context: number) =>
-      event({
-        sessionId: 'long',
-        projectId: '/work/loopcraft',
-        timestamp: new Date(Date.parse('2026-05-02T10:00:00.000Z') + index * 60_000).toISOString(),
-        inputTokens: 10,
-        cacheReadTokens: context,
-        outputTokens: 500,
-        totalTokens: context + 510,
-        pricing: { input: 4, cacheRead: 0.2, cacheWrite: 5 },
-      });
-    const growing = Array.from({ length: 40 }, (_, i) => turn(i, 40_000 + i * 8_000));
-    const report = buildAgentWasteReport([provider(growing)], growing, range);
-    const drag = report.signals.find((s) => s.kind === 'context-drag');
-
-    expect(drag).toBeDefined();
-    expect(drag!.evidence.reason).toStartWith('loopcraft: requests grew from');
-    expect(drag!.estimatedSavings).toBeGreaterThan(0);
-
-    const steady = Array.from({ length: 40 }, (_, i) => turn(i, 300_000));
-    expect(
-      buildAgentWasteReport([provider(steady)], steady, range).signals.some((s) => s.kind === 'context-drag'),
-    ).toBe(false);
-
-    const short = growing.slice(0, 10);
-    expect(buildAgentWasteReport([provider(short)], short, range).signals.some((s) => s.kind === 'context-drag')).toBe(
-      false,
-    );
-  });
-
-  test('lists the ten costliest sessions per kind and rolls up the rest', () => {
-    const sessions = Array.from({ length: 14 }, (_, sessionIndex) =>
-      Array.from({ length: 40 }, (_, i) =>
-        event({
-          sessionId: `s${sessionIndex}`,
-          timestamp: new Date(Date.parse('2026-05-02T10:00:00.000Z') + i * 60_000).toISOString(),
-          inputTokens: 10,
-          cacheReadTokens: (40_000 + i * 8_000) * (sessionIndex + 1),
-          outputTokens: 500,
-          totalTokens: (40_000 + i * 8_000) * (sessionIndex + 1) + 510,
-          pricing: { input: 4, cacheRead: 0.2, cacheWrite: 5 },
-        }),
-      ),
-    ).flat();
-    const uncapped = 14;
-    const report = buildAgentWasteReport([provider(sessions)], sessions, range);
-    const drag = report.signals.filter((s) => s.kind === 'context-drag');
-
-    expect(drag).toHaveLength(11);
-    const rollup = drag.find((s) => s.title.includes('more sessions'))!;
-    expect(rollup.title).toBe(`Context keeps growing (${uncapped - 10} more sessions)`);
-    expect(rollup.evidence.eventCount).toBe(4 * 40);
-    // The rollup keeps the smaller sessions' savings in the total.
-    const listed = drag.filter((s) => s !== rollup).map((s) => s.estimatedSavings ?? 0);
-    expect(Math.min(...listed)).toBeGreaterThanOrEqual(rollup.estimatedSavings! / 4);
-  });
-
-  test('long low-yield sessions are measured by active time, not wall-clock span', () => {
-    const at = (sessionId: string, iso: string) =>
-      event({ sessionId, projectId: '/work/app', timestamp: iso, outputTokens: 10, cost: 5, totalTokens: 1_000 });
-    const steady = Array.from({ length: 13 }, (_, i) =>
-      at('steady', new Date(Date.parse('2026-05-02T09:00:00.000Z') + i * 5 * 60_000).toISOString()),
-    );
-    const resumed = [at('resumed', '2026-05-02T09:00:00.000Z'), at('resumed', '2026-05-04T09:00:00.000Z')];
-    const events = [...steady, ...resumed];
-    const flagged = buildAgentWasteReport([provider(events)], events, range).signals.filter(
-      (s) => s.kind === 'long-session-low-yield',
-    );
-
-    expect(flagged.map((s) => s.evidence.sessionId)).toEqual(['steady']);
-    expect(flagged[0]!.evidence.reason).toStartWith('app: 60 active minutes produced');
-  });
-
-  test('skips prompt-only signals when prompt capture is missing', () => {
-    const events = [event({ prompt: undefined }), event({ prompt: undefined, sessionId: 's2' })];
-    const report = buildAgentWasteReport([provider(events)], events, range);
-
-    expect(report.signals.some((s) => s.kind === 'prompt-repeat' || s.kind === 'retry-loop')).toBe(false);
-    expect(report.warnings.some((w) => w.includes('No prompt text'))).toBe(true);
   });
 });
 

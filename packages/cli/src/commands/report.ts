@@ -5,12 +5,11 @@ import {
   SCHEMA_VERSION,
   VERSION,
   aggregate,
-  analyzeEfficiency,
   buildMoreStats,
   mergeProviderData,
+  redactSavingsReportForExport,
 } from '@tokenleak/core';
 import type { RenderOptions, TokenleakOutput } from '@tokenleak/core';
-import { buildPricingTable } from '@tokenleak/registry';
 import {
   JsonRenderer,
   PngRenderer,
@@ -20,7 +19,7 @@ import {
   renderWrappedPng,
 } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
-import { loadCompareTokenleakData } from '../data-loader.js';
+import { buildSavings, loadCompareTokenleakData } from '../data-loader.js';
 import { computeDateRange } from '../date-range.js';
 import { TokenleakError, handleError } from '../errors.js';
 import {
@@ -66,7 +65,7 @@ export function buildHelpText(): string {
     '  receipts               Itemized receipt of spend by prompt behavior',
     '  serve                  Serve the dashboard, Wrapped and replay pages locally',
     '  simulate-routing       Estimate savings from model routing changes',
-    '  waste                  Detect agent waste signals with evidence',
+    '  waste                  Savings findings as an evidence table',
     '  behavior-diff          Compare agent/model/project behavior cohorts',
     "  pricing                Show each model's rates and where the price came from",
     '  statusline             One-line spend summary for editor and tmux status bars',
@@ -92,7 +91,7 @@ export function buildHelpText(): string {
     '  -p, --provider <list>   Provider filter list, comma-separated',
     '      --compare <range>   Compare against YYYY-MM-DD..YYYY-MM-DD or auto',
     '      --more             Add expanded PNG/SVG stats and unlock compare cards',
-    '      --advisor           Analyze usage and suggest cost-saving model switches',
+    '      --advisor           Savings recommendations with the projected monthly bill',
     '      --include-prompts   Keep captured prompt text in JSON exports (omitted by default)',
     '      --clipboard         Copy rendered output to the clipboard',
     '      --open              Open the generated output file',
@@ -268,9 +267,33 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     process.stderr.write(`Loaded ${totalDays} day-records, ${totalEvents} events\n`);
   }
 
+  // --advisor is the savings report rendered as model-efficiency advice.
+  if (config.advisor) {
+    if (config.format !== 'terminal' && config.format !== 'json') {
+      throw new TokenleakError(
+        `--advisor only supports terminal and json formats, got "${config.format}".`,
+      );
+    }
+    const report = buildSavings(providerDataList, dateRange);
+    const rendered =
+      config.format === 'json'
+        ? JSON.stringify(
+            config.includePrompts ? report : redactSavingsReportForExport(report),
+            null,
+            2,
+          )
+        : renderAdvisorView(report, { width: config.width, noColor: config.noColor });
+    if (config.output) {
+      writeFileSync(config.output, rendered);
+    } else {
+      process.stdout.write(rendered + '\n');
+    }
+    return;
+  }
+
   // --live-server and --wrapped-live are aliases for `tokenleak serve`, which builds its own
-  // output. --advisor and --format wrapped still take precedence, as they always have.
-  if ((config.liveServer || config.wrappedLive) && !config.advisor && config.format !== 'wrapped') {
+  // output. --format wrapped still takes precedence, as it always has.
+  if ((config.liveServer || config.wrappedLive) && config.format !== 'wrapped') {
     const flag = config.liveServer ? '--live-server' : '--wrapped-live';
     const ignoredFlags: string[] = [];
     if (config.output) ignoredFlags.push('--output');
@@ -300,8 +323,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const mergedDaily = mergeProviderData(providerDataList);
   const stats = aggregate(mergedDaily, dateRange.until, dateRange);
 
-  // Force --more when --advisor is used (needs event data)
-  const needsMore = config.more || config.format === 'wrapped' || config.advisor;
+  const needsMore = config.more || config.format === 'wrapped';
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -311,41 +333,6 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     aggregated: stats,
     more: needsMore ? buildMoreStats(providerDataList, dateRange) : null,
   };
-
-  // Advisor mode — analyze efficiency and render report
-  if (config.advisor) {
-    if (config.format !== 'terminal' && config.format !== 'json') {
-      throw new TokenleakError(
-        `--advisor only supports terminal and json formats, got "${config.format}".`,
-      );
-    }
-
-    const advisorReport = analyzeEfficiency(
-      output,
-      buildPricingTable(output.providers.flatMap((p) => (p.events ?? []).map((e) => e.model))),
-    );
-
-    if (config.format === 'json') {
-      const rendered = JSON.stringify(advisorReport, null, 2);
-      if (config.output) {
-        writeFileSync(config.output, rendered);
-      } else {
-        process.stdout.write(rendered + '\n');
-      }
-      return;
-    }
-
-    const rendered = renderAdvisorView(advisorReport, {
-      width: config.width,
-      noColor: config.noColor,
-    });
-    if (config.output) {
-      writeFileSync(config.output, rendered);
-    } else {
-      process.stdout.write(rendered + '\n');
-    }
-    return;
-  }
 
   // Wrapped format — special rendering path
   if (config.format === 'wrapped') {
@@ -565,7 +552,7 @@ export const main = defineCommand({
     },
     advisor: {
       type: 'boolean',
-      description: 'Analyze usage and suggest cost-saving model switches',
+      description: 'Savings recommendations with the projected monthly bill',
       default: false,
     },
   },

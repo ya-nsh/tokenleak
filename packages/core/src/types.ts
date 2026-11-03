@@ -483,37 +483,10 @@ export interface CommonsInspectReport {
   };
 }
 
-export type WasteCategory =
-  | 'premium-short-output'
-  | 'low-cache-hit-rate'
-  | 'wasted-cache-writes'
-  | 'context-drag'
-  | 'burst-spike'
-  | 'model-switch-churn';
-
 export interface WasteRecipe {
   title: string;
   command?: string;
   detail: string;
-}
-
-export interface WasteFinding {
-  category: WasteCategory;
-  severity: 'high' | 'medium' | 'low';
-  title: string;
-  evidence: string;
-  provider?: string;
-  model?: string;
-  projectId?: string;
-  estimatedMonthlySavings: number | null;
-  recipes: WasteRecipe[];
-}
-
-export interface WasteReport {
-  method: string;
-  dateRange: DateRange;
-  enoughEvidence: boolean;
-  findings: WasteFinding[];
 }
 
 export interface NutritionOutcomeSignal {
@@ -626,42 +599,6 @@ export interface RoutingSimulationReport {
   affectedTokens: number;
   candidates: RoutingSimulationCandidate[];
   rules: RoutingRule[];
-  warnings: string[];
-}
-
-export type WasteSignalKind =
-  | 'context-drag'
-  | 'retry-loop'
-  | 'model-churn'
-  | 'premium-for-small-task'
-  | 'cache-miss-heavy'
-  | 'cache-write-waste'
-  | 'burst-with-low-output'
-  | 'long-session-low-yield'
-  | 'prompt-repeat'
-  | 'outcome-missing';
-
-export interface AgentWasteSignal {
-  kind: WasteSignalKind;
-  title: string;
-  severity: 'high' | 'medium' | 'low';
-  confidence: OptimizationConfidence;
-  estimatedSavings: number | null;
-  evidence: OptimizationEvidence;
-  recipes: WasteRecipe[];
-}
-
-export interface AgentWasteReport {
-  method: string;
-  dateRange: DateRange;
-  summary: {
-    totalSignals: number;
-    highSeverity: number;
-    estimatedSavings: number | null;
-    analyzedEvents: number;
-    analyzedSessions: number;
-  };
-  signals: AgentWasteSignal[];
   warnings: string[];
 }
 
@@ -816,7 +753,7 @@ export interface TokenleakOutput {
   more?: MoreStats | null;
   optimization?: {
     routingSimulation?: RoutingSimulationReport | null;
-    agentWaste?: AgentWasteReport | null;
+    savings?: SavingsReport | null;
     behaviorDiff?: AgentBehaviorDiffReport | null;
   };
 }
