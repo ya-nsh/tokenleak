@@ -87,6 +87,9 @@ describe('patched frames', () => {
     states.push(stateFor('overview', 4, (s) => (s.showHelp = true)));
     states.push(stateFor('overview', 4, (s) => (s.sortMode = 'tokens')));
     states.push(stateFor('receipts', 4, (s) => (s.receiptsExpandedLineIndex = 0)));
+    states.push(stateFor('overview', 1, (s) => (s.palette = { query: '', selected: 3 })));
+    states.push(stateFor('overview', 1, (s) => (s.palette = { query: 'rcpt', selected: 0 })));
+    states.push(stateFor('overview', 1, (s) => (s.palette = { query: 'zzzz', selected: 0 })));
 
     for (const order of [states, [...states].reverse()]) {
       for (const state of order) {
