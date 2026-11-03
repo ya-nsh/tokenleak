@@ -13,8 +13,8 @@ import type {
 } from '@tokenleak/core';
 import type { IProvider } from '../provider';
 import { collectFiles } from './local-usage';
-import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
 import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
+import { parseAppendableJsonl } from '../parsers/appendable-jsonl';
 import { cleanPromptText } from '../parsers/prompt-text';
 import { normalizeModelName } from '../models/normalizer';
 import { isInRange, mapWithConcurrency } from '../utils';
@@ -328,6 +328,24 @@ function buildDailyUsage(records: UsageRecord[]): DailyUsage[] {
   return daily;
 }
 
+/** What a transcript parse carries from one line to the next. */
+interface ClaudeParseState {
+  /** The most recent user prompt, attributed to the assistant usage that follows it. */
+  lastPrompt: string | null;
+  promptSequence: number;
+}
+
+function isClaudeParseState(value: unknown): value is ClaudeParseState {
+  if (value === null || typeof value !== 'object') return false;
+  const state = value as Record<string, unknown>;
+  return (
+    (state['lastPrompt'] === null || typeof state['lastPrompt'] === 'string') &&
+    typeof state['promptSequence'] === 'number' &&
+    Number.isInteger(state['promptSequence']) &&
+    state['promptSequence'] >= 0
+  );
+}
+
 /**
  * Claude Code JSONL provider.
  *
@@ -368,32 +386,30 @@ export class ClaudeCodeProvider implements IProvider {
       const projectId = relative(this.baseDir, dirname(file)).split(sep).join('/');
 
       try {
-        const parsed = await cache.read(file, async () => {
-          const records: UsageRecord[] = [];
-          const fileWarnings: JsonlRecordWarning[] = [];
-          let lastPrompt: string | null = null;
-          let promptSequence = 0;
-          for await (const record of splitJsonlRecords(file, {
-            onWarning: (warning) => fileWarnings.push(warning),
-          })) {
-            const userPrompt = extractUserPrompt(record);
-            if (userPrompt !== null) {
-              lastPrompt = userPrompt;
-              promptSequence += 1;
-              continue;
-            }
-            const usage = extractUsage(record);
-            if (usage !== null) {
-              usage.sessionId = relativeFile;
-              usage.projectId = usage.projectId ?? projectId;
-              if (lastPrompt !== null) {
-                usage.prompt = lastPrompt;
-                usage.promptId = `user:${promptSequence}`;
-              }
-              records.push(usage);
-            }
-          }
-          return { records, warnings: fileWarnings };
+        const parsed = await cache.readAppendable<ClaudeParseState>(file, {
+          isState: isClaudeParseState,
+          parse: (from) =>
+            parseAppendableJsonl<UsageRecord, ClaudeParseState>(file, from, {
+              initialState: () => ({ lastPrompt: null, promptSequence: 0 }),
+              cloneState: (state) => ({ ...state }),
+              visit: (record, state, records) => {
+                const userPrompt = extractUserPrompt(record);
+                if (userPrompt !== null) {
+                  state.lastPrompt = userPrompt;
+                  state.promptSequence += 1;
+                  return;
+                }
+                const usage = extractUsage(record);
+                if (usage === null) return;
+                usage.sessionId = relativeFile;
+                usage.projectId = usage.projectId ?? projectId;
+                if (state.lastPrompt !== null) {
+                  usage.prompt = state.lastPrompt;
+                  usage.promptId = `user:${state.promptSequence}`;
+                }
+                records.push(usage);
+              },
+            }),
         });
         for (const warning of parsed.warnings)
           incrementWarningCount(warnings, warning.kind, warning.file);
