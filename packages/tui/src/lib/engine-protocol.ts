@@ -1,7 +1,15 @@
 import type { EngineCore } from './engine-core.js';
 
 /** Engine methods callable across the worker boundary. */
-export type EngineMethod = 'loadCached' | 'loadFresh' | 'report' | 'exportImage' | 'llmPrompt' | 'openLiveSite' | 'stopLiveSite';
+export type EngineMethod =
+  | 'loadCached'
+  | 'loadFresh'
+  | 'setFilter'
+  | 'report'
+  | 'exportImage'
+  | 'llmPrompt'
+  | 'openLiveSite'
+  | 'stopLiveSite';
 
 export type EngineArgs<M extends EngineMethod> = Parameters<EngineCore[M]>;
 export type EngineResult<M extends EngineMethod> = Awaited<ReturnType<EngineCore[M]>>;
@@ -19,6 +27,7 @@ export type EngineResponseMessage =
 const ENGINE_METHODS: ReadonlySet<string> = new Set<EngineMethod>([
   'loadCached',
   'loadFresh',
+  'setFilter',
   'report',
   'exportImage',
   'llmPrompt',

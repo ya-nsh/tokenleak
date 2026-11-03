@@ -15,7 +15,9 @@ import { buildCommonsExport, buildCommonsPromptExport, collectGitOutcomeSignals,
 import { buildReplayLiveDataProvider, startLiveSite } from '@tokenleak/renderers';
 import type { LiveSite, LiveSiteContent } from '@tokenleak/renderers';
 import { writeFileSync } from 'node:fs';
-import type { TuiData } from './data.js';
+import type { FilterOptions, TuiData } from './data.js';
+import { filterTuiData, isFilterActive } from './filter.js';
+import type { UsageFilter } from './filter.js';
 import {
   buildTokenleakOutput,
   ensureAgentBehaviorDiffReport,
@@ -85,6 +87,10 @@ export interface LiveSiteResult {
  * started, in-process behind the same asynchronous interface.
  */
 export class EngineCore {
+  /** Everything loaded, before any drill-down. */
+  private full: TuiData | null = null;
+  private filter: UsageFilter = {};
+  /** `full` narrowed by `filter`; what reports, exports and the live site use. */
   private data: TuiData | null = null;
   /** Per-window scratch state so reports share window scoping and routing results. */
   private readonly windowStates = new Map<number, AppState>();
@@ -93,16 +99,28 @@ export class EngineCore {
   /** The snapshot saved by the previous run, if any. Becomes the engine's data. */
   async loadCached(): Promise<TuiData | null> {
     const cached = readCachedTuiData();
-    if (cached && this.data === null) this.setData(cached);
-    return cached ? slimTuiData(cached) : null;
+    if (!cached) return null;
+    if (this.full === null) this.setFull(cached);
+    return this.slim(this.full === cached ? this.data! : filterTuiData(cached, this.filter), cached);
   }
 
   /** Reads every provider, replaces the engine's data and saves the snapshot. */
   async loadFresh(options: { attemptCursorSync: boolean }): Promise<TuiData> {
     const fresh = await loadAllData({ attemptCursorSync: options.attemptCursorSync });
-    this.setData(fresh);
+    this.setFull(fresh);
     writeCachedTuiData(fresh);
-    return slimTuiData(fresh);
+    return this.slim(this.data!, fresh);
+  }
+
+  /**
+   * Narrows every later report, export and live page to `filter` (an empty
+   * filter clears it) and returns the narrowed data, or null before any load.
+   */
+  async setFilter(filter: UsageFilter): Promise<TuiData | null> {
+    this.filter = isFilterActive(filter) ? { ...filter } : {};
+    if (!this.full) return null;
+    this.setData(filterTuiData(this.full, this.filter));
+    return this.slim(this.data!, this.full);
   }
 
   async report<K extends ReportKind>(request: ReportRequest<K>): Promise<ReportResults[K] | null> {
@@ -177,9 +195,18 @@ export class EngineCore {
     }
   }
 
+  private setFull(full: TuiData): void {
+    this.full = full;
+    this.setData(filterTuiData(full, this.filter));
+  }
+
   private setData(data: TuiData): void {
     this.data = data;
     this.windowStates.clear();
+  }
+
+  private slim(data: TuiData, full: TuiData): TuiData {
+    return { ...slimTuiData(data), filterOptions: filterOptionsOf(full) };
   }
 
   private stateFor(window: number): AppState | null {
@@ -239,6 +266,18 @@ export class EngineCore {
     window.nutritionOutcomeSignals = signals;
     return ensureNutritionReport(state);
   }
+}
+
+/** Providers and models a drill-down can pick from, biggest spend first. */
+export function filterOptionsOf(data: TuiData): FilterOptions {
+  const providers = [...data.providers]
+    .sort((a, b) => b.totalCost - a.totalCost || a.displayName.localeCompare(b.displayName))
+    .map((provider) => ({ key: provider.provider, label: provider.displayName }));
+  const models = (data.allTimeStats.allModels ?? data.allTimeStats.topModels)
+    .slice()
+    .sort((a, b) => b.cost - a.cost || a.model.localeCompare(b.model))
+    .map((entry) => entry.model);
+  return { providers, models };
 }
 
 const PNG_EXPORT_PATH = 'tokenleak.png';
