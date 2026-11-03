@@ -57,24 +57,49 @@ const isDirectExecution =
     : process.argv[1] !== undefined &&
       import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 
+/**
+ * How a command ended. `finished` commands let the process exit once output
+ * drains; an `interactive` one (the TUI) keeps running until the user quits.
+ */
+export type CommandOutcome = 'finished' | 'interactive';
+
+export interface DefaultCommandDeps {
+  stdinIsTTY: boolean;
+  stdoutIsTTY: boolean;
+  /** Starts the TUI and resolves once it is on screen, not when it closes. */
+  startTui: () => Promise<void>;
+}
+
+const defaultCommandDeps: DefaultCommandDeps = {
+  stdinIsTTY: Boolean(process.stdin.isTTY),
+  stdoutIsTTY: Boolean(process.stdout.isTTY),
+  startTui: async () => {
+    const { main: startTui } = await import('@tokenleak/tui');
+    await startTui();
+  },
+};
+
 /** The default command: the TUI in a terminal, otherwise a rendered report. */
-async function runDefaultCommand(argv: string[]): Promise<void> {
+export async function runDefaultCommand(
+  argv: string[],
+  deps: DefaultCommandDeps = defaultCommandDeps,
+): Promise<CommandOutcome> {
   process.argv = [...process.argv.slice(0, 2), ...argv];
-  if (printInfoFlag(infoFlagsFromArgv(argv), buildHelpText)) return;
+  if (printInfoFlag(infoFlagsFromArgv(argv), buildHelpText)) return 'finished';
 
   // Every path prices usage, so a broken override file must stop the run up front.
   await initPricing();
 
-  if (shouldStartTui(argv, Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY))) {
-    const { main: startTui } = await import('@tokenleak/tui');
-    await startTui();
-    return;
+  if (shouldStartTui(argv, deps.stdinIsTTY, deps.stdoutIsTTY)) {
+    await deps.startTui();
+    return 'interactive';
   }
 
   await validateCommandFlags(main, argv, 'tokenleak');
   const mainArgs = typeof main.args === 'function' ? await main.args() : await main.args;
   assertNoStrayPositional(argv, (mainArgs ?? {}) as ArgsDef, 'tokenleak', [...SUBCOMMANDS.keys()]);
   await runMain(main);
+  return 'finished';
 }
 
 /**
@@ -87,16 +112,18 @@ async function dispatchCli(): Promise<void> {
   const argv = normalizeCliArgv(globals.argv);
 
   const subcommand = argv[0] !== undefined ? SUBCOMMANDS.get(argv[0]) : undefined;
+  let outcome: CommandOutcome = 'finished';
   try {
     if (subcommand) {
       await subcommand(argv.slice(1));
     } else {
-      await runDefaultCommand(argv);
+      outcome = await runDefaultCommand(argv);
     }
   } catch (error: unknown) {
     handleError(error);
   }
-  finishCommand(0);
+  // finishCommand arms a forced exit, which would kill a TUI that is still open.
+  if (outcome === 'finished') finishCommand(0);
 }
 
 if (isDirectExecution) {
