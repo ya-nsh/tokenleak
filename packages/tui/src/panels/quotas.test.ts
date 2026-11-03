@@ -2,7 +2,8 @@ import { Box, Text } from '@opentui/core';
 import { expect, test } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import { createInitialState } from '../lib/state';
-import { createQuotasPanel, quotaPanelHeight } from './quotas';
+import { createQuotasPanel } from './quotas';
+import { contentRows } from '../lib/layout';
 
 test('renders quota bars and setup guidance at laptop and narrow terminal sizes', async () => {
   for (const [width, height] of [
@@ -86,7 +87,7 @@ test('quota rows stay distinct inside the header/banner/footer layout', async ()
         { flexDirection: 'column', height: '100%', width: '100%' },
         Text({ content: 'HEADER', height: 1 }),
         Text({ content: 'CURSOR BANNER', height: 1 }),
-        createQuotasPanel(state, 80, quotaPanelHeight(16, true)),
+        createQuotasPanel(state, 80, contentRows(16, true)),
         Text({ content: 'GLOBAL FOOTER', height: 1 }),
       ),
     );
@@ -101,8 +102,3 @@ test('quota rows stay distinct inside the header/banner/footer layout', async ()
   }
 });
 
-test('quota content height handles banners and tiny terminals', () => {
-  expect(quotaPanelHeight(24, false)).toBe(22);
-  expect(quotaPanelHeight(24, true)).toBe(21);
-  expect(quotaPanelHeight(1, true)).toBe(0);
-});

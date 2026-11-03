@@ -2,12 +2,22 @@ import { Box, Text } from '@opentui/core';
 import type { RoutingSimulationCandidate, RoutingSimulationReport } from '@tokenleak/core';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatCost, formatTokens, truncate, wrapText } from '../lib/format.js';
+import { fitItems } from '../lib/layout.js';
 
 export const SIMULATOR_VISIBLE_ROWS = 8;
+/** Each candidate is an action, a savings line and an optional detail line. */
+const SIMULATOR_ROWS_PER_ITEM = 3;
+/** Border, title, three summary lines, blank, section header, both indicators and three warning lines. */
+const SIMULATOR_FIXED_ROWS = 2 + 1 + 3 + 1 + 1 + 2 + 3;
+
+/** Candidates per page in `height` rows. */
+export function simulatorVisibleRows(height: number): number {
+  return fitItems(height, SIMULATOR_FIXED_ROWS, SIMULATOR_ROWS_PER_ITEM, SIMULATOR_VISIBLE_ROWS);
+}
 export const SIMULATOR_MAX_CONTENT_WIDTH = 78;
 
-function clampOffset(offset: number, itemCount: number): number {
-  return Math.max(0, Math.min(offset, Math.max(0, itemCount - SIMULATOR_VISIBLE_ROWS)));
+function clampOffset(offset: number, itemCount: number, pageSize: number): number {
+  return Math.max(0, Math.min(offset, Math.max(0, itemCount - pageSize)));
 }
 
 function candidateAction(candidate: RoutingSimulationCandidate): string {
@@ -35,34 +45,63 @@ export function createSimulatorPanel(
   report: RoutingSimulationReport | null,
   scrollOffset: number = 0,
   contentWidth: number = SIMULATOR_MAX_CONTENT_WIDTH,
+  height = Number.POSITIVE_INFINITY,
 ) {
   const width = Math.max(36, contentWidth);
   if (!report) {
     return Box(
-      { flexDirection: 'column', width: '100%', flexGrow: 1, borderStyle: 'single', borderColor: COLORS.dimWhite, paddingLeft: 1 },
+      {
+        flexDirection: 'column',
+        width: '100%',
+        flexGrow: 1,
+        borderStyle: 'single',
+        borderColor: COLORS.dimWhite,
+        paddingLeft: 1,
+      },
       Text({ content: ' Routing Simulator ', fg: COLORS.amber, attributes: BOLD }),
       Text({ content: 'No event data available for routing simulation', fg: COLORS.dimWhite }),
     );
   }
 
   const positiveCandidates = report.candidates.filter((candidate) => (candidate.savings ?? 0) > 0);
-  const offset = clampOffset(scrollOffset, positiveCandidates.length);
-  const candidates = positiveCandidates.slice(offset, offset + SIMULATOR_VISIBLE_ROWS);
+  const pageSize = simulatorVisibleRows(height);
+  const offset = clampOffset(scrollOffset, positiveCandidates.length, pageSize);
+  const candidates = positiveCandidates.slice(offset, offset + pageSize);
   const below = positiveCandidates.length - offset - candidates.length;
   return Box(
-    { flexDirection: 'column', width: '100%', flexGrow: 1, borderStyle: 'single', borderColor: COLORS.dimWhite, paddingLeft: 1, paddingRight: 1 },
+    {
+      flexDirection: 'column',
+      width: '100%',
+      flexGrow: 1,
+      borderStyle: 'single',
+      borderColor: COLORS.dimWhite,
+      paddingLeft: 1,
+      paddingRight: 1,
+    },
     Text({ content: ' Routing Simulator ', fg: COLORS.amber, attributes: BOLD }),
     Text({
-      content: truncate(` Actual spend ${formatCost(report.currentCost)}  ->  Estimated with routing ${formatCost(report.simulatedCost)}`, width),
+      content: truncate(
+        ` Actual spend ${formatCost(report.currentCost)}  ->  Estimated with routing ${formatCost(report.simulatedCost)}`,
+        width,
+      ),
       fg: COLORS.green,
       attributes: BOLD,
     }),
     Text({
-      content: truncate(` Savings ${formatCost(report.estimatedSavings)} (${(report.estimatedSavingsPercent * 100).toFixed(1)}%)`, width),
+      content: truncate(
+        ` Savings ${formatCost(report.estimatedSavings)} (${(report.estimatedSavingsPercent * 100).toFixed(1)}%)`,
+        width,
+      ),
       fg: COLORS.green,
       attributes: BOLD,
     }),
-    Text({ content: truncate(` Could reroute ${report.affectedEvents} events / ${formatTokens(report.affectedTokens)} tokens  |  Strategy ${report.strategy}`, width), fg: COLORS.dimWhite }),
+    Text({
+      content: truncate(
+        ` Could reroute ${report.affectedEvents} events / ${formatTokens(report.affectedTokens)} tokens  |  Strategy ${report.strategy}`,
+        width,
+      ),
+      fg: COLORS.dimWhite,
+    }),
     Text({ content: '', fg: COLORS.dimWhite }),
     Text({ content: ' Top Candidates ', fg: COLORS.amber, attributes: BOLD }),
     ...(offset > 0 ? [Text({ content: ` ${offset} more above`, fg: COLORS.dimWhite })] : []),
@@ -75,7 +114,10 @@ export function createSimulatorPanel(
               fg: COLORS.white,
             }),
             Text({
-              content: truncate(`    Save about ${formatCost(candidate.savings ?? 0)} on this event · confidence: ${candidate.confidence}`, width),
+              content: truncate(
+                `    Save about ${formatCost(candidate.savings ?? 0)} on this event · confidence: ${candidate.confidence}`,
+                width,
+              ),
               fg: COLORS.dimWhite,
             }),
             ...(detail
@@ -90,8 +132,8 @@ export function createSimulatorPanel(
     ...(report.warnings.length > 0
       ? [
           Text({ content: '', fg: COLORS.dimWhite }),
-          ...wrapText(`Warnings: ${report.warnings.slice(0, 2).join(' | ')}`, width, 2).map((line) =>
-            Text({ content: truncate(` ${line}`, width), fg: COLORS.dimWhite }),
+          ...wrapText(`Warnings: ${report.warnings.slice(0, 2).join(' | ')}`, width, 2).map(
+            (line) => Text({ content: truncate(` ${line}`, width), fg: COLORS.dimWhite }),
           ),
         ]
       : []),
