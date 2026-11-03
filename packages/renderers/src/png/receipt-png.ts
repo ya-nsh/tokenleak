@@ -1,5 +1,6 @@
 import type { Receipt } from '@tokenleak/core';
 import sharp from 'sharp';
+import { rasterDensity } from './raster-density';
 import { renderReceiptSvg } from '../svg/receipt';
 
 const PNG_DENSITY = 216;
@@ -13,7 +14,7 @@ export async function renderReceiptPng(
 ): Promise<Buffer> {
   const svgString = renderReceiptSvg(receipt, options);
 
-  return sharp(Buffer.from(svgString), { density: PNG_DENSITY })
+  return sharp(Buffer.from(svgString), { density: rasterDensity(svgString, PNG_DENSITY) })
     .png({ adaptiveFiltering: true, compressionLevel: 9, force: true })
     .toBuffer();
 }

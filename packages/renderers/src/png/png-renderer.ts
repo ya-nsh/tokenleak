@@ -2,6 +2,7 @@ import type { TokenleakOutput, RenderOptions } from '@tokenleak/core';
 import type { IRenderer } from '../renderer';
 import { renderTerminalCardSvg } from './terminal-card';
 import sharp from 'sharp';
+import { rasterDensity } from './raster-density';
 
 const PNG_DENSITY = 432;
 
@@ -11,7 +12,7 @@ export class PngRenderer implements IRenderer {
   async render(output: TokenleakOutput, options: RenderOptions): Promise<Buffer> {
     const svgString = renderTerminalCardSvg(output, options);
     const pngBuffer = await sharp(Buffer.from(svgString), {
-      density: PNG_DENSITY,
+      density: rasterDensity(svgString, PNG_DENSITY),
     })
       .png({
         adaptiveFiltering: true,
