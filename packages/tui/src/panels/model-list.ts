@@ -12,7 +12,23 @@ import {
 import { COLORS, BOLD, MODEL_COLORS } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
 
-export function createModelList(state: AppState, stats: AggregatedStats | null) {
+const MODEL_NAME_MIN_WIDTH = 30;
+/** Beyond this the cost and token columns drift too far from the names. */
+const MODEL_NAME_MAX_WIDTH = 48;
+const PCT_WIDTH = 9;
+const COST_WIDTH = 10;
+const TOKENS_WIDTH = 10;
+/** Bullet, the gap after the name, and the panel's border and padding. */
+const ROW_CHROME_WIDTH = 2 + 1 + 4;
+
+/** Name column width for a panel `contentWidth` cells wide. */
+export function modelNameWidth(contentWidth: number): number {
+  const available = contentWidth - ROW_CHROME_WIDTH - PCT_WIDTH - COST_WIDTH - TOKENS_WIDTH;
+  return Math.max(MODEL_NAME_MIN_WIDTH, Math.min(MODEL_NAME_MAX_WIDTH, available));
+}
+
+export function createModelList(state: AppState, stats: AggregatedStats | null, contentWidth = 0) {
+  const nameWidth = modelNameWidth(contentWidth);
   if (state.isLoading || !stats) {
     const skeletonRows: ReturnType<typeof Text>[] = [];
     for (let i = 0; i < 5; i++) {
@@ -86,7 +102,7 @@ export function createModelList(state: AppState, stats: AggregatedStats | null) 
     const colorIdx = sortedModels.indexOf(m);
     const color = MODEL_COLORS[colorIdx % MODEL_COLORS.length]!;
     const pct = `(${m.percentage.toFixed(1)}%)`;
-    const nameStr = truncate(formatModelWithTier(m.model, m.serviceTiers), 30);
+    const nameStr = truncate(formatModelWithTier(m.model, m.serviceTiers), nameWidth);
     const costStr = formatCostWithCompleteness(m.cost, m.costCompleteness);
     const tokStr = formatTokens(m.tokens);
 
@@ -96,13 +112,13 @@ export function createModelList(state: AppState, stats: AggregatedStats | null) 
         { flexDirection: 'row', width: '100%' },
         Text({ content: '\u25cf ', fg: color }),
         Text({
-          content: padRight(nameStr, 31),
+          content: padRight(nameStr, nameWidth + 1),
           fg: colorIdx === 0 ? COLORS.amber : COLORS.white,
           attributes: colorIdx === 0 ? BOLD : undefined,
         }),
-        Text({ content: padRight(pct, 9), fg: COLORS.dimWhite }),
-        Text({ content: padLeft(costStr, 10), fg: COLORS.amber }),
-        Text({ content: padLeft(tokStr, 10), fg: COLORS.green }),
+        Text({ content: padRight(pct, PCT_WIDTH), fg: COLORS.dimWhite }),
+        Text({ content: padLeft(costStr, COST_WIDTH), fg: COLORS.amber }),
+        Text({ content: padLeft(tokStr, TOKENS_WIDTH), fg: COLORS.green }),
       ),
     );
   }

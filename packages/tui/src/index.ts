@@ -295,7 +295,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         { flexDirection: 'column', width: '100%', flexGrow: 1 },
         createChartPanel(state, daily),
         createStatsRow(state, windowStats),
-        createModelList(state, windowStats),
+        createModelList(state, windowStats, renderer.terminalWidth),
       );
     case 'matrix':
       if (hasWindowData && state.matrixPage > 0 && !state.cachedMoreStats) {
