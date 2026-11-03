@@ -2,46 +2,21 @@ import { refreshQuotas, startQuotaPolling } from './lib/quotas.js';
 import { createQuotasPanel } from './panels/quotas.js';
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
-import type { TokenleakOutput } from '@tokenleak/core';
-import {
-  buildCommonsExport,
-  buildCommonsPromptExport,
-  getTodayLocal,
-} from '@tokenleak/core';
 import {
   CursorAuthError,
   resolveCursorSetupStatus,
   saveCursorCredentials,
   validateCursorSession,
 } from '@tokenleak/registry';
-import {
-  buildReplayLiveDataProvider,
-  computeAchievements,
-  startLiveSite,
-} from '@tokenleak/renderers';
-import type { LiveSite, LiveSiteContent } from '@tokenleak/renderers';
+import { computeAchievements } from '@tokenleak/renderers';
 import { copyTextToClipboard } from './lib/clipboard.js';
 import { COLORS, BOLD } from './lib/theme.js';
-import {
-  loadAllData,
-  loadNutritionOutcomeSignalsForWindow,
-  readCachedTuiData,
-  writeCachedTuiData,
-  getDailyForWindow,
-  ensureSavingsReport,
-  ensureFocusReport,
-  ensureExplainReport,
-  ensureCompareOutput,
-  ensureMoreStats,
-  ensureReplayReport,
-  ensureRoutingSimulationReport,
-  ensureAgentBehaviorDiffReport,
-  ensureNutritionReport,
-  ensureReceipt,
-  deriveReceiptLines,
-  getScopedWindowData,
-  buildTokenleakOutput,
-} from './lib/data.js';
+import { getDailyForWindow, deriveReceiptLines, buildTokenleakOutput } from './lib/data.js';
+import type { TuiData } from './lib/data.js';
+import { createDataEngine } from './lib/engine.js';
+import type { DataEngine } from './lib/engine.js';
+import type { ReportKind, ReportResults } from './lib/engine-core.js';
+import { createReportTask } from './lib/report-task.js';
 import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader, buildSubTabBar } from './panels/header.js';
@@ -229,6 +204,33 @@ function deferredPanelForTask(
   return createDeferredPanel(label, `Loading ${label}...`);
 }
 
+let engine: DataEngine | null = null;
+
+function dataEngine(): DataEngine {
+  engine ??= createDataEngine();
+  return engine;
+}
+
+/** A view task that fetches one report of the selected window for the view keyed `key`. */
+function requestReport<K extends ReportKind>(
+  state: AppState,
+  key: string,
+  kind: K,
+  assign: (report: ReportResults[K]) => void,
+  date: string | null = null,
+): () => Promise<void> {
+  return createReportTask(
+    {
+      report: (request) => dataEngine().report(request),
+      currentData: () => state.data,
+      currentKey: () => getSelectedViewTaskKey(state),
+    },
+    key,
+    { kind, window: state.selectedWindowIndex, date },
+    assign,
+  );
+}
+
 function nutritionWindowKey(state: AppState): string | null {
   const window = state.data?.windows[state.selectedWindowIndex];
   return window ? `${window.dateRange.since}..${window.dateRange.until}` : null;
@@ -300,9 +302,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     case 'matrix':
       if (hasWindowData && state.matrixPage > 0 && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'matrix');
-        return deferredPanelForTask(state, renderer, key, 'Matrix', () => {
-          ensureMoreStats(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Matrix', requestReport(state, key, 'more', (report) => {
+          state.cachedMoreStats = report;
+        }));
       }
       return createMatrixView(state);
     case 'advisor':
@@ -311,9 +313,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'advisor');
-        return deferredPanelForTask(state, renderer, key, 'Advisor', () => {
-          ensureSavingsReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Advisor', requestReport(state, key, 'savings', (report) => {
+          state.cachedSavingsReport = report;
+        }));
       }
       return createAdvisorPanel(state, state.cachedSavingsReport, viewHeight(state, renderer));
     case 'focus':
@@ -322,9 +324,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedFocusReport) {
         const key = getSelectedViewTaskKey(state, 'focus');
-        return deferredPanelForTask(state, renderer, key, 'Focus Sessions', () => {
-          ensureFocusReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Focus Sessions', requestReport(state, key, 'focus', (report) => {
+          state.cachedFocusReport = report;
+        }));
       }
       return createFocusPanel(state, state.cachedFocusReport);
     case 'explain':
@@ -334,9 +336,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       ensureExplainDate(state);
       if (!state.cachedExplainReport || state.cachedExplainReport.date !== state.explainDate) {
         const key = getSelectedViewTaskKey(state, 'explain');
-        return deferredPanelForTask(state, renderer, key, 'Explain', () => {
-          ensureExplainReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Explain', requestReport(state, key, 'explain', (report) => {
+          state.cachedExplainReport = report;
+        }, state.explainDate));
       }
       return createExplainPanel(state.cachedExplainReport, state.explainDate);
     case 'compare':
@@ -345,9 +347,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedCompareOutput) {
         const key = getSelectedViewTaskKey(state, 'compare');
-        return deferredPanelForTask(state, renderer, key, 'Compare', () => {
-          ensureCompareOutput(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Compare', requestReport(state, key, 'compare', (report) => {
+          state.cachedCompareOutput = report;
+        }));
       }
       return createComparePanel(state, state.cachedCompareOutput);
     case 'export':
@@ -370,9 +372,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedReplayReport || state.cachedReplayReport.date !== state.replayDate) {
         const key = getSelectedViewTaskKey(state, 'replay');
-        return deferredPanelForTask(state, renderer, key, 'Replay', () => {
-          ensureReplayReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Replay', requestReport(state, key, 'replay', (report) => {
+          state.cachedReplayReport = report;
+        }, state.replayDate));
       }
       return createReplayPanel(
         state.cachedReplayReport,
@@ -393,23 +395,17 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedNutritionReport) {
         const key = getSelectedViewTaskKey(state, 'nutrition');
+        const loadNutrition = requestReport(state, key, 'nutrition', (report) => {
+          state.cachedNutritionReport = report;
+          const signalKey = nutritionWindowKey(state);
+          if (signalKey) {
+            state.nutritionSignalsLoadedKeys.add(signalKey);
+          }
+        });
         return deferredPanelForTask(state, renderer, key, 'AI ROI', async () => {
           state.nutritionSignalsLoading = true;
           try {
-            const signals = await loadNutritionOutcomeSignalsForWindow(state);
-            if (getSelectedViewTaskKey(state, 'nutrition') !== key) {
-              return;
-            }
-            const window = state.data?.windows[state.selectedWindowIndex];
-            if (window) {
-              window.nutritionOutcomeSignals = signals;
-            }
-            state.cachedNutritionReport = null;
-            const signalKey = nutritionWindowKey(state);
-            if (signalKey) {
-              state.nutritionSignalsLoadedKeys.add(signalKey);
-            }
-            ensureNutritionReport(state);
+            await loadNutrition();
           } finally {
             state.nutritionSignalsLoading = false;
           }
@@ -424,9 +420,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
     case 'wrapped': {
       if (hasWindowData && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'wrapped');
-        return deferredPanelForTask(state, renderer, key, 'Wrapped', () => {
-          ensureMoreStats(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Wrapped', requestReport(state, key, 'more', (report) => {
+          state.cachedMoreStats = report;
+        }));
       }
       const output = buildTokenleakOutput(state, { computeMore: false });
       const achievements = output ? computeAchievements(output) : [];
@@ -451,9 +447,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedReceipt) {
         const key = getSelectedViewTaskKey(state, 'receipts');
-        return deferredPanelForTask(state, renderer, key, 'Receipts', () => {
-          ensureReceipt(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Receipts', requestReport(state, key, 'receipt', (report) => {
+          state.cachedReceipt = report;
+        }));
       }
       return createReceiptsPanel(
         state,
@@ -470,9 +466,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedRoutingSimulationReport) {
         const key = getSelectedViewTaskKey(state, 'simulator');
-        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', () => {
-          ensureRoutingSimulationReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Routing Simulator', requestReport(state, key, 'routing', (report) => {
+          state.cachedRoutingSimulationReport = report;
+        }));
       }
       return createSimulatorPanel(
         state.cachedRoutingSimulationReport,
@@ -486,9 +482,9 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedSavingsReport) {
         const key = getSelectedViewTaskKey(state, 'waste');
-        return deferredPanelForTask(state, renderer, key, 'Waste Signals', () => {
-          ensureSavingsReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Waste Signals', requestReport(state, key, 'savings', (report) => {
+          state.cachedSavingsReport = report;
+        }));
       }
       return createWastePanel(
         state.cachedSavingsReport,
@@ -502,18 +498,14 @@ function buildContent(state: AppState, renderer: CliRenderer) {
       }
       if (!state.cachedBehaviorDiffReport) {
         const key = getSelectedViewTaskKey(state, 'behavior');
-        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', () => {
-          ensureAgentBehaviorDiffReport(state);
-        });
+        return deferredPanelForTask(state, renderer, key, 'Behavior Diff', requestReport(state, key, 'behavior', (report) => {
+          state.cachedBehaviorDiffReport = report;
+        }));
       }
       return createBehaviorPanel(state.cachedBehaviorDiffReport);
     default:
       return Box({ flexDirection: 'column', width: '100%', flexGrow: 1 });
   }
-}
-
-function buildWindowScopedTokenleakOutput(state: AppState): TokenleakOutput | null {
-  return buildTokenleakOutput(state, { computeMore: true });
 }
 
 function resetCursorSetupForm(state: AppState): void {
@@ -539,7 +531,7 @@ function closeCursorSetup(state: AppState): void {
 
 function applyLoadedData(
   state: AppState,
-  freshData: Awaited<ReturnType<typeof loadAllData>>,
+  freshData: TuiData,
 ): void {
   state.data = freshData;
   state.isLoading = false;
@@ -580,9 +572,8 @@ async function reloadAllData(
   render(state, renderer);
 
   try {
-    const freshData = await loadAllData({ attemptCursorSync: true });
+    const freshData = await dataEngine().call('loadFresh', { attemptCursorSync: true });
     applyLoadedData(state, freshData);
-    writeCachedTuiData(freshData);
   } catch (err: unknown) {
     state.isLoading = false;
     state.loadError = `${failurePrefix ?? 'Refresh failed'}: ${err instanceof Error ? err.message : String(err)}`;
@@ -864,17 +855,8 @@ function pauseReplayPlaybackIfRunning(state: AppState): void {
 
 // ── In-process live site: replay (global `o`) and AI Wrapped (export `l`) share one server ──
 
-let liveSite: LiveSite | null = null;
-
-/** Start the live site, or add `content` to the one already running. */
-async function ensureLiveSite(content: LiveSiteContent): Promise<LiveSite> {
-  if (liveSite) {
-    liveSite.update(content);
-    return liveSite;
-  }
-  liveSite = await startLiveSite(content);
-  return liveSite;
-}
+/** The replay page's URL while the engine's live site serves it. */
+let replayLiveUrl: string | null = null;
 
 const OS_OPEN_COMMANDS: Record<string, string> = {
   darwin: 'open',
@@ -895,22 +877,23 @@ function openUrlInBrowser(url: string): void {
 
 async function launchReplayBrowser(state: AppState, renderer: CliRenderer): Promise<void> {
   // Idempotent — second press just re-opens the browser to the existing page.
-  if (state.replayLiveServerPort !== null && liveSite) {
-    openUrlInBrowser(liveSite.url('replay'));
+  if (state.replayLiveServerPort !== null && replayLiveUrl) {
+    openUrlInBrowser(replayLiveUrl);
     return;
   }
   if (!state.data) return; // still booting; nothing to render yet
-  const scoped = getScopedWindowData(state);
-  const providers = scoped?.scopedProviders ?? state.data.providers;
-  const replayLiveData = buildReplayLiveDataProvider(providers, state.replayDate, getTodayLocal());
-  state.replayDate = replayLiveData.initialDate;
-  state.cachedReplayReport = replayLiveData.initialReport;
+  const data = state.data;
+  const window = state.selectedWindowIndex;
   try {
-    // The live site never writes to stdout/stderr, so it cannot corrupt the TUI.
-    const site = await ensureLiveSite({ replay: replayLiveData });
+    // The live site runs in the engine and never writes to stdout/stderr, so it cannot corrupt the TUI.
+    const site = await dataEngine().call('openLiveSite', { replay: { window, date: state.replayDate } });
+    if (state.data !== data || state.selectedWindowIndex !== window || !site.replay || !site.urls.replay) return;
+    state.replayDate = site.replay.date;
+    state.cachedReplayReport = site.replay.report;
     state.replayLiveServerPort = site.port;
+    replayLiveUrl = site.urls.replay;
     render(state, renderer);
-    openUrlInBrowser(site.url('replay'));
+    openUrlInBrowser(site.urls.replay);
   } catch {
     // best-effort. The TUI render path doesn't have an error toast yet —
     // failing silently is safer than dumping to stderr (would corrupt
@@ -935,10 +918,10 @@ function handleGlobalReplayBrowserKey(
 
 /** Stop the live site; its pages were built from data that is about to change or go away. */
 function stopLiveSite(state: AppState): void {
-  if (liveSite !== null) {
-    try { liveSite.stop(); } catch { /* noop */ }
-    liveSite = null;
+  if (state.replayLiveServerPort !== null || replayLiveUrl !== null) {
+    void dataEngine().call('stopLiveSite').catch(() => {});
   }
+  replayLiveUrl = null;
   state.replayLiveServerPort = null;
 }
 
@@ -1279,57 +1262,35 @@ async function handleExport(
   state: AppState,
   renderer: CliRenderer,
 ): Promise<void> {
-  const output = buildTokenleakOutput(state, { computeMore: true });
-  if (!output) {
+  if (!state.data || !state.data.windows[state.selectedWindowIndex]) {
     state.exportStatus = 'Error: No data loaded';
     render(state, renderer);
     return;
   }
+  const window = state.selectedWindowIndex;
 
   try {
     if (key === 'p') {
       state.exportStatus = 'Rendering PNG...';
       render(state, renderer);
-
-      const { PngRenderer } = await import('@tokenleak/renderers');
-      const pngRenderer = new PngRenderer();
-      const buffer = await pngRenderer.render(output, {
-        format: 'png',
-        theme: 'dark',
-        width: 120,
-        showInsights: true,
-        noColor: false,
-        output: null,
-      });
-      const { writeFileSync } = await import('node:fs');
-      const outputPath = 'tokenleak.png';
-      writeFileSync(outputPath, buffer);
+      const outputPath = await dataEngine().call('exportImage', window, 'png');
       state.exportStatus = `Saved to ${outputPath}`;
     } else if (key === 'w') {
       state.exportStatus = 'Rendering Wrapped PNG...';
       render(state, renderer);
-
-      const { renderWrappedPng } = await import('@tokenleak/renderers');
-      const buffer = await renderWrappedPng(output, { theme: 'dark' });
-      const { writeFileSync } = await import('node:fs');
-      const outputPath = 'tokenleak-wrapped.png';
-      writeFileSync(outputPath, buffer);
+      const outputPath = await dataEngine().call('exportImage', window, 'wrapped-png');
       state.exportStatus = `Saved to ${outputPath}`;
     } else if (key === 'l') {
       state.exportStatus = 'Starting live server...';
       render(state, renderer);
 
-      const site = await ensureLiveSite({ wrapped: output });
-      state.exportStatus = `AI Wrapped live at ${site.url('wrapped')} (stops when you quit)`;
+      const site = await dataEngine().call('openLiveSite', { wrapped: { window } });
+      state.exportStatus = `AI Wrapped live at ${site.urls.wrapped ?? `port ${site.port}`} (stops when you quit)`;
     } else if (key === 'a') {
       state.exportStatus = 'Copying LLM prompt...';
       render(state, renderer);
 
-      const scopedOutput = buildWindowScopedTokenleakOutput(state);
-      if (!scopedOutput) {
-        throw new Error('No data loaded');
-      }
-      const prompt = buildCommonsPromptExport(buildCommonsExport(scopedOutput));
+      const prompt = await dataEngine().call('llmPrompt', window);
       await copyTextToClipboard(prompt);
       state.exportStatus = 'Copied LLM analysis prompt to clipboard';
     }
@@ -1349,9 +1310,8 @@ async function loadFreshDataInBackground(state: AppState, renderer: CliRenderer)
   render(state, renderer);
 
   try {
-    const freshData = await loadAllData({ attemptCursorSync: false });
+    const freshData = await dataEngine().call('loadFresh', { attemptCursorSync: false });
     applyLoadedData(state, freshData);
-    writeCachedTuiData(freshData);
   } catch (err: unknown) {
     state.isLoading = false;
     state.loadError = `Refresh failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -1374,9 +1334,8 @@ async function syncCursorInBackground(
     render(state, renderer);
 
     if (options.reloadData !== false && status.state === 'ready') {
-      const freshData = await loadAllData({ attemptCursorSync: false });
+      const freshData = await dataEngine().call('loadFresh', { attemptCursorSync: false });
       applyLoadedData(state, freshData);
-      writeCachedTuiData(freshData);
       render(state, renderer);
     }
   } catch {
@@ -1399,16 +1358,25 @@ export async function main(): Promise<void> {
   });
   renderer.on('destroy', stopQuotaPolling);
 
+  const engineHandle = dataEngine();
+  renderer.on('destroy', () => engineHandle.dispose());
+
   // Show loading state immediately
   render(state, renderer);
 
-  const cachedData = readCachedTuiData();
-  if (cachedData) {
-    applyLoadedData(state, cachedData);
-    render(state, renderer);
-  }
-
   void (async () => {
+    // The engine reads last run's snapshot off this thread; the frame above stays responsive.
+    let cachedData: TuiData | null = null;
+    try {
+      cachedData = await engineHandle.call('loadCached');
+    } catch {
+      // An unreadable snapshot only costs the instant first paint; the fresh load reports failures.
+    }
+    if (cachedData && state.data === null && !renderer.isDestroyed) {
+      applyLoadedData(state, cachedData);
+      render(state, renderer);
+    }
+
     if (cachedData) {
       await syncCursorInBackground(state, renderer, { reloadData: false });
       await loadFreshDataInBackground(state, renderer);
