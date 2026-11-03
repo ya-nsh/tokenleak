@@ -358,7 +358,7 @@ export class ClaudeCodeProvider implements IProvider {
     const allEvents: UsageEvent[] = [];
     const warnings = new Map<string, ProviderWarning>();
     const cache = new UsageFileCache<UsageRecord>(
-      'claude-code-v7',
+      'claude-code-v8',
       this.baseDir,
       isCachedUsageRecord,
     );
