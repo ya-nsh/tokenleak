@@ -7,7 +7,7 @@ const PACKAGES_DIR = join(import.meta.dir, '..', '..');
 
 describe('core', () => {
   it('exports a version string', () => {
-    expect(VERSION).toBe('2.3.0');
+    expect(VERSION).toBe('2.4.0');
   });
 
   it('version is a valid semver format', () => {
