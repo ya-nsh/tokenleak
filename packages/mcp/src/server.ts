@@ -29,6 +29,7 @@ import {
 } from '@tokenleak/registry';
 import { registerTools } from './tools/index.js';
 import { registerResources } from './resources/index.js';
+import { VERSION } from '@tokenleak/core';
 
 /**
  * Create a Tokenleak MCP server with all tools and resources registered.
@@ -41,7 +42,7 @@ export function createTokenleakServer(registry?: ProviderRegistry): McpServer {
 
   const server = new McpServer({
     name: 'tokenleak',
-    version: '2.2.1',
+    version: VERSION,
   });
 
   registerTools(server, reg);
