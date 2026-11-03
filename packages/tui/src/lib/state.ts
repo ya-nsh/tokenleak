@@ -15,6 +15,7 @@ import type {
 } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
+import type { PaletteState } from './palette.js';
 
 export type ViewMode =
   | 'quotas'
@@ -73,6 +74,9 @@ export interface AppState {
 
   // help overlay
   showHelp: boolean;
+
+  /** The command palette while it is open. */
+  palette: PaletteState | null;
 
   // wrapped view
   wrappedScrollOffset: number;
@@ -157,6 +161,7 @@ export function createInitialState(): AppState {
     },
     matrixPage: 0,
     showHelp: false,
+    palette: null,
     wrappedScrollOffset: 0,
     exportStatus: null,
     showCursorSetup: false,

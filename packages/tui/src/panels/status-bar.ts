@@ -39,9 +39,11 @@ function viewHints(state: AppState): Hint[] {
     behavior: ['j/k:scroll'],
   };
   return [
+    { text: '/:go to', priority: 1 },
     { text: '1-6:group', priority: 1 },
     { text: '←→:tab', priority: 2 },
-    { text: 'tab/⇧tab:period', priority: 3 },
+    // The selected period is always visible in the header, so its hint goes early.
+    { text: 'tab/⇧tab:period', priority: 5 },
     ...(viewSpecific[state.selectedView] ?? []).map((text, index) => ({ text, priority: 2 + index })),
     { text: 'r:refresh', priority: 4 },
     { text: 'c:cursor', priority: 6 },
