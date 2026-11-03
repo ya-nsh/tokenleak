@@ -59,7 +59,7 @@ export function createHelpPanel() {
         ...helpSection('EXPORT VIEW', [
           ['p', 'Save PNG'],
           ['w', 'Save Wrapped PNG'],
-          ['l', 'Launch Live Server'],
+          ['l', 'Open AI Wrapped in the browser'],
           ['a', 'Copy LLM prompt'],
         ]),
       ),

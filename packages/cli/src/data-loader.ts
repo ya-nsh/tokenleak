@@ -36,20 +36,37 @@ export async function loadTokenleakData(
   range: DateRange,
   options: LoadTokenleakDataOptions = {},
 ): Promise<TokenleakOutput> {
-  const { data: providerDataList, stats } = await loadAndAggregate(providers, range);
-  const events = providerDataList.flatMap((provider) => provider.events ?? []);
+  const { data: providerDataList } = await loadAndAggregate(providers, range);
+  return buildTokenleakOutput(providerDataList, range, options);
+}
 
+/** Build a complete TokenleakOutput, MoreStats included, from already-loaded provider data. */
+export function buildTokenleakOutput(
+  providerDataList: ProviderData[],
+  range: DateRange,
+  options: LoadTokenleakDataOptions = {},
+): TokenleakOutput {
+  const events = providerDataList.flatMap((provider) => provider.events ?? []);
   return {
     schemaVersion: SCHEMA_VERSION,
     generated: new Date().toISOString(),
     dateRange: range,
     providers: providerDataList,
-    aggregated: stats,
+    aggregated: aggregateProviders(providerDataList, range),
     more: buildMoreStats(providerDataList, range),
     optimization: options.includeOptimization
       ? buildDefaultOptimization(providerDataList, events, range)
       : undefined,
   };
+}
+
+function aggregateProviders(
+  providerDataList: ProviderData[],
+  range: DateRange,
+): ReturnType<typeof aggregate> {
+  const stats = aggregate(mergeProviderData(providerDataList), range.until, range);
+  stats.costCompleteness = mergeCostCompleteness(providerDataList);
+  return stats;
 }
 
 function defaultBehaviorSelectors(
@@ -58,7 +75,11 @@ function defaultBehaviorSelectors(
   range: DateRange,
 ): [BehaviorCohortSelector, BehaviorCohortSelector] {
   const topProviders = providers
-    .map((provider) => ({ provider: provider.provider, label: provider.displayName, tokens: provider.totalTokens }))
+    .map((provider) => ({
+      provider: provider.provider,
+      label: provider.displayName,
+      tokens: provider.totalTokens,
+    }))
     .filter((provider) => provider.tokens > 0)
     .sort((a, b) => b.tokens - a.tokens || a.label.localeCompare(b.label));
   if (topProviders.length >= 2) {
@@ -72,7 +93,9 @@ function defaultBehaviorSelectors(
   for (const event of events) {
     modelTokens.set(event.model, (modelTokens.get(event.model) ?? 0) + event.totalTokens);
   }
-  const topModels = [...modelTokens.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const topModels = [...modelTokens.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
   if (topModels.length >= 2) {
     return [
       { label: topModels[0]![0], dimension: 'model', model: topModels[0]![0] },
@@ -93,7 +116,11 @@ export function buildDefaultOptimization(
 ): NonNullable<TokenleakOutput['optimization']> {
   const [baseline, comparison] = defaultBehaviorSelectors(providers, events, range);
   return {
-    routingSimulation: buildRoutingSimulationReport(events, range, buildPricingTable(events.map((event) => event.model))),
+    routingSimulation: buildRoutingSimulationReport(
+      events,
+      range,
+      buildPricingTable(events.map((event) => event.model)),
+    ),
     agentWaste: buildAgentWasteReport(providers, events, range),
     behaviorDiff: buildAgentBehaviorDiffReport(events, range, baseline, comparison),
   };
@@ -153,11 +180,7 @@ async function loadAndAggregate(
     throw new TokenleakError('No provider data found');
   }
 
-  const mergedDaily = mergeProviderData(providerDataList);
-  const stats = aggregate(mergedDaily, range.until, range);
-  stats.costCompleteness = mergeCostCompleteness(providerDataList);
-
-  return { data: providerDataList, stats };
+  return { data: providerDataList, stats: aggregateProviders(providerDataList, range) };
 }
 
 export interface LoadedCompareTokenleakData {

@@ -18,11 +18,9 @@ import {
   TerminalRenderer,
   renderAdvisorView,
   renderWrappedPng,
-  startLiveServer,
-  startWrappedLiveServer,
 } from '@tokenleak/renderers';
 import type { IRenderer } from '@tokenleak/renderers';
-import { buildDefaultOptimization, loadCompareTokenleakData } from '../data-loader.js';
+import { loadCompareTokenleakData } from '../data-loader.js';
 import { computeDateRange } from '../date-range.js';
 import { TokenleakError, handleError } from '../errors.js';
 import {
@@ -34,6 +32,7 @@ import {
 } from '../providers.js';
 import { FORMAT_VALUES, resolveConfig } from '../report-options.js';
 import { copyToClipboard, openFile, uploadToGist } from '../sharing/index.js';
+import { buildLiveSiteContent, runLiveSite } from './serve.js';
 
 export function buildHelpText(): string {
   return [
@@ -49,6 +48,7 @@ export function buildHelpText(): string {
     '  tokenleak nutrition [flags]',
     '  tokenleak replay [date] [flags]',
     '  tokenleak receipts [flags]',
+    '  tokenleak serve [flags]',
     '  tokenleak usage [--json] [--provider claude,codex,copilot]',
     '  tokenleak simulate-routing [flags]',
     '  tokenleak waste [flags]',
@@ -64,6 +64,7 @@ export function buildHelpText(): string {
     '  nutrition              Estimate token cost per local Git outcome signal',
     "  replay [date]          Replay a day's session timeline (defaults to today)",
     '  receipts               Itemized receipt of spend by prompt behavior',
+    '  serve                  Serve the dashboard, Wrapped and replay pages locally',
     '  simulate-routing       Estimate savings from model routing changes',
     '  waste                  Detect agent waste signals with evidence',
     '  behavior-diff          Compare agent/model/project behavior cohorts',
@@ -96,8 +97,8 @@ export function buildHelpText(): string {
     '      --clipboard         Copy rendered output to the clipboard',
     '      --open              Open the generated output file',
     '      --upload <target>   Upload rendered output, currently: gist',
-    '  -L, --live-server       Start the interactive local dashboard',
-    '      --wrapped-live      Start the AI Wrapped presentation in a browser',
+    '  -L, --live-server       Alias for `tokenleak serve`, announcing the dashboard',
+    '      --wrapped-live      Alias for `tokenleak serve`, announcing AI Wrapped',
     '      --no-color          Disable ANSI colors',
     '      --no-insights       Hide insights in terminal mode',
     '      --verbose           Show every skipped log entry and sync detail (any command)',
@@ -265,7 +266,34 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
     const totalEvents = providerDataList.reduce((s, p) => s + (p.events?.length ?? 0), 0);
     const totalDays = providerDataList.reduce((s, p) => s + p.daily.length, 0);
     process.stderr.write(`Loaded ${totalDays} day-records, ${totalEvents} events\n`);
-    process.stderr.write('Aggregating stats...\n');
+  }
+
+  // --live-server and --wrapped-live are aliases for `tokenleak serve`, which builds its own
+  // output. --advisor and --format wrapped still take precedence, as they always have.
+  if ((config.liveServer || config.wrappedLive) && !config.advisor && config.format !== 'wrapped') {
+    const flag = config.liveServer ? '--live-server' : '--wrapped-live';
+    const ignoredFlags: string[] = [];
+    if (config.output) ignoredFlags.push('--output');
+    if (config.clipboard) ignoredFlags.push('--clipboard');
+    if (config.open) ignoredFlags.push('--open');
+    if (config.upload) ignoredFlags.push('--upload');
+    if (ignoredFlags.length > 0) {
+      process.stderr.write(`Warning: ${ignoredFlags.join(', ')} ignored in ${flag} mode.\n`);
+    }
+
+    const content = buildLiveSiteContent(providerDataList, dateRange, {
+      format: config.format,
+      theme: config.theme,
+      width: config.width,
+      showInsights: !config.noInsights,
+      noColor: config.noColor,
+      output: config.output,
+      more: config.more,
+    });
+    await runLiveSite(content, {
+      landing: config.liveServer ? 'dashboard' : 'wrapped',
+      open: false,
+    });
   }
 
   // Merge and aggregate
@@ -273,14 +301,7 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
   const stats = aggregate(mergedDaily, dateRange.until, dateRange);
 
   // Force --more when --advisor is used (needs event data)
-  const needsMore =
-    config.more || config.format === 'wrapped' || config.wrappedLive || config.advisor;
-
-  if (config.wrappedLive && needsMore) {
-    process.stderr.write(
-      'Computing extended analytics (hourOfDay, sessions, cache, projections)...\n',
-    );
-  }
+  const needsMore = config.more || config.format === 'wrapped' || config.advisor;
 
   const output: TokenleakOutput = {
     schemaVersion: SCHEMA_VERSION,
@@ -354,73 +375,6 @@ export async function run(cliArgs: Record<string, unknown>): Promise<void> {
       throw new TokenleakError(`Unknown upload target "${config.upload}". Supported: gist`);
     }
     return;
-  }
-
-  // Live server mode
-  if (config.liveServer) {
-    const ignoredFlags: string[] = [];
-    if (config.output) ignoredFlags.push('--output');
-    if (config.clipboard) ignoredFlags.push('--clipboard');
-    if (config.open) ignoredFlags.push('--open');
-    if (config.upload) ignoredFlags.push('--upload');
-    if (ignoredFlags.length > 0) {
-      process.stderr.write(`Warning: ${ignoredFlags.join(', ')} ignored in --live-server mode.\n`);
-    }
-
-    const renderOptions: RenderOptions = {
-      format: config.format,
-      theme: config.theme,
-      width: config.width,
-      showInsights: !config.noInsights,
-      noColor: config.noColor,
-      output: config.output,
-      more: config.more,
-    };
-    const events = providerDataList.flatMap((provider) => provider.events ?? []);
-    output.optimization = buildDefaultOptimization(providerDataList, events, dateRange);
-    await startLiveServer(output, renderOptions);
-    // Keep process alive until interrupted
-    await new Promise<void>((resolve) => {
-      process.on('SIGINT', () => {
-        process.stderr.write('\nShutting down server...\n');
-        resolve();
-      });
-      process.on('SIGTERM', () => {
-        resolve();
-      });
-    });
-    return;
-  }
-
-  // Wrapped live server mode
-  if (config.wrappedLive) {
-    const ignoredWrappedFlags: string[] = [];
-    if (config.output) ignoredWrappedFlags.push('--output');
-    if (config.clipboard) ignoredWrappedFlags.push('--clipboard');
-    if (config.open) ignoredWrappedFlags.push('--open');
-    if (config.upload) ignoredWrappedFlags.push('--upload');
-    if (ignoredWrappedFlags.length > 0) {
-      process.stderr.write(
-        `Warning: ${ignoredWrappedFlags.join(', ')} ignored in --wrapped-live mode.\n`,
-      );
-    }
-
-    process.stderr.write('Generating wrapped presentation...\n');
-    const { stop } = await startWrappedLiveServer(output);
-    process.stderr.write('Press Ctrl+C to stop the server.\n');
-    await new Promise<void>((resolve) => {
-      process.on('SIGINT', () => {
-        process.stderr.write('\nShutting down wrapped live server...\n');
-        stop();
-        resolve();
-      });
-      process.on('SIGTERM', () => {
-        stop();
-        resolve();
-      });
-    });
-    // The server has stopped; its sockets may linger, so exit explicitly.
-    process.exit(0);
   }
 
   // Render

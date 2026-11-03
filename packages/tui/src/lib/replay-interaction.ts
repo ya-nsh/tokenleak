@@ -1,6 +1,3 @@
-import type { ProviderData } from '@tokenleak/core';
-import { buildReplayReport, getTodayLocal } from '@tokenleak/core';
-import type { ReplayHeatmapEntry, ReplayLiveDataProvider } from '@tokenleak/renderers';
 import type { AppState } from './state.js';
 import { exitReplayPlayback } from './replay-playback.js';
 
@@ -75,53 +72,3 @@ export function keepReplaySelectionVisible(state: AppState, visibleCount: number
   );
 }
 
-export function buildReplayHeatmap(providers: ProviderData[]): ReplayHeatmapEntry[] {
-  const byDate = new Map<string, { tokens: number; cost: number; events: number }>();
-  for (const provider of providers) {
-    const events = provider.events ?? [];
-    for (const event of events) {
-      const current = byDate.get(event.date) ?? { tokens: 0, cost: 0, events: 0 };
-      current.tokens += event.totalTokens;
-      current.cost += event.cost;
-      current.events += 1;
-      byDate.set(event.date, current);
-    }
-  }
-
-  return Array.from(byDate.entries())
-    .map(([date, values]) => ({
-      date,
-      tokens: values.tokens,
-      cost: values.cost,
-      events: values.events,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function latestActiveDate(heatmap: ReplayHeatmapEntry[]): string | null {
-  let latest: string | null = null;
-  for (const entry of heatmap) {
-    if (entry.events > 0 && (latest === null || entry.date > latest)) {
-      latest = entry.date;
-    }
-  }
-  return latest;
-}
-
-export function buildReplayLiveDataProvider(
-  providers: ProviderData[],
-  replayDate: string | null,
-  fallbackDate: string = getTodayLocal(),
-): ReplayLiveDataProvider {
-  const heatmap = buildReplayHeatmap(providers);
-  const initialDate = replayDate ?? latestActiveDate(heatmap) ?? fallbackDate;
-  return {
-    heatmap,
-    initialDate,
-    initialReport: buildReplayReport(providers, initialDate),
-    getReport: (date: string) => {
-      const report = buildReplayReport(providers, date);
-      return report.events.length > 0 ? report : null;
-    },
-  };
-}

@@ -4,16 +4,10 @@ export { SvgRenderer, renderWrappedCard, renderBadge, renderWrappedSlidesSvg, co
 export type { Achievement } from './svg/index';
 export { PngRenderer, renderWrappedPng, renderReceiptPng } from './png/index';
 export { TerminalRenderer } from './terminal/index';
-export { startLiveServer } from './live/live-server';
-export type { LiveServerOptions } from './live/live-server';
-export { startWrappedLiveServer } from './live/wrapped-live-server';
-export type { WrappedLiveServerOptions } from './live/wrapped-live-server';
-export { startReplayLiveServer } from './live/replay-live-server';
-export type {
-  ReplayLiveServerOptions,
-  ReplayLiveDataProvider,
-  ReplayHeatmapEntry,
-} from './live/replay-live-server';
+export { startLiveSite, generateLiveIndexHtml, LIVE_ROUTES, DEFAULT_LIVE_PORT } from './live/site';
+export type { LiveSite, LiveSiteContent, LiveSiteOptions, LiveRoute } from './live/site';
+export { buildReplayHeatmap, buildReplayLiveDataProvider } from './live/replay-data';
+export type { ReplayLiveDataProvider, ReplayHeatmapEntry } from './live/replay-data';
 export { generateReplayLiveHtml } from './live/replay-live-template';
 export { renderCompareView } from './terminal/index';
 export { renderAdvisorView } from './terminal/index';

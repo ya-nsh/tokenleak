@@ -110,8 +110,9 @@ tokenleak
 # Skip the TUI and render directly with flags
 tokenleak --format terminal
 
-# Start the local live dashboard server
-tokenleak --live-server
+# Serve the dashboard, AI Wrapped and replay pages from one local server
+tokenleak serve
+tokenleak serve --days 365 --open
 
 # Output as JSON
 tokenleak --format json
@@ -131,7 +132,7 @@ tokenleak commons prompt --provider claude,codex --output tokenleak-llm-prompt.m
 tokenleak --format wrapped
 tokenleak --format wrapped --theme light --output my-wrapped.png --open
 
-# Launch the interactive AI Wrapped presentation in a browser
+# Launch the interactive AI Wrapped presentation in a browser (same server, /wrapped)
 tokenleak --wrapped-live
 tokenleak --wrapped-live --days 365
 
@@ -227,7 +228,7 @@ tokenleak behavior-diff --provider claude-code,codex --days 30
 
 - `tokenleak explain <date>` builds a narrative day report with top providers, sessions, projects, models, and anomaly flags.
 - `tokenleak focus` ranks sessions by a deep-work score derived from active time, token density, and project streak. Active time skips gaps over 30 minutes (or uses provider-reported turn durations), and density needs at least 10 active minutes.
-- `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI on `http://localhost:3567` — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
+- `tokenleak replay [date]` shows a chronological timeline of all sessions for a day, clustering events into flow blocks with a pulse chart and flow/think ratio. Defaults to today. Pass `--interactive` (or `-i`) to open a browser scrub UI at `/replay` on the [local live server](#live-server) — drag the timeline, press space to play the day at 60–600× speed, watch the cumulative cost odometer tick up. Combine with `--open` to launch the browser automatically.
 - `tokenleak nutrition` powers the TUI **AI ROI** view. It resolves local Git repo roots from provider project paths, runs read-only `git log --numstat`, and reports tokens/cost per commit and changed line. `No Git signal` means Tokenleak saw AI usage for a repo path but found no commits in the selected date window; switch to a wider window or ensure the project path exists locally as a Git worktree.
 - `tokenleak simulate-routing` re-prices historical events under conservative downgrade rules so pro users can estimate savings before changing model habits or team guidance.
 - `tokenleak waste` detects deterministic waste signals such as context drag, repeated prompt clusters, model churn, cache misses, and premium models used for small tasks.
@@ -426,7 +427,7 @@ The TUI dashboard includes a Wrapped view (press `8` or arrow to it).
 Launch the AI Wrapped as an interactive 12-slide presentation in your browser with smooth transitions, keyboard/swipe navigation, and progress dots:
 
 ```bash
-# Start the wrapped live server (opens on localhost:3456)
+# Start the live server and announce the Wrapped deck (localhost:3333/wrapped)
 tokenleak --wrapped-live
 
 # With a full year of data
@@ -438,7 +439,7 @@ tokenleak --wrapped-live --provider claude-code,codex
 
 `tokenleak --format wrapped` is the static export path: it writes a tall PNG you can attach to docs, posts, or issues. `tokenleak --wrapped-live` uses the same underlying stats, but serves them as a browser deck that is better for demos, screenshares, and walking through each section interactively.
 
-The Wrapped Live server starts on `http://localhost:3456` and automatically increments to the next free port if `3456` is already taken. The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
+Wrapped Live is the `/wrapped` page of the [local live server](#live-server), which starts on `http://localhost:3333` and moves to the next free port if `3333` is taken. The presentation uses the same 12 sections as the static wrapped card but rendered as navigable slides with an obsidian-and-gold design. Use arrow keys, click the nav buttons, or swipe on touch devices to move between slides.
 
 ### Model Efficiency Advisor
 
@@ -564,9 +565,19 @@ The Matrix view spans 4 pages:
 3. Cache economics, cache ROI, session metrics, top projects
 4. Model efficiency, attribution clusters, top sessions, cache ROI by model
 
-### Live dashboard
+### Live server
 
-`tokenleak --live-server` starts a local HTTP server that serves an interactive HTML dashboard. The server starts on `http://localhost:3333` and increments the port if needed.
+`tokenleak serve` starts one local web server with every browser view:
+
+| Page | What it shows | Older shortcut |
+| --- | --- | --- |
+| `/dashboard` | Interactive usage dashboard | `tokenleak --live-server` |
+| `/wrapped` | AI Wrapped presentation | `tokenleak --wrapped-live` |
+| `/replay?date=YYYY-MM-DD` | Session replay with a 90-day heatmap | `tokenleak replay --interactive` |
+
+`/` links every page, and `/api/replay?date=YYYY-MM-DD` returns one day's replay as JSON. The server listens on `127.0.0.1` only. It starts on port `3333` (override with `--port`, or `--port 0` for any free port) and moves to the next free port if that one is taken. `--open` opens the dashboard in your browser.
+
+The older shortcuts still work. Each one starts the same server and lists its own page first. In the TUI, `o` (replay) and `l` in the Export view (AI Wrapped) share one in-process server, too.
 
 ## All flags
 
@@ -577,7 +588,8 @@ Subcommands:
 - `tokenleak explain <date>` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters.
 - `tokenleak focus` supports `--format terminal|json`, `--output`, `--width`, and the standard provider/date filters.
 - `tokenleak commons export` writes anonymized aggregate JSON; `tokenleak commons prompt` writes or copies a Markdown prompt for external LLM analysis; `tokenleak commons inspect <file>` validates a commons JSON export before sharing.
-- `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today. Add `-i`/`--interactive` to launch a local browser scrub UI on port 3567 (override with `--port`); add `--open` to auto-open the browser. `--format`, `--output`, and `--width` are ignored in interactive mode.
+- `tokenleak replay [date]` supports `--format terminal|json`, `--output`, `--width`, and the standard provider filters. Date defaults to today. Add `-i`/`--interactive` to open the `/replay` page of the local live server (port 3333; override with `--port`); add `--open` to auto-open the browser. `--format`, `--output`, and `--width` are ignored in interactive mode.
+- `tokenleak serve` supports `--port`, `--open`, `--theme`, and the standard provider/date filters. See [Live server](#live-server).
 - `tokenleak cursor --help` prints the Cursor auth/cache command help text.
 - `tokenleak explain --help`, `tokenleak focus --help`, `tokenleak commons --help`, and `tokenleak replay --help` print the subcommand-specific help text.
 
@@ -603,8 +615,8 @@ Subcommands:
 | `--clipboard` |  | `false` | Copy rendered output to the system clipboard |
 | `--open` |  | `false` | Open the rendered file in the default app |
 | `--upload` |  |  | Upload output to a service. Supported: `gist` |
-| `--live-server` | `-L` | `false` | Start the local browser dashboard |
-| `--wrapped-live` |  | `false` | Start the interactive AI Wrapped presentation in a browser |
+| `--live-server` | `-L` | `false` | Alias for `tokenleak serve`, announcing the dashboard |
+| `--wrapped-live` |  | `false` | Alias for `tokenleak serve`, announcing AI Wrapped |
 | `--advisor` |  | `false` | Run the model efficiency advisor |
 | `--no-color` |  | `false` | Strip ANSI escape codes from terminal output |
 | `--no-insights` |  | `false` | Hide terminal insights |

@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from 'bun:test';
 import type { ReplayReport, UsageEvent, FlowBlock } from '@tokenleak/core';
-import { startReplayLiveServer } from '../replay-live-server';
+import { startLiveSite } from '../site';
 import { generateReplayLiveHtml } from '../replay-live-template';
 
 function makeEvent(overrides: Partial<UsageEvent> & { timestamp: string }): UsageEvent {
@@ -232,7 +232,7 @@ describe('generateReplayLiveHtml', () => {
   });
 });
 
-describe('startReplayLiveServer', () => {
+describe('live site replay page', () => {
   const cleanups: Array<() => void> = [];
 
   afterEach(() => {
@@ -243,34 +243,34 @@ describe('startReplayLiveServer', () => {
   });
 
   it('starts on port 0 (any free port) and returns 200', async () => {
-    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
+    const { port, stop } = await startLiveSite({ replay: makeReport() }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/replay`);
     expect(res.status).toBe(200);
   });
 
   it('responds with content-type text/html', async () => {
-    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
+    const { port, stop } = await startLiveSite({ replay: makeReport() }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/replay`);
     expect(res.headers.get('content-type') ?? '').toContain('text/html');
   });
 
   it('serves HTML containing the embedded replay payload', async () => {
-    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
+    const { port, stop } = await startLiveSite({ replay: makeReport() }, { port: 0 });
     cleanups.push(stop);
-    const html = await (await fetch(`http://localhost:${port}/`)).text();
+    const html = await (await fetch(`http://localhost:${port}/replay`)).text();
     expect(html).toContain('window.__REPLAY__');
     expect(html).toContain('id="timeline"');
   });
 
   it('shuts down cleanly', async () => {
-    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
-    expect((await fetch(`http://localhost:${port}/`)).status).toBe(200);
+    const { port, stop } = await startLiveSite({ replay: makeReport() }, { port: 0 });
+    expect((await fetch(`http://localhost:${port}/replay`)).status).toBe(200);
     stop();
     let connectionRefused = false;
     try {
-      await fetch(`http://localhost:${port}/`);
+      await fetch(`http://localhost:${port}/replay`);
     } catch {
       connectionRefused = true;
     }
@@ -279,16 +279,16 @@ describe('startReplayLiveServer', () => {
 
   it('falls back to the next port when the requested one is taken', async () => {
     const seed = 19_889;
-    const a = await startReplayLiveServer(makeReport(), { port: seed });
+    const a = await startLiveSite({ replay: makeReport() }, { port: seed });
     cleanups.push(a.stop);
-    const b = await startReplayLiveServer(makeReport(), { port: seed });
+    const b = await startLiveSite({ replay: makeReport() }, { port: seed });
     cleanups.push(b.stop);
     expect(a.port).toBe(seed);
     expect(b.port).toBeGreaterThan(a.port);
   });
 });
 
-describe('startReplayLiveServer (multi-day mode)', () => {
+describe('live site replay page (multi-day mode)', () => {
   const cleanups: Array<() => void> = [];
 
   afterEach(() => {
@@ -346,27 +346,27 @@ describe('startReplayLiveServer (multi-day mode)', () => {
     };
   }
 
-  it('renders the heatmap on GET /', async () => {
+  it('renders the heatmap on GET /replay', async () => {
     const p = makeProvider();
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
       getReport: async (d) => (d === p.otherReport.date ? p.otherReport : null),
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/replay`);
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('class="heatmap-grid"');
     expect(html).toContain('hm-cell--active');
-    expect(html).toContain('href="/?date=2026-04-21"');
+    expect(html).toContain('href="/replay?date=2026-04-21"');
   });
 
-  it('serves a different day for /?date=YYYY-MM-DD via getReport', async () => {
+  it('serves a different day for /replay?date=YYYY-MM-DD via getReport', async () => {
     const p = makeProvider();
     let lookedUp: string | null = null;
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
@@ -374,9 +374,9 @@ describe('startReplayLiveServer (multi-day mode)', () => {
         lookedUp = d;
         return d === p.otherReport.date ? p.otherReport : null;
       },
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/?date=2026-04-21`);
+    const res = await fetch(`http://localhost:${port}/replay?date=2026-04-21`);
     expect(res.status).toBe(200);
     expect(lookedUp).toBe('2026-04-21');
     const html = await res.text();
@@ -384,16 +384,16 @@ describe('startReplayLiveServer (multi-day mode)', () => {
     expect(html).toContain('"date":"2026-04-21"');
   });
 
-  it('falls back to an empty report (not 404) for an unknown day on GET /', async () => {
+  it('falls back to an empty report (not 404) for an unknown day on GET /replay', async () => {
     const p = makeProvider();
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
       getReport: async () => null,
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/?date=2025-01-01`);
+    const res = await fetch(`http://localhost:${port}/replay?date=2025-01-01`);
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('nothing happened on 2025-01-01');
@@ -401,12 +401,12 @@ describe('startReplayLiveServer (multi-day mode)', () => {
 
   it('GET /api/replay?date=X returns 200 + JSON for a known day', async () => {
     const p = makeProvider();
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
       getReport: async (d) => (d === p.otherReport.date ? p.otherReport : null),
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
     const res = await fetch(`http://localhost:${port}/api/replay?date=2026-04-21`);
     expect(res.status).toBe(200);
@@ -417,12 +417,12 @@ describe('startReplayLiveServer (multi-day mode)', () => {
 
   it('GET /api/replay?date=invalid returns 400', async () => {
     const p = makeProvider();
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
       getReport: async () => null,
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
     const res = await fetch(`http://localhost:${port}/api/replay?date=foo`);
     expect(res.status).toBe(400);
@@ -430,26 +430,26 @@ describe('startReplayLiveServer (multi-day mode)', () => {
 
   it('GET /api/replay?date=missing returns 404', async () => {
     const p = makeProvider();
-    const { port, stop } = await startReplayLiveServer({
+    const { port, stop } = await startLiveSite({ replay: {
       heatmap: p.heatmap,
       initialDate: p.initialDate,
       initialReport: p.initialReport,
       getReport: async () => null,
-    }, { port: 0 });
+    } }, { port: 0 });
     cleanups.push(stop);
     const res = await fetch(`http://localhost:${port}/api/replay?date=2024-12-31`);
     expect(res.status).toBe(404);
   });
 
   it('single-day mode (passing a ReplayReport) does NOT render the heatmap', async () => {
-    const { port, stop } = await startReplayLiveServer(makeReport(), { port: 0 });
+    const { port, stop } = await startLiveSite({ replay: makeReport() }, { port: 0 });
     cleanups.push(stop);
-    const res = await fetch(`http://localhost:${port}/`);
+    const res = await fetch(`http://localhost:${port}/replay`);
     const html = await res.text();
     // Structural element: only emitted when the heatmap section is rendered.
     // (The CSS class names live in the inlined stylesheet either way, so we
     // can't grep on `hm-cell--active` to detect single- vs multi-day mode.)
     expect(html).not.toContain('<section class="section heatmap-section"');
-    expect(html).not.toContain('href="/?date=');
+    expect(html).not.toContain('?date=');
   });
 });

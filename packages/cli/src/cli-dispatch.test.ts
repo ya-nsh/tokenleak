@@ -26,6 +26,7 @@ describe('subcommand dispatch', () => {
     ['pricing', 'tokenleak pricing'],
     ['receipts', 'tokenleak receipts'],
     ['replay', 'tokenleak replay'],
+    ['serve', 'tokenleak serve'],
     ['simulate-routing', 'tokenleak simulate-routing'],
     ['statusline', 'tokenleak statusline'],
     ['usage', 'tokenleak usage'],
