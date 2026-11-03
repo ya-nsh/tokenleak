@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { ProviderColors, ProviderData, RenderOptions, UsageEvent } from '@tokenleak/core';
 import { buildReplayReport } from '@tokenleak/core';
 import { TokenleakError } from '../errors';
-import { buildLiveSiteContent, parsePort, parseServeArgs } from './serve';
+import { buildLiveSiteContent, listenForShutdown, parsePort, parseServeArgs } from './serve';
 
 const CLI_PATH = join(import.meta.dir, '..', 'cli.ts');
 const PI_FIXTURES = join(
@@ -167,6 +167,44 @@ async function waitForStderr(
   }
   throw new Error(`stderr never matched ${pattern}:\n${text}`);
 }
+
+describe('listenForShutdown', () => {
+  function quietly<T>(fn: () => T): T {
+    const write = process.stderr.write;
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      return fn();
+    } finally {
+      process.stderr.write = write;
+    }
+  }
+
+  test('handles Ctrl+C and SIGTERM as soon as it is created', () => {
+    const before = { int: process.listenerCount('SIGINT'), term: process.listenerCount('SIGTERM') };
+    const shutdown = listenForShutdown();
+    expect(process.listenerCount('SIGINT')).toBe(before.int + 1);
+    expect(process.listenerCount('SIGTERM')).toBe(before.term + 1);
+    shutdown.dispose();
+    expect(process.listenerCount('SIGINT')).toBe(before.int);
+    expect(process.listenerCount('SIGTERM')).toBe(before.term);
+  });
+
+  test('resolves on the first signal and removes both handlers', async () => {
+    const before = { int: process.listenerCount('SIGINT'), term: process.listenerCount('SIGTERM') };
+    const shutdown = listenForShutdown();
+    quietly(() => process.emit('SIGTERM'));
+    await shutdown.stopped;
+    expect(process.listenerCount('SIGINT')).toBe(before.int);
+    expect(process.listenerCount('SIGTERM')).toBe(before.term);
+  });
+
+  test('dispose is safe to call after a signal', async () => {
+    const shutdown = listenForShutdown();
+    quietly(() => process.emit('SIGINT'));
+    await shutdown.stopped;
+    expect(() => shutdown.dispose()).not.toThrow();
+  });
+});
 
 describe('tokenleak serve (process)', () => {
   test('serves every page on one port and exits 0 on SIGINT', async () => {
