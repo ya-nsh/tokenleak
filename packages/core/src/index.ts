@@ -63,6 +63,10 @@ export type {
   WasteSignalKind,
   AgentWasteSignal,
   AgentWasteReport,
+  SavingsKind,
+  SavingsCategory,
+  SavingsRecommendation,
+  SavingsReport,
   BehaviorDiffDimension,
   BehaviorCohortSelector,
   BehaviorCohortMetrics,
@@ -172,5 +176,7 @@ export {
 } from './cost-completeness';
 
 export { analyzeEfficiency, describePricingGap, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
+export { buildSavingsReport, filterBySeverity } from './savings';
+export type { BuildSavingsReportInput } from './savings';
 export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';
 export type { QuotaProvider, QuotaWindow, ProviderQuota, QuotaSnapshot } from './quotas';
