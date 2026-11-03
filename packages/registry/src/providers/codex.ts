@@ -901,7 +901,7 @@ export class CodexProvider implements IProvider {
     // Codex logs omit the service tier; fall back to what config.toml requests.
     const configuredTier = this.configPath ? readCodexConfiguredTier(this.configPath) : undefined;
     const cache = new UsageFileCache<CodexUsageRecord>(
-      'codex-v5',
+      'codex-v6',
       this.sessionsDir,
       isCachedUsageRecord,
     );
