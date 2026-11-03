@@ -5,6 +5,8 @@ import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState, ViewMode } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
 import { OVERFLOW_MARKER_WIDTH, fitTabWindow, tabWidth } from '../lib/fit.js';
+import { VIEW_GROUPS, entryViewOf, groupOfView } from '../lib/views.js';
+import { quotaSummary } from '@tokenleak/renderers';
 
 const HEADER_PADDING = 2;
 const RIGHT_GAP = 2;
@@ -20,24 +22,6 @@ function formatCompactTime(): string {
 }
 
 export type ViewSwitchCallback = (mode: ViewMode) => void;
-
-const VIEWS: { key: string; label: string; mode: ViewMode }[] = [
-  { key: '1', label: 'Overview', mode: 'overview' },
-  { key: 'U', label: 'Quotas', mode: 'quotas' },
-  { key: '2', label: 'Matrix', mode: 'matrix' },
-  { key: '3', label: 'Advisor', mode: 'advisor' },
-  { key: '4', label: 'Focus', mode: 'focus' },
-  { key: '5', label: 'Explain', mode: 'explain' },
-  { key: '6', label: 'Compare', mode: 'compare' },
-  { key: '7', label: 'Export', mode: 'export' },
-  { key: '8', label: 'Wrapped', mode: 'wrapped' },
-  { key: '9', label: 'Replay', mode: 'replay' },
-  { key: '0', label: 'AI ROI', mode: 'nutrition' },
-  { key: 'R', label: 'Receipts', mode: 'receipts' },
-  { key: 'X', label: 'Sim', mode: 'simulator' },
-  { key: 'Y', label: 'Waste', mode: 'waste' },
-  { key: 'Z', label: 'Diff', mode: 'behavior' },
-];
 
 export function buildHeader(
   state: AppState,
@@ -81,58 +65,59 @@ export function buildHeader(
     }
   }
 
-  // View mode indicators — each is a clickable Box. Keyboard shortcuts stay in
-  // the help panel so the tab row remains clean. On narrow terminals only the
-  // tabs around the active view are shown, with ‹ › marking the rest.
+  // Group tabs — each is a clickable Box. Keyboard shortcuts stay in the
+  // help panel so the tab row remains clean. On narrow terminals only the
+  // tabs around the active group are shown, with ‹ › marking the rest.
   const rightText = state.selectedView === 'quotas' ? 'Account capacity' : windowCost;
   const time = formatCompactTime();
-  const periodWidth = state.selectedView === 'quotas'
-    ? ' LIVE '.length
-    : WINDOW_LABELS.reduce((sum, label) => sum + tabWidth(label), 0);
+  const periodWidth =
+    state.selectedView === 'quotas'
+      ? ' LIVE '.length
+      : WINDOW_LABELS.reduce((sum, label) => sum + tabWidth(label), 0);
   // Without a measured terminal (tests, first frame) show every tab.
   const terminalWidth = Number.isFinite(renderer.width) ? renderer.width : Number.POSITIVE_INFINITY;
   const budget =
-    terminalWidth - HEADER_PADDING - periodWidth - SECTION_GAP - rightText.length - RIGHT_GAP - time.length - RIGHT_GAP;
-  const activeIndex = Math.max(0, VIEWS.findIndex((v) => v.mode === state.selectedView));
-  const window = fitTabWindow(VIEWS.map((v) => v.label), activeIndex, budget);
+    terminalWidth -
+    HEADER_PADDING -
+    periodWidth -
+    SECTION_GAP -
+    rightText.length -
+    RIGHT_GAP -
+    time.length -
+    RIGHT_GAP;
+  const activeGroup = groupOfView(state.selectedView);
+  const activeIndex = VIEW_GROUPS.indexOf(activeGroup);
+  const window = fitTabWindow(
+    VIEW_GROUPS.map((group) => group.label),
+    activeIndex,
+    budget,
+  );
   const viewParts: ReturnType<typeof Box | typeof Text>[] = [];
   if (window.start > 0) {
     viewParts.push(Text({ content: '‹'.padEnd(OVERFLOW_MARKER_WIDTH), fg: COLORS.dimWhite }));
   }
-  for (const v of VIEWS.slice(window.start, window.end)) {
-    const isActive = state.selectedView === v.mode;
-    const viewMode = v.mode;
-    const children = isActive
-      ? [
-          Text({
-            content: ` ${v.label} `,
-            fg: COLORS.bg,
-            bg: COLORS.cyan,
-            attributes: BOLD,
-          }),
-        ]
-      : [
-          Text({
-            content: ` ${v.label} `,
-            fg: COLORS.dimWhite,
-          }),
-        ];
-
+  for (const group of VIEW_GROUPS.slice(window.start, window.end)) {
+    const isActive = group === activeGroup;
     viewParts.push(
       Box(
         {
           flexDirection: 'row',
-          onMouseDown: onViewSwitch
-            ? () => {
-                onViewSwitch(viewMode);
-              }
-            : undefined,
+          onMouseDown:
+            onViewSwitch && !isActive
+              ? () => {
+                  onViewSwitch(entryViewOf(group, state.lastViewByGroup));
+                }
+              : undefined,
         },
-        ...children,
+        Text(
+          isActive
+            ? { content: ` ${group.label} `, fg: COLORS.bg, bg: COLORS.cyan, attributes: BOLD }
+            : { content: ` ${group.label} `, fg: COLORS.dimWhite },
+        ),
       ),
     );
   }
-  if (window.end < VIEWS.length) {
+  if (window.end < VIEW_GROUPS.length) {
     viewParts.push(Text({ content: '›'.padStart(OVERFLOW_MARKER_WIDTH), fg: COLORS.dimWhite }));
   }
 
@@ -147,7 +132,9 @@ export function buildHeader(
     },
     Box(
       { flexDirection: 'row' },
-      ...(state.selectedView === 'quotas' ? [Text({ content: ' LIVE ', fg: COLORS.cyan })] : tabParts),
+      ...(state.selectedView === 'quotas'
+        ? [Text({ content: ' LIVE ', fg: COLORS.cyan })]
+        : tabParts),
       Text({ content: ' ', fg: COLORS.dimWhite }),
       ...viewParts,
     ),
@@ -156,5 +143,73 @@ export function buildHeader(
       Text({ content: rightText, fg: COLORS.amber, attributes: BOLD }),
       Text({ content: time, fg: COLORS.green }),
     ),
+  );
+}
+
+const SUB_TAB_SEPARATOR = ' · ';
+const QUOTA_HINT = 'U: quotas';
+
+/** The quota widget text: the last snapshot's tightest windows, or how to load one. */
+function quotaWidgetText(state: AppState): string {
+  const summary = state.quotaSnapshot ? quotaSummary(state.quotaSnapshot) : null;
+  if (summary) return `Quota ${summary}`;
+  return state.quotasLoading ? 'Checking quotas...' : QUOTA_HINT;
+}
+
+/**
+ * The second header row: the active group's sub-tabs on the left and the
+ * subscription quota widget on the right. The widget shows the last
+ * snapshot; it never triggers a network check on its own.
+ */
+export function buildSubTabBar(
+  state: AppState,
+  renderer: CliRenderer,
+  onViewSwitch?: ViewSwitchCallback,
+) {
+  const group = groupOfView(state.selectedView);
+  const tabs: ReturnType<typeof Box | typeof Text>[] = [];
+  group.views.forEach((view, index) => {
+    if (index > 0) tabs.push(Text({ content: SUB_TAB_SEPARATOR, fg: COLORS.dimWhite }));
+    const isActive = view.mode === state.selectedView;
+    tabs.push(
+      Box(
+        {
+          flexDirection: 'row',
+          onMouseDown: onViewSwitch && !isActive ? () => onViewSwitch(view.mode) : undefined,
+        },
+        Text(
+          isActive
+            ? { content: view.label, fg: COLORS.cyan, attributes: BOLD }
+            : { content: view.label, fg: COLORS.dimWhite },
+        ),
+      ),
+    );
+  });
+  const hint = group.views.length > 1 ? `  (${group.key}: next)` : '';
+  const tabsWidth =
+    group.views.reduce((sum, view) => sum + view.label.length, 0) +
+    SUB_TAB_SEPARATOR.length * (group.views.length - 1) +
+    hint.length;
+  const terminalWidth = Number.isFinite(renderer.width) ? renderer.width : Number.POSITIVE_INFINITY;
+  const quotaBudget = terminalWidth - HEADER_PADDING - 1 - tabsWidth - RIGHT_GAP;
+  const quota = quotaWidgetText(state);
+  const quotaText =
+    quota.length <= quotaBudget ? quota : quotaBudget >= QUOTA_HINT.length ? QUOTA_HINT : '';
+
+  return Box(
+    {
+      flexDirection: 'row',
+      width: '100%',
+      justifyContent: 'space-between',
+      paddingLeft: 2,
+      paddingRight: 1,
+      height: 1,
+    },
+    Box(
+      { flexDirection: 'row' },
+      ...tabs,
+      ...(hint ? [Text({ content: hint, fg: COLORS.dimWhite })] : []),
+    ),
+    Text({ content: quotaText, fg: state.quotaSnapshot ? COLORS.amber : COLORS.dimWhite }),
   );
 }

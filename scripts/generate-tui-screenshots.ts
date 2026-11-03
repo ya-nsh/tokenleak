@@ -8,7 +8,7 @@ import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
 import { computeAchievements } from '@tokenleak/renderers';
 import { SCHEMA_VERSION } from '../packages/core/dist/index.js';
-import { buildHeader } from '../packages/tui/dist/panels/header.js';
+import { buildHeader, buildSubTabBar } from '../packages/tui/dist/panels/header.js';
 import { createChartPanel } from '../packages/tui/dist/panels/chart-panel.js';
 import { createStatsRow } from '../packages/tui/dist/panels/stats-row.js';
 import { createModelList } from '../packages/tui/dist/panels/model-list.js';
@@ -23,7 +23,7 @@ import { createWrappedPanel } from '../packages/tui/dist/panels/wrapped.js';
 import {
   loadAllData,
   getDailyForWindow,
-  ensureAdvisorReport,
+  ensureSavingsReport,
   ensureFocusReport,
   ensureExplainReport,
   ensureCompareOutput,
@@ -134,7 +134,7 @@ function buildContent(state: AppState): ReturnType<typeof Box> {
     case 'matrix':
       return createMatrixView(state);
     case 'advisor':
-      return createAdvisorPanel(state, ensureAdvisorReport(state));
+      return createAdvisorPanel(state, ensureSavingsReport(state));
     case 'focus':
       return createFocusPanel(state, ensureFocusReport(state));
     case 'explain':
@@ -173,6 +173,7 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
       backgroundColor: COLORS.bg,
     },
     buildHeader(state, renderer),
+    buildSubTabBar(state, renderer),
     buildContent(state),
     buildStatusBar(state),
   );

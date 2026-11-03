@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { CliRenderer } from '@opentui/core';
 import { createInitialState } from '../lib/state.js';
-import { buildHeader } from './header.js';
+import { buildHeader, buildSubTabBar } from './header.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -23,43 +23,102 @@ function collectTextContent(node: unknown): string[] {
 }
 
 describe('buildHeader', () => {
-  test('narrow terminals show the tabs around the active view with overflow markers', () => {
+  test('narrow terminals show the groups around the active one with overflow markers', () => {
     const state = createInitialState();
     state.isLoading = false;
-    state.selectedView = 'replay';
+    state.selectedView = 'focus';
 
-    const text = collectTextContent(buildHeader(state, { width: 100 } as CliRenderer)).join('');
+    const text = collectTextContent(buildHeader(state, { width: 64 } as CliRenderer)).join('');
 
-    expect(text).toContain(' Replay ');
+    expect(text).toContain(' Sessions ');
     expect(text).toContain('‹');
     expect(text).toContain('›');
     expect(text).not.toContain(' Overview ');
   });
 
-  test('renders view tabs without visible shortcut prefixes', () => {
+  test('shows the six groups, not individual views, without shortcut prefixes', () => {
     const state = createInitialState();
     state.isLoading = false;
 
     const text = collectTextContent(buildHeader(state, {} as CliRenderer)).join('');
 
-    expect(text).toContain(' Overview ');
-    expect(text).toContain(' Matrix ');
-    expect(text).toContain(' Receipts ');
-
-    for (const prefixedLabel of [
-      '1Overview',
-      '2Matrix',
-      '3Advisor',
-      '4Focus',
-      '5Explain',
-      '6Compare',
-      '7Export',
-      '8Wrapped',
-      '9Replay',
-      '0AI ROI',
-      'RReceipts',
-    ]) {
-      expect(text).not.toContain(prefixedLabel);
+    for (const group of ['Overview', 'Spend', 'Sessions', 'Savings', 'ROI', 'Share']) {
+      expect(text).toContain(` ${group} `);
     }
+    expect(text).not.toContain(' Matrix ');
+    expect(text).not.toContain(' Receipts ');
+    expect(text).not.toMatch(/[0-9](Overview|Spend|Sessions|Savings|ROI|Share)/);
+  });
+
+  test('every group fits at 100 columns', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    state.selectedView = 'behavior';
+
+    const text = collectTextContent(buildHeader(state, { width: 100 } as CliRenderer)).join('');
+
+    expect(text).not.toContain('‹');
+    expect(text).not.toContain('›');
+  });
+});
+
+describe('buildSubTabBar', () => {
+  test('lists the active group’s sub-tabs and how to cycle them', () => {
+    const state = createInitialState();
+    state.selectedView = 'waste';
+
+    const text = collectTextContent(buildSubTabBar(state, { width: 140 } as CliRenderer)).join('');
+
+    expect(text).toContain('Advisor · Waste · Routing · Receipts');
+    expect(text).toContain('(4: next)');
+  });
+
+  test('shows the last quota snapshot without fetching one', () => {
+    const state = createInitialState();
+    state.quotaSnapshot = {
+      schemaVersion: 1,
+      checkedAt: '2026-09-06T12:00:00Z',
+      providers: [
+        {
+          provider: 'claude',
+          status: 'ready',
+          plan: null,
+          windows: [
+            {
+              id: 'five',
+              label: '5h',
+              usedPercent: 58,
+              remainingPercent: 42,
+              resetsAt: null,
+              unlimited: false,
+            },
+          ],
+          fetchedAt: null,
+          stale: false,
+          message: null,
+          retryAt: null,
+        },
+      ],
+    };
+
+    const text = collectTextContent(buildSubTabBar(state, { width: 140 } as CliRenderer)).join('');
+
+    expect(text).toContain('Quota Claude 42%');
+    expect(state.quotasLoading).toBe(false);
+  });
+
+  test('points at the quotas view before any snapshot exists', () => {
+    const state = createInitialState();
+    const text = collectTextContent(buildSubTabBar(state, { width: 100 } as CliRenderer)).join('');
+    expect(text).toContain('Overview · Quotas');
+    expect(text).toContain('U: quotas');
+  });
+
+  test('drops the quota widget rather than overflow a narrow terminal', () => {
+    const state = createInitialState();
+    state.selectedView = 'receipts';
+    const text = collectTextContent(buildSubTabBar(state, { width: 50 } as CliRenderer)).join('');
+    expect(text).toContain('Receipts');
+    expect(text).not.toContain('U: quotas');
   });
 });

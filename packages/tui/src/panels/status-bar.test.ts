@@ -83,14 +83,27 @@ describe('buildStatusBar', () => {
 });
 
 describe('createHelpPanel', () => {
-  test('continues documenting direct view shortcuts', () => {
-    const text = collectTextContent(createHelpPanel()).join('');
+  test('documents every group with its tabs and the direct shortcuts', () => {
+    const text = collectTextContent(createHelpPanel()).join('\n');
 
-    expect(text).toContain('1');
-    expect(text).toContain('Overview');
-    expect(text).toContain('0');
-    expect(text).toContain('AI ROI');
-    expect(text).toContain('R');
-    expect(text).toContain('Receipts');
+    expect(text).toContain('1 Overview');
+    expect(text).toContain('Overview Quotas');
+    expect(text).toContain('4 Savings');
+    expect(text).toContain('Advisor Waste Routing Receipts');
+    expect(text).toContain('5 ROI');
+    expect(text).toContain('AI ROI Diff');
+    expect(text).toContain('U R X');
+    expect(text).toContain('Quotas, Receipts, Routing');
+    expect(text).toContain('Y Z');
+    expect(text).toContain('Waste, Diff');
+    expect(text).toContain('EXPLAIN VIEW');
+    expect(text).toContain('1-6 again');
+  });
+
+  test('footer hints name group switching', () => {
+    const state = createInitialState();
+    state.isLoading = false;
+    const text = collectTextContent(buildStatusBar(state, 140)).join('');
+    expect(text).toContain('1-6:group');
   });
 });

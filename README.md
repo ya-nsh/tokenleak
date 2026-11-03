@@ -63,25 +63,31 @@ npx tokenleak --help
 ```
 
 After installing, run `tokenleak` in your terminal. It auto-detects supported providers from their local logs.
-In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with 15 views:
+In an interactive TTY, plain `tokenleak` launches a full-screen TUI dashboard with six groups. Press `1`–`6` to pick a group, and press the same key again to step through its tabs:
 
-- **Overview** — heatmap, stats, providers, and top models
-- **Quotas** — live subscription limits for Claude, Codex, and Copilot
-- **Matrix** — 4-page deep-dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
-- **Advisor** — savings recommendations with the projected monthly bill
-- **Focus** — deep-work session rankings scored by active time (breaks over 30 min excluded), density, and streaks
-- **Explain** — narrative day-by-day usage breakdown
-- **Compare** — side-by-side period comparison with deltas
-- **Export** — save PNG, Wrapped PNG, launch a live server, or copy an LLM-ready analysis prompt
-- **Wrapped** — Spotify-Wrapped-style stats card with achievements and usage breakdown
-- **Replay** — chronological session timeline with flow blocks, pulse chart, and flow/think ratio
-- **AI ROI** — token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
-- **Receipts** — itemized spend by prompt behavior
-- **Sim** — what routing short tasks to cheaper models would have saved
-- **Waste** — the same savings findings as an evidence table
-- **Diff** — compare providers, models, or projects side by side
+1. **Overview**
+   - **Overview**: heatmap, stats, providers, and top models
+   - **Quotas**: live subscription limits for Claude, Codex, and Copilot
+2. **Spend**
+   - **Matrix**: a 4-page deep dive with activity patterns, cache economics, sessions, model efficiency, attribution, and cache ROI by model
+   - **Compare**: side-by-side period comparison with deltas
+3. **Sessions**
+   - **Focus**: deep-work session rankings scored by active time (breaks over 30 min excluded), density, and streaks
+   - **Replay**: chronological session timeline with flow blocks, pulse chart, and flow/think ratio
+   - **Explain**: narrative day-by-day usage breakdown
+4. **Savings**
+   - **Advisor**: savings recommendations with the projected monthly bill
+   - **Waste**: the same savings findings as an evidence table
+   - **Routing**: what routing short tasks to cheaper models would have saved
+   - **Receipts**: itemized spend by prompt behavior
+5. **ROI**
+   - **AI ROI**: token spend versus local Git output, including commits, changed lines, and cost/token ratios per repo
+   - **Diff**: compare providers, models, or projects side by side
+6. **Share**
+   - **Export**: save PNG or Wrapped PNG, open AI Wrapped in the browser, or copy an LLM-ready analysis prompt
+   - **Wrapped**: Spotify-Wrapped-style stats card with achievements and usage breakdown
 
-On narrow terminals the tab bar shows the views around the active one (`‹` / `›` mark the rest) and footer hints drop by priority, so `q:quit` and `?:keys` are always visible.
+The second header row lists the active group's tabs. On its right is a compact quota widget, such as `Quota Claude 42% · Codex 90%`, showing each provider's tightest window from the last quota check. It never checks quotas on its own; open the Quotas tab (`U`) to refresh. On narrow terminals the group bar shows the groups around the active one (`‹` / `›` mark the rest) and footer hints drop by priority, so `q:quit` and `?:keys` are always visible.
 
 
 ### From source
@@ -525,7 +531,7 @@ JSON exports (files, `--clipboard`, `--upload gist`) omit captured prompt text b
 
 ### TUI dashboard (default)
 
-In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). The TUI provides 15 views with keyboard and mouse navigation. The Advisor and Waste views show the same savings report.
+In a real TTY, `tokenleak` launches a full-screen terminal dashboard built with [@opentui/core](https://www.npmjs.com/package/@opentui/core). Its 15 views are grouped into six tabs with keyboard and mouse navigation (see the list above). The Advisor and Waste tabs show the same savings report.
 
 Latest OpenTUI screenshots from the current dashboard build:
 
@@ -541,10 +547,12 @@ Latest OpenTUI screenshots from the current dashboard build:
 
 | Key | Action |
 | --- | --- |
-| `←` / `→` | Switch between views |
+| `1`–`6` | Switch group: Overview, Spend, Sessions, Savings, ROI, Share |
+| `1`–`6` again | Next tab in the current group |
+| `←` / `→` | Previous/next tab, crossing into the next group |
+| `U` `R` `X` `Y` `Z` | Jump to Quotas, Receipts, Routing, Waste, or Diff |
 | `Tab` / `>` | Next time period (1D → 7D → 30D → 90D → ALL) |
 | `Shift+Tab` / `<` | Previous time period |
-| `1`–`8` | Jump directly to a view |
 | `j` / `k` | Scroll up/down in scrollable views |
 | `[` / `]` | Matrix page navigation (in Matrix view) |
 | `h` / `l` | Previous/next day (in Explain view) |

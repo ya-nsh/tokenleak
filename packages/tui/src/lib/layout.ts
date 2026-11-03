@@ -1,5 +1,5 @@
-/** Rows the header and footer take from every view. */
-export const CHROME_ROWS = 2;
+/** Rows the header, the sub-tab bar and the footer take from every view. */
+export const CHROME_ROWS = 3;
 
 /** Rows left for the active view after the chrome and the optional Cursor banner. */
 export function contentRows(terminalHeight: number, hasCursorBanner: boolean): number {

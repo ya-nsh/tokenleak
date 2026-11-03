@@ -1,10 +1,18 @@
 import { Box, Text } from '@opentui/core';
 import { COLORS, BOLD } from '../lib/theme.js';
+import { DIRECT_VIEW_KEYS, VIEW_GROUPS } from '../lib/views.js';
 
-function helpSection(title: string, items: [string, string][]) {
+/** Shortcut letters per help row, so the row fits half a 100-column terminal. */
+const DIRECT_KEYS_PER_ROW = 3;
+
+/**
+ * A titled list of key bindings. Sections are compact (no blank under the
+ * title) so the whole overlay fits a 36-row terminal; the last section in a
+ * column drops its trailing blank too.
+ */
+function helpSection(title: string, items: [string, string][], last = false) {
   const children: ReturnType<typeof Box | typeof Text>[] = [
     Text({ content: title, fg: COLORS.amber, attributes: BOLD }),
-    Text({ content: '', fg: COLORS.dimWhite }),
   ];
 
   for (const [key, desc] of items) {
@@ -17,8 +25,25 @@ function helpSection(title: string, items: [string, string][]) {
     );
   }
 
-  children.push(Text({ content: '', fg: COLORS.dimWhite }));
+  if (!last) children.push(Text({ content: '', fg: COLORS.dimWhite }));
   return children;
+}
+
+/** The letter shortcuts as help rows: keys on the left, their tab labels on the right. */
+function directKeyRows(): [string, string][] {
+  const labels = new Map(
+    VIEW_GROUPS.flatMap((group) => group.views.map((view) => [view.mode, view.label] as const)),
+  );
+  const entries = Object.entries(DIRECT_VIEW_KEYS);
+  const rows: [string, string][] = [];
+  for (let start = 0; start < entries.length; start += DIRECT_KEYS_PER_ROW) {
+    const chunk = entries.slice(start, start + DIRECT_KEYS_PER_ROW);
+    rows.push([
+      chunk.map(([key]) => key).join(' '),
+      chunk.map(([, mode]) => labels.get(mode) ?? mode).join(', '),
+    ]);
+  }
+  return rows;
 }
 
 export function createHelpPanel() {
@@ -41,8 +66,9 @@ export function createHelpPanel() {
       Box(
         { flexDirection: 'column', flexGrow: 1 },
         ...helpSection('NAVIGATION', [
-          ['\u2192', 'Next view'],
-          ['\u2190', 'Prev view'],
+          ['1-6', 'Switch group'],
+          ['1-6 again', 'Next tab in the group'],
+          ['\u2192 / \u2190', 'Next / prev tab (all groups)'],
           ['Tab / >', 'Next time period'],
           ['Shift+Tab / <', 'Prev time period'],
           ['j / \u2193', 'Scroll down'],
@@ -52,7 +78,7 @@ export function createHelpPanel() {
         ...helpSection('ACTIONS', [
           ['s', 'Toggle sort mode'],
           ['r', 'Refresh data'],
-          ['o', 'Open interactive replay (any view)'],
+          ['o', 'Open browser replay (any view)'],
           ['c', 'Open Cursor setup'],
           ['q', 'Quit'],
         ]),
@@ -62,32 +88,26 @@ export function createHelpPanel() {
           ['l', 'Open AI Wrapped in the browser'],
           ['a', 'Copy LLM prompt'],
         ]),
+        ...helpSection(
+          'EXPLAIN VIEW',
+          [
+            ['h', 'Previous day'],
+            ['l', 'Next day'],
+          ],
+          true,
+        ),
       ),
 
       // Right column
       Box(
         { flexDirection: 'column', flexGrow: 1 },
         ...helpSection('VIEWS', [
-          ['U', 'Subscription quotas (account-wide)'],
-          ['1', 'Overview'],
-          ['2', 'Matrix'],
-          ['3', 'Advisor'],
-          ['4', 'Focus'],
-          ['5', 'Explain'],
-          ['6', 'Compare'],
-          ['7', 'Export'],
-          ['8', 'Wrapped'],
-          ['9', 'Replay'],
-          ['0', 'AI ROI'],
-          ['R', 'Receipts'],
-          ['X', 'Routing Simulator'],
-          ['Y', 'Waste Signals'],
-          ['Z', 'Behavior Diff'],
+          ...VIEW_GROUPS.map((group): [string, string] => [
+            `${group.key} ${group.label}`,
+            group.views.map((view) => view.label).join(' '),
+          ]),
+          ...directKeyRows(),
           ['?', 'Help'],
-        ]),
-        ...helpSection('EXPLAIN VIEW', [
-          ['h', 'Previous day'],
-          ['l', 'Next day'],
         ]),
         ...helpSection('REPLAY VIEW', [
           ['h / l', 'Previous / next day'],
@@ -95,13 +115,17 @@ export function createHelpPanel() {
           ['Enter / Space', 'Toggle selected flow block'],
           ['Click', 'Select and toggle a flow block'],
         ]),
-        ...helpSection('RECEIPTS VIEW', [
-          ['j / k', 'Select line item'],
-          ['Enter / Space', 'Toggle selected line item'],
-          ['Click', 'Select and toggle a line item'],
-          ['S', 'Cycle sort (cost / qty / alpha)'],
-          ['f', 'Cycle category filter'],
-        ]),
+        ...helpSection(
+          'RECEIPTS VIEW',
+          [
+            ['j / k', 'Select line item'],
+            ['Enter / Space', 'Toggle selected line item'],
+            ['Click', 'Select and toggle a line item'],
+            ['S', 'Cycle sort (cost / qty / alpha)'],
+            ['f', 'Cycle category filter'],
+          ],
+          true,
+        ),
       ),
     ),
 

@@ -44,7 +44,8 @@ import {
 } from './lib/data.js';
 import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
-import { buildHeader } from './panels/header.js';
+import { buildHeader, buildSubTabBar } from './panels/header.js';
+import { adjacentView, groupOfView, viewForKey } from './lib/views.js';
 import { createChartPanel } from './panels/chart-panel.js';
 import { createStatsRow } from './panels/stats-row.js';
 import { createModelList } from './panels/model-list.js';
@@ -1022,6 +1023,7 @@ function handleViewSwitch(mode: ViewMode): void {
   }
   if (currentState.selectedView !== mode) {
     currentState.selectedView = mode;
+    currentState.lastViewByGroup[groupOfView(mode).id] = mode;
     currentState.modelScrollOffset = 0;
     currentState.advisorScrollOffset = 0;
     currentState.focusScrollOffset = 0;
@@ -1054,6 +1056,7 @@ function buildLayout(state: AppState, renderer: CliRenderer) {
       backgroundColor: COLORS.bg,
     },
     buildHeader(state, renderer, handleViewSwitch),
+    buildSubTabBar(state, renderer, handleViewSwitch),
     ...(cursorBanner ? [cursorBanner] : []),
     buildContent(state, renderer),
     buildStatusBar(state, renderer.width),
@@ -1138,42 +1141,6 @@ function shiftExplainDate(state: AppState, direction: number): void {
   state.explainDate = d.toISOString().slice(0, 10);
   state.cachedExplainReport = null;
 }
-
-const VIEW_KEYS: Record<string, ViewMode> = {
-  U: 'quotas',
-  '1': 'overview',
-  '2': 'matrix',
-  '3': 'advisor',
-  '4': 'focus',
-  '5': 'explain',
-  '6': 'compare',
-  '7': 'export',
-  '8': 'wrapped',
-  '9': 'replay',
-  '0': 'nutrition',
-  R: 'receipts',
-  X: 'simulator',
-  Y: 'waste',
-  Z: 'behavior',
-};
-
-const VIEW_ORDER: ViewMode[] = [
-  'overview',
-  'quotas',
-  'matrix',
-  'advisor',
-  'focus',
-  'explain',
-  'compare',
-  'export',
-  'wrapped',
-  'replay',
-  'nutrition',
-  'receipts',
-  'simulator',
-  'waste',
-  'behavior',
-];
 
 /** Views that support j/k scrolling and their scroll offset field */
 const SCROLLABLE_VIEWS = new Set<ViewMode>([
@@ -1533,19 +1500,9 @@ export async function main(): Promise<void> {
       return true;
     }
 
-    // Right arrow: next view
-    if (sequence === '\x1b[C') {
-      const idx = VIEW_ORDER.indexOf(state.selectedView);
-      const next = VIEW_ORDER[(idx + 1) % VIEW_ORDER.length]!;
-      handleViewSwitch(next);
-      return true;
-    }
-
-    // Left arrow: prev view
-    if (sequence === '\x1b[D') {
-      const idx = VIEW_ORDER.indexOf(state.selectedView);
-      const prev = VIEW_ORDER[(idx - 1 + VIEW_ORDER.length) % VIEW_ORDER.length]!;
-      handleViewSwitch(prev);
+    // Right / left arrow: next / previous view, crossing into the next group
+    if (sequence === '\x1b[C' || sequence === '\x1b[D') {
+      handleViewSwitch(adjacentView(state.selectedView, sequence === '\x1b[C' ? 1 : -1));
       return true;
     }
 
@@ -1561,8 +1518,8 @@ export async function main(): Promise<void> {
       return true;
     }
 
-    // 1-9/0: switch view
-    const viewMode = VIEW_KEYS[sequence];
+    // 1-6: switch group (again: next sub-tab); U/R/X/Y/Z: jump to a sub-tab
+    const viewMode = viewForKey(sequence, state.selectedView, state.lastViewByGroup);
     if (viewMode) {
       handleViewSwitch(viewMode);
       return true;
