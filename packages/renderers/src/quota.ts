@@ -50,3 +50,32 @@ export function quotaLines(snapshot: QuotaSnapshot, now = Date.now()): string[] 
   }
   return lines;
 }
+
+const QUOTA_PROVIDER_NAMES: Record<QuotaSnapshot['providers'][number]['provider'], string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  copilot: 'Copilot',
+};
+
+/**
+ * One compact line for a status widget: each ready provider's tightest
+ * window as capacity left, e.g. `Claude 42% · Codex 90%`. Null when no
+ * provider reported a limited window.
+ */
+export function quotaSummary(snapshot: QuotaSnapshot): string | null {
+  const parts: string[] = [];
+  for (const provider of snapshot.providers) {
+    if (provider.status !== 'ready') continue;
+    const tightest = provider.windows
+      .filter((bucket) => !bucket.unlimited && bucket.remainingPercent !== null)
+      .reduce<
+        number | null
+      >((lowest, bucket) => (lowest === null || bucket.remainingPercent! < lowest ? bucket.remainingPercent! : lowest), null);
+    if (tightest === null) continue;
+    const percent = Math.round(Math.max(0, Math.min(100, tightest)));
+    parts.push(
+      `${QUOTA_PROVIDER_NAMES[provider.provider]} ${percent}%${provider.stale ? ' (stale)' : ''}`,
+    );
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
