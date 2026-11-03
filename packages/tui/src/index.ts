@@ -17,6 +17,7 @@ import { createDataEngine } from './lib/engine.js';
 import type { DataEngine } from './lib/engine.js';
 import type { ReportKind, ReportResults } from './lib/engine-core.js';
 import { createReportTask } from './lib/report-task.js';
+import { reconcileChildren } from './lib/reconcile.js';
 import { createInitialState, WINDOW_LABELS } from './lib/state.js';
 import type { AppState, ViewMode } from './lib/state.js';
 import { buildHeader, buildSubTabBar } from './panels/header.js';
@@ -70,13 +71,6 @@ import { buildCursorBanner, getCursorBannerText, createCursorSetupPanel, isEscap
 
 const CURSOR_SETUP_LABEL_INPUT_ID = 'cursor-setup-label-input';
 const CURSOR_SETUP_TOKEN_INPUT_ID = 'cursor-setup-token-input';
-
-function clearRoot(renderer: CliRenderer): void {
-  const children = renderer.root.getChildren();
-  for (const child of children) {
-    renderer.root.remove(child.id);
-  }
-}
 
 function createDeferredPanel(title: string, message: string, isError: boolean = false) {
   return Box(
@@ -1029,7 +1023,8 @@ function handleViewSwitch(mode: ViewMode): void {
   render(currentState, currentRenderer);
 }
 
-function buildLayout(state: AppState, renderer: CliRenderer) {
+/** The whole screen for `state`: header, tab bar, active view and status bar. */
+export function buildLayout(state: AppState, renderer: CliRenderer) {
   const cursorBanner = buildCursorBanner(state);
   return Box(
     {
@@ -1059,11 +1054,23 @@ function focusCursorSetupField(state: AppState, renderer: CliRenderer): void {
   }
 }
 
+let framePending = false;
+
+/**
+ * Schedules one frame for the current state. Calls in the same tick share a
+ * frame, which patches the live tree (see `reconcileChildren`) rather than
+ * remounting it.
+ */
 function render(state: AppState, renderer: CliRenderer): void {
-  clearRoot(renderer);
-  renderer.root.add(buildLayout(state, renderer));
-  focusCursorSetupField(state, renderer);
-  renderer.requestRender();
+  if (framePending || renderer.isDestroyed) return;
+  framePending = true;
+  queueMicrotask(() => {
+    framePending = false;
+    if (renderer.isDestroyed) return;
+    reconcileChildren(renderer, renderer.root, [buildLayout(state, renderer)]);
+    focusCursorSetupField(state, renderer);
+    renderer.requestRender();
+  });
 }
 
 /** Null caches that depend on the selected window */
