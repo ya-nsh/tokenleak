@@ -434,3 +434,45 @@ describe('CodexProvider', () => {
     expect(day1.cost).toBeCloseTo(0.00572, 5);
   });
 });
+
+describe('Codex configured service tier', () => {
+  async function loadWithConfig(records: unknown[], toml: string | null) {
+    const root = mkdtempSync(join(tmpdir(), 'tokenleak-codex-tier-'));
+    const sessions = join(root, 'sessions');
+    mkdirSync(sessions);
+    writeFileSync(join(sessions, 'session.jsonl'), records.map((r) => JSON.stringify(r)).join('\n'));
+    const configPath = join(root, 'config.toml');
+    if (toml !== null) writeFileSync(configPath, toml);
+    try {
+      return await new CodexProvider(sessions, undefined, configPath).load(CURRENT_RANGE);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it('uses the configured tier when the log records none, marked as configured', async () => {
+    const data = await loadWithConfig([turn('gpt-5.5'), tokens(1_000, 100)], 'service_tier = "default"\n');
+    expect(data.events?.[0]).toMatchObject({ serviceTier: 'default', serviceTierSource: 'config' });
+    expect(data.daily[0]!.models[0]!.serviceTiers).toEqual([
+      expect.objectContaining({ tier: 'default', tokens: 1_100, configuredTokens: 1_100 }),
+    ]);
+  });
+
+  it('a tier recorded in the log wins over the config', async () => {
+    const recorded = { ...turn('gpt-5.5'), payload: { model: 'gpt-5.5', service_tier: 'flex' } };
+    const data = await loadWithConfig([recorded, tokens(1_000, 100)], 'service_tier = "default"\n');
+    expect(data.events?.[0]).toMatchObject({ serviceTier: 'flex', serviceTierSource: 'request' });
+    expect(data.daily[0]!.models[0]!.serviceTiers?.[0]?.configuredTokens).toBeUndefined();
+  });
+
+  it('stays unknown without a config file', async () => {
+    const data = await loadWithConfig([turn('gpt-5.5'), tokens(1_000, 100)], null);
+    expect(data.events?.[0]?.serviceTier).toBe('unknown');
+    expect(data.events?.[0]?.serviceTierSource).toBeUndefined();
+  });
+
+  it('a custom sessions directory does not read the real config', async () => {
+    const data = await loadRecords([turn('gpt-5.5'), tokens(1_000, 100)]);
+    expect(data.events?.[0]?.serviceTier).toBe('unknown');
+  });
+});

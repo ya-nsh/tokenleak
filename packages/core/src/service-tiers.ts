@@ -22,6 +22,7 @@ export function mergeServiceTiers(...groups: (ServiceTierUsage[] | undefined)[])
         previous.tokens += item.tokens;
         previous.cost += item.cost;
         previous.unpricedTokens += item.unpricedTokens;
+        if (item.configuredTokens) previous.configuredTokens = (previous.configuredTokens ?? 0) + item.configuredTokens;
       } else {
         tiers.set(item.tier, { ...item });
       }
@@ -34,5 +35,10 @@ export function formatModelWithTier(model: string, tiers?: ServiceTierUsage[]): 
   if (!tiers?.length) return model;
   const labels: Record<string, string> = { default: 'Standard', fast: 'Fast', unknown: 'tier unknown',
     auto: 'Auto tier', flex: 'Flex', ultrafast: 'Ultrafast' };
-  return `${model} [${tiers.map(({ tier }) => labels[tier] ?? tier).join(', ')}]`;
+  // A tier known only from settings is labelled as such, never as recorded.
+  const describe = ({ tier, tokens, configuredTokens }: ServiceTierUsage): string => {
+    const label = labels[tier] ?? tier;
+    return tokens > 0 && (configuredTokens ?? 0) >= tokens ? `${label} (config)` : label;
+  };
+  return `${model} [${tiers.map(describe).join(', ')}]`;
 }

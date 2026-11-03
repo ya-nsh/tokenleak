@@ -29,6 +29,11 @@ export interface ServiceTierUsage {
   tokens: number;
   cost: number;
   unpricedTokens: number;
+  /**
+   * Tokens whose tier came from the user's tool settings because the provider
+   * did not record one (e.g. Codex logs omit `service_tier`).
+   */
+  configuredTokens?: number;
 }
 
 export interface CachePricingDetails {
@@ -122,7 +127,7 @@ export interface UsageEvent {
   responseId?: string;
   /** Canonical recorded tier; missing historical metadata is explicitly unknown for Codex. */
   serviceTier?: string;
-  serviceTierSource?: 'response' | 'request' | 'model-name';
+  serviceTierSource?: 'response' | 'request' | 'model-name' | 'config';
   projectId?: string;
   repoRoot?: string;
   directory?: string;
