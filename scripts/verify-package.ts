@@ -29,6 +29,20 @@ try {
   if (!run([cli, '--version'], temp).includes(metadata.version)) {
     throw new Error('Installed launcher did not report the packaged version');
   }
+  // The TUI starts its data engine from the worker file shipped beside the executable.
+  const engineWorker = join(temp, 'node_modules', 'tokenleak', 'tokenleak-engine.js');
+  const engineProbe = join(temp, 'engine-probe.ts');
+  writeFileSync(engineProbe, `
+    const worker = new Worker(${JSON.stringify(engineWorker)});
+    worker.onmessage = (event) => { console.log(JSON.stringify(event.data)); worker.terminate(); };
+    worker.onerror = (event) => { console.error(event.message); process.exit(1); };
+    worker.postMessage({ id: 1, method: 'loadCached', args: [] });
+  `);
+  const probe = JSON.parse(run([process.execPath, engineProbe], temp,
+    { TOKENLEAK_TUI_CACHE_PATH: join(temp, 'no-tui-cache.json') })) as { id: number; ok: boolean; value: unknown };
+  if (probe.id !== 1 || probe.ok !== true || probe.value !== null) {
+    throw new Error('Installed data engine worker did not answer a request');
+  }
   const codexDir = join(temp, 'codex');
   mkdirSync(join(codexDir, 'sessions'), { recursive: true });
   const timestamp = '2026-03-12T10:00:00Z';
@@ -46,7 +60,7 @@ try {
       Math.abs(report.aggregated.totalCost - 0.01056) > 1e-9) {
     throw new Error('Installed CLI failed the model/tier/duplicate usage smoke test');
   }
-  console.log(`Verified tokenleak@${metadata.version}: tarball installation, executable launcher, and usage report.`);
+  console.log(`Verified tokenleak@${metadata.version}: tarball installation, executable launcher, data engine worker, and usage report.`);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

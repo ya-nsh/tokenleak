@@ -16,7 +16,7 @@ const publishPkg = {
   bin: {
     tokenleak: 'tokenleak',
   },
-  files: ['tokenleak'],
+  files: ['tokenleak', 'tokenleak-engine.js'],
   dependencies: {
     sharp: '^0.34.0',
     '@opentui/core': '^0.1.88',
