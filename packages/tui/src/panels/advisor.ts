@@ -8,6 +8,11 @@ import type { AppState } from '../lib/state.js';
 export const ADVISOR_VISIBLE_ITEMS = 5;
 const CONTENT_WIDTH = 72;
 const MAX_BODY_LINES = 2;
+/**
+ * Each recommendation is a title, at most two description lines and a blank
+ * line, so five fit a standard terminal. Recipes live in the Waste view.
+ */
+export const ADVISOR_LINES_PER_ITEM = 1 + MAX_BODY_LINES + 1;
 
 function confidenceColor(c: 'high' | 'medium' | 'low'): string {
   if (c === 'high') return COLORS.green;
@@ -83,15 +88,18 @@ function titleLine(title: string, badge: string): string {
   return `${prefix}${truncate(title, titleWidth)}  ${badge}`;
 }
 
-function formatSavings(value: number | null): string {
-  return value === null ? 'not estimated' : `${formatCost(value)}/mo`;
+/** Monthly saving for a title line; findings without an estimate show none. */
+function formatSavings(value: number | null): string | null {
+  return value === null ? null : `${formatCost(value)}/mo`;
 }
 
 function renderRecommendation(rec: SavingsRecommendation) {
-  const badge = confidenceLabel(rec.confidence);
+  // The saving rides on the title line so a long reason can never push it out of view.
+  const badge = [formatSavings(rec.monthlySavings), confidenceLabel(rec.confidence)]
+    .filter((part): part is string => part !== null)
+    .join('  ');
   const title = `${CATEGORY_LABELS[rec.category]}: ${cleanText(rec.title)}`;
-  const recipe = rec.recipes[0];
-  const description = `${cleanText(rec.evidence.reason)} Saves ${formatSavings(rec.monthlySavings)}`;
+  const description = cleanText(rec.evidence.reason);
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
@@ -101,7 +109,6 @@ function renderRecommendation(rec: SavingsRecommendation) {
       attributes: BOLD,
     }),
     ...indentedTextLines(description, COLORS.dimWhite),
-    ...(recipe ? indentedTextLines(`Recipe: ${recipe.title} - ${recipe.detail}`, COLORS.cyan) : []),
     Text({ content: '', fg: COLORS.dimWhite }),
   );
 }
