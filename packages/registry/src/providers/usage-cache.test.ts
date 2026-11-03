@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import {
   appendFileSync,
-  readdirSync,
-  readFileSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -62,8 +61,24 @@ for (const Provider of [CodexProvider, ClaudeCodeProvider]) {
     const provider = new Provider(source);
     const cold = await provider.load(range);
     expect(await new Provider(source).load(range)).toEqual(cold);
-    const cacheFile = join(root, 'cache', readdirSync(join(root, 'cache'))[0]!);
-    const validCache = readFileSync(cacheFile, 'utf8');
+    const store = join(root, 'cache', 'usage.sqlite');
+    const readPayload = (): string => {
+      const db = new Database(store);
+      try {
+        return (db.query('SELECT payload FROM entries WHERE file = ?').get(file) as { payload: string }).payload;
+      } finally {
+        db.close();
+      }
+    };
+    const writePayload = (payload: string): void => {
+      const db = new Database(store);
+      try {
+        db.query('UPDATE entries SET payload = ? WHERE file = ?').run(payload, file);
+      } finally {
+        db.close();
+      }
+    };
+    const validCache = readPayload();
     for (const corrupt of [
       (entry: { records: unknown[]; warnings: unknown[] }) => {
         entry.records = [null];
@@ -79,8 +94,8 @@ for (const Provider of [CodexProvider, ClaudeCodeProvider]) {
       },
     ]) {
       const payload = JSON.parse(validCache);
-      corrupt(payload.entries[file]);
-      writeFileSync(cacheFile, JSON.stringify(payload));
+      corrupt(payload);
+      writePayload(JSON.stringify(payload));
       expect(await provider.load(range)).toEqual(cold);
       expect(await provider.load(range)).toEqual(cold);
     }
