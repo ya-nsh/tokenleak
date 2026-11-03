@@ -6,6 +6,10 @@ const MIN_TOKEN_LENGTH = 3;
 const NGRAM_SIZE = 2;
 const SAMPLE_PROMPT_COUNT = 3;
 const SAMPLE_PROMPT_MAX_CHARS = 120;
+/** Joins prompt-key parts; provider, session and prompt ids never contain NUL. */
+const KEY_SEPARATOR = '\u0000';
+/** Stands in for a missing session id so it cannot collide with an empty one. */
+const NO_SESSION = '\u0001';
 
 export interface PromptCluster {
   costCompleteness?: CostCompleteness;
@@ -60,7 +64,7 @@ export function clusterPrompts(
     topMembers: TopMember[];
   }
 
-  const clusters: WorkingCluster[] = [];
+  const shingleIndex = new ShingleIndex<WorkingCluster>();
   // Every assistant message in a turn repeats the same prompt. Remember where
   // each prompt landed so repeats skip the bigram scan over every cluster.
   const clusterByPromptKey = new Map<string, WorkingCluster>();
@@ -79,8 +83,8 @@ export function clusterPrompts(
   for (const [index, event] of withPrompts.entries()) {
     const promptId = event.promptId?.trim() || event.turnId?.trim();
     const promptKey = promptId
-      ? JSON.stringify([event.provider, event.sessionId, promptId])
-      : JSON.stringify(['event', index]);
+      ? `turn${KEY_SEPARATOR}${event.provider}${KEY_SEPARATOR}${event.sessionId ?? NO_SESSION}${KEY_SEPARATOR}${promptId}`
+      : `event${KEY_SEPARATOR}${index}`;
     const prompt = event.prompt!.trim();
 
     const known = clusterByPromptKey.get(promptKey) ?? clusterByPromptText.get(prompt);
@@ -107,14 +111,7 @@ export function clusterPrompts(
       signature.add(`\u0000exact\u0001${normalize(prompt) || prompt.toLowerCase()}`);
     }
 
-    let best: { cluster: WorkingCluster; sim: number } | null = null;
-    for (const cluster of clusters) {
-      const sim = jaccard(signature, cluster.signature);
-      if (sim >= threshold && (best === null || sim > best.sim)) {
-        best = { cluster, sim };
-      }
-    }
-
+    const best = shingleIndex.findBest(signature, threshold);
     if (best !== null) {
       const c = best.cluster;
       c.promptKeys.add(promptKey);
@@ -126,7 +123,7 @@ export function clusterPrompts(
         c.canonicalPrompt = prompt;
         c.canonicalCost = event.cost;
       }
-      for (const bigram of signature) c.signature.add(bigram);
+      shingleIndex.extend(best.cluster, signature);
       insertTopMember(c.topMembers, prompt, keyFor(prompt), event.cost);
       clusterByPromptKey.set(promptKey, c);
       clusterByPromptText.set(prompt, c);
@@ -142,13 +139,13 @@ export function clusterPrompts(
         totalTokens: event.totalTokens,
         topMembers: [{ prompt, cost: event.cost, key: keyFor(prompt) }],
       };
-      clusters.push(created);
+      shingleIndex.add(created);
       clusterByPromptKey.set(promptKey, created);
       clusterByPromptText.set(prompt, created);
     }
   }
 
-  return clusters
+  return shingleIndex.clusters
     .map((c) => ({
       costCompleteness: buildEventCostCompleteness(c.events),
       canonicalPrompt: c.canonicalPrompt,
@@ -158,6 +155,84 @@ export function clusterPrompts(
       samplePrompts: buildSamplePrompts(c.topMembers),
     }))
     .sort((a, b) => b.totalCost - a.totalCost);
+}
+
+interface SignedCluster {
+  signature: Set<string>;
+}
+
+/**
+ * Inverted index from shingle to the clusters whose signature contains it.
+ *
+ * A cluster can only reach a positive Jaccard similarity with a prompt if the
+ * two share at least one shingle, so scoring the posting lists of the prompt's
+ * shingles finds the same best match as scanning every cluster, without the
+ * O(prompts × clusters) cost. Ties resolve to the earliest-created cluster,
+ * matching a front-to-back scan.
+ */
+class ShingleIndex<C extends SignedCluster> {
+  readonly clusters: C[] = [];
+  private readonly ids = new Map<C, number>();
+  private readonly postings = new Map<string, number[]>();
+  /** Per-cluster shared-shingle counts for the current query; reset after each use. */
+  private readonly overlap: number[] = [];
+
+  add(cluster: C): void {
+    const id = this.clusters.length;
+    this.clusters.push(cluster);
+    this.ids.set(cluster, id);
+    this.overlap.push(0);
+    for (const shingle of cluster.signature) this.post(shingle, id);
+  }
+
+  /** Merges `signature` into the cluster's own signature, indexing only new shingles. */
+  extend(cluster: C, signature: Set<string>): void {
+    const id = this.ids.get(cluster);
+    if (id === undefined) throw new Error('ShingleIndex.extend: cluster was never added');
+    for (const shingle of signature) {
+      if (cluster.signature.has(shingle)) continue;
+      cluster.signature.add(shingle);
+      this.post(shingle, id);
+    }
+  }
+
+  findBest(signature: Set<string>, threshold: number): { cluster: C; sim: number } | null {
+    const touched: number[] = [];
+    for (const shingle of signature) {
+      const ids = this.postings.get(shingle);
+      if (!ids) continue;
+      for (const id of ids) {
+        if (this.overlap[id] === 0) touched.push(id);
+        this.overlap[id]! += 1;
+      }
+    }
+
+    let bestId = -1;
+    let bestSim = 0;
+    for (const id of touched) {
+      const shared = this.overlap[id]!;
+      this.overlap[id] = 0;
+      const union = signature.size + this.clusters[id]!.signature.size - shared;
+      const sim = union === 0 ? 0 : shared / union;
+      if (sim < threshold) continue;
+      if (bestId === -1 || sim > bestSim || (sim === bestSim && id < bestId)) {
+        bestId = id;
+        bestSim = sim;
+      }
+    }
+
+    if (bestId !== -1) return { cluster: this.clusters[bestId]!, sim: bestSim };
+    // A non-positive threshold accepts clusters that share nothing (similarity
+    // 0); a full scan would settle on the first cluster in that case.
+    if (threshold <= 0 && this.clusters.length > 0) return { cluster: this.clusters[0]!, sim: 0 };
+    return null;
+  }
+
+  private post(shingle: string, id: number): void {
+    const ids = this.postings.get(shingle);
+    if (ids) ids.push(id);
+    else this.postings.set(shingle, [id]);
+  }
 }
 
 interface TopMember {
@@ -254,15 +329,4 @@ function normalize(text: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 0;
-  let intersection = 0;
-  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
-  for (const item of small) {
-    if (large.has(item)) intersection++;
-  }
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
 }
