@@ -291,7 +291,7 @@ describe('MCP Server', () => {
     expect(content[0]!.text).toContain('Invalid since date');
   });
 
-  it('calls get_efficiency_advice and returns advisor report', async () => {
+  it('calls get_efficiency_advice and returns the savings report', async () => {
     const { client } = await createConnectedClient();
 
     const result = await client.callTool({
@@ -303,11 +303,10 @@ describe('MCP Server', () => {
     const content = result.content as Array<{ type: string; text: string }>;
     const parsed = JSON.parse(content[0]!.text);
 
-    expect(parsed.recommendations).toBeDefined();
     expect(Array.isArray(parsed.recommendations)).toBe(true);
-    expect(typeof parsed.totalCurrentMonthlyCost).toBe('number');
-    expect(typeof parsed.totalMonthlySavings).toBe('number');
-    expect(typeof parsed.analyzedDays).toBe('number');
+    expect(typeof parsed.summary.currentMonthlyCost).toBe('number');
+    expect(typeof parsed.summary.analyzedDays).toBe('number');
+    expect(parsed.schemaVersion).toBeDefined();
   });
 
   it('calls optimization intelligence tools and returns reports', async () => {
@@ -329,7 +328,16 @@ describe('MCP Server', () => {
     expect(waste.isError).toBeUndefined();
     const wasteJson = JSON.parse((waste.content as Array<{ text: string }>)[0]!.text);
     expect(wasteJson.summary).toBeDefined();
-    expect(Array.isArray(wasteJson.signals)).toBe(true);
+    expect(Array.isArray(wasteJson.recommendations)).toBe(true);
+
+    const filtered = await client.callTool({
+      name: 'get_agent_waste',
+      arguments: { days: 30, severity: 'high' },
+    });
+    const filteredJson = JSON.parse((filtered.content as Array<{ text: string }>)[0]!.text);
+    expect(
+      filteredJson.recommendations.every((r: { severity: string }) => r.severity === 'high'),
+    ).toBe(true);
 
     const diff = await client.callTool({
       name: 'get_agent_behavior_diff',

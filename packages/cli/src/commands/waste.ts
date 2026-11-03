@@ -1,11 +1,12 @@
 import {
   DEFAULT_DAYS,
   VERSION,
-  buildAgentWasteReport,
-  redactWasteReportForExport,
+  filterBySeverity,
+  redactSavingsReportForExport,
 } from '@tokenleak/core';
-import type { AgentWasteReport } from '@tokenleak/core';
+import type { SavingsReport } from '@tokenleak/core';
 import { bold, dim } from '@tokenleak/renderers';
+import { buildSavings } from '../data-loader.js';
 import { TokenleakError } from '../errors.js';
 import { loadOptimizationInput } from '../providers.js';
 import { resolveConfig, resolveTerminalJsonFormat } from '../report-options.js';
@@ -16,7 +17,7 @@ import { initPricing } from '@tokenleak/registry';
 export function buildWasteHelpText(): string {
   return [
     `tokenleak waste ${VERSION}`,
-    'Detect deterministic agent waste signals with evidence and recipes.',
+    'Savings findings with evidence and recipes (the same report as --advisor).',
     '',
     'Usage:',
     '  tokenleak waste [flags]',
@@ -35,28 +36,31 @@ export function buildWasteHelpText(): string {
   ].join('\n');
 }
 
-function renderAgentWasteReport(
-  report: AgentWasteReport,
-  width: number,
-  noColor: boolean,
-  severity: string = 'all',
-): string {
+/** Rows shown in the terminal table; JSON output keeps every recommendation. */
+const MAX_TERMINAL_ROWS = 12;
+const SEVERITIES = ['all', 'high', 'medium', 'low'] as const;
+type SeverityFilter = (typeof SEVERITIES)[number];
+
+function isSeverityFilter(value: string): value is SeverityFilter {
+  return (SEVERITIES as readonly string[]).includes(value);
+}
+
+/** The evidence view of the savings report: every finding with its severity and proof. */
+function renderWasteView(report: SavingsReport, width: number, noColor: boolean): string {
   const termWidth = Math.max(80, width || 80);
-  const visible = report.signals.filter(
-    (signal) => severity === 'all' || signal.severity === severity,
-  );
+  const visible = report.recommendations;
   const lines = [
     bold('Tokenleak Agent Waste', noColor),
     report.method,
     '',
     `Range: ${report.dateRange.since} to ${report.dateRange.until}`,
-    `Signals: ${report.summary.totalSignals}  High: ${report.summary.highSeverity}  Estimated savings: ${formatNullableCost(report.summary.estimatedSavings)}`,
+    `Findings: ${report.summary.totalRecommendations}  High: ${report.summary.highSeverity}  Estimated savings: ${formatNullableCost(report.summary.estimatedSavings)}`,
     `Analyzed: ${report.summary.analyzedEvents.toLocaleString('en-US')} events / ${report.summary.analyzedSessions.toLocaleString('en-US')} sessions`,
     '',
   ];
 
   if (visible.length === 0) {
-    lines.push('No waste signals matched the selected filter.');
+    lines.push('No findings matched the selected filter.');
   } else {
     const headers = ['Severity', 'Kind', 'Title', 'Savings', 'Confidence'];
     const widths = [10, 22, 34, 10, 12];
@@ -66,17 +70,25 @@ function renderAgentWasteReport(
       `|${cells.map((cell, index) => ` ${truncateCell(cell, widths[index]! - 2).padEnd(widths[index]! - 2)} `).join('|')}|`;
     lines.push(row(headers));
     lines.push(`|${widths.map((colWidth) => '-'.repeat(colWidth)).join('|')}|`);
-    for (const signal of visible.slice(0, 12)) {
+    for (const recommendation of visible.slice(0, MAX_TERMINAL_ROWS)) {
       lines.push(
         row([
-          signal.severity,
-          signal.kind,
-          signal.title,
-          formatNullableCost(signal.estimatedSavings),
-          signal.confidence,
+          recommendation.severity,
+          recommendation.kind,
+          recommendation.title,
+          formatNullableCost(recommendation.estimatedSavings),
+          recommendation.confidence,
         ]),
       );
-      lines.push(dim(`  ${truncateCell(signal.evidence.reason, termWidth - 4)}`, noColor));
+      lines.push(dim(`  ${truncateCell(recommendation.evidence.reason, termWidth - 4)}`, noColor));
+    }
+    if (visible.length > MAX_TERMINAL_ROWS) {
+      lines.push(
+        dim(
+          `  ...and ${visible.length - MAX_TERMINAL_ROWS} more (--format json lists all)`,
+          noColor,
+        ),
+      );
     }
   }
 
@@ -90,27 +102,19 @@ export async function runWaste(cliArgs: Record<string, unknown>): Promise<void> 
   const config = resolveConfig(cliArgs);
   const format = resolveTerminalJsonFormat('waste', cliArgs);
   const severity = typeof cliArgs['severity'] === 'string' ? cliArgs['severity'] : 'all';
-  const includePrompts = cliArgs['includePrompts'] === true;
-  if (!['all', 'high', 'medium', 'low'].includes(severity)) {
+  if (!isSeverityFilter(severity)) {
     throw new TokenleakError('tokenleak waste --severity must be all, high, medium, or low');
   }
   const { dateRange, providers } = await loadOptimizationInput(config);
-  const events = providers.flatMap((provider) => provider.events ?? []);
-  const report = buildAgentWasteReport(providers, events, dateRange);
-  const exported = includePrompts ? report : redactWasteReportForExport(report);
+  const report = filterBySeverity(buildSavings(providers, dateRange), severity);
   const rendered =
     format === 'json'
       ? JSON.stringify(
-          severity === 'all'
-            ? exported
-            : {
-                ...exported,
-                signals: exported.signals.filter((signal) => signal.severity === severity),
-              },
+          cliArgs['includePrompts'] === true ? report : redactSavingsReportForExport(report),
           null,
           2,
         )
-      : renderAgentWasteReport(report, config.width, config.noColor, severity);
+      : renderWasteView(report, config.width, config.noColor);
   await writeReportOutput(rendered, config.output);
 }
 

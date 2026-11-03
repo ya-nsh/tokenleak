@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type {
-  AgentWasteReport,
-  AgentWasteSignal,
   RoutingSimulationCandidate,
   RoutingSimulationReport,
+  SavingsRecommendation,
+  SavingsReport,
 } from '@tokenleak/core';
 import { createWastePanel } from './waste.js';
 import { createSimulatorPanel } from './simulator.js';
@@ -28,13 +28,15 @@ function wasteSignal(
   reason: string,
   recipeTitle: string,
   cost: number,
-): AgentWasteSignal {
+): SavingsRecommendation {
   return {
     kind: title === 'Repeated prompt cluster' ? 'prompt-repeat' : 'context-drag',
+    category: 'session',
     title,
     severity: 'high',
     confidence: 'high',
     estimatedSavings: cost / 2,
+    monthlySavings: cost,
     evidence: {
       eventCount: 12,
       tokens: 24_200_000,
@@ -46,7 +48,7 @@ function wasteSignal(
   };
 }
 
-function wasteReport(): AgentWasteReport {
+function wasteReport(): SavingsReport {
   const signals = [
     wasteSignal(
       'Repeated prompt cluster',
@@ -55,9 +57,9 @@ function wasteReport(): AgentWasteReport {
       8,
     ),
     wasteSignal(
-      'High context drag',
+      'Context keeps growing',
       'Input tokens are 14.5x output tokens in this session.',
-      'Start a compact follow-up session',
+      'Compact or hand off before context balloons',
       6,
     ),
     wasteSignal(
@@ -71,36 +73,42 @@ function wasteReport(): AgentWasteReport {
     method: 'test',
     dateRange: { since: '2026-05-10', until: '2026-05-16' },
     summary: {
-      totalSignals: signals.length,
+      totalRecommendations: signals.length,
       highSeverity: signals.length,
+      currentCost: 18,
+      currentMonthlyCost: 77,
       estimatedSavings: 9,
+      monthlySavings: 38,
+      analyzedDays: 7,
       analyzedEvents: 200,
       analyzedSessions: 8,
+      pricedTokenShare: 1,
+      unpricedModels: [],
     },
-    signals,
+    recommendations: signals,
     warnings: [],
   };
 }
 
-function scrollableWasteReport(): AgentWasteReport {
+function scrollableWasteReport(): SavingsReport {
   const report = wasteReport();
   const extra = Array.from({ length: 7 }, (_, index) =>
     wasteSignal(
-      index % 2 === 0 ? 'High context drag' : 'Repeated prompt cluster',
+      index % 2 === 0 ? 'Context keeps growing' : 'Repeated prompt cluster',
       index % 2 === 0
         ? `Input tokens are ${10 + index}.0x output tokens in this session.`
         : `${120 + index} similar prompts clustered around "# Extra prompt ${index}".`,
-      index % 2 === 0 ? 'Start a compact follow-up session' : 'Break the retry loop',
+      index % 2 === 0 ? 'Compact or hand off before context balloons' : 'Break the retry loop',
       1 + index,
     ),
   );
-  const signals = [...report.signals, ...extra];
+  const signals = [...report.recommendations, ...extra];
   return {
     ...report,
-    signals,
+    recommendations: signals,
     summary: {
       ...report.summary,
-      totalSignals: signals.length,
+      totalRecommendations: signals.length,
       highSeverity: signals.length,
     },
   };

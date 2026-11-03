@@ -1,5 +1,5 @@
 import { Box, Text } from '@opentui/core';
-import type { AgentWasteReport, AgentWasteSignal } from '@tokenleak/core';
+import type { SavingsRecommendation, SavingsReport } from '@tokenleak/core';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatCost, formatTokens, truncate, wrapText } from '../lib/format.js';
 
@@ -12,19 +12,19 @@ function severityColor(severity: 'high' | 'medium' | 'low'): string {
   return COLORS.dimWhite;
 }
 
-function shortSignalTitle(signal: AgentWasteSignal): string {
+function shortSignalTitle(signal: SavingsRecommendation): string {
   if (signal.title === 'Repeated prompt cluster') return 'Repeated similar asks';
-  if (signal.title === 'High context drag') return 'Too much context';
+  if (signal.title === 'Context keeps growing') return 'Too much context';
   return signal.title;
 }
 
 function shortRecipeTitle(title: string | undefined): string {
   if (title === 'Break the retry loop') return 'Change approach';
-  if (title === 'Start a compact follow-up session') return 'Start fresh';
+  if (title === 'Compact or hand off before context balloons') return 'Start fresh';
   return title ?? 'Review signal';
 }
 
-function readableReason(signal: AgentWasteSignal): string {
+function readableReason(signal: SavingsRecommendation): string {
   const repeatMatch = signal.evidence.reason.match(/^(\d+)\s+similar prompts/i);
   if (signal.kind === 'prompt-repeat' && repeatMatch) {
     return `${repeatMatch[1]} similar asks repeated in this window.`;
@@ -37,7 +37,7 @@ function clampOffset(offset: number, itemCount: number): number {
 }
 
 export function createWastePanel(
-  report: AgentWasteReport | null,
+  report: SavingsReport | null,
   scrollOffset: number = 0,
   contentWidth: number = WASTE_MAX_CONTENT_WIDTH,
 ) {
@@ -50,14 +50,14 @@ export function createWastePanel(
     );
   }
 
-  const offset = clampOffset(scrollOffset, report.signals.length);
-  const signals = report.signals.slice(offset, offset + WASTE_VISIBLE_ROWS);
-  const below = report.signals.length - offset - signals.length;
+  const offset = clampOffset(scrollOffset, report.recommendations.length);
+  const signals = report.recommendations.slice(offset, offset + WASTE_VISIBLE_ROWS);
+  const below = report.recommendations.length - offset - signals.length;
   return Box(
     { flexDirection: 'column', width: '100%', flexGrow: 1, borderStyle: 'single', borderColor: COLORS.dimWhite, paddingLeft: 1, paddingRight: 1 },
     Text({ content: ' Waste Signals ', fg: COLORS.amber, attributes: BOLD }),
     Text({
-      content: truncate(` Signals ${report.summary.totalSignals}  High ${report.summary.highSeverity}  Est. savings ${report.summary.estimatedSavings === null ? '-' : formatCost(report.summary.estimatedSavings)}`, width),
+      content: truncate(` Findings ${report.summary.totalRecommendations}  High ${report.summary.highSeverity}  Est. savings ${report.summary.estimatedSavings === null ? '-' : formatCost(report.summary.estimatedSavings)}`, width),
       fg: COLORS.white,
       attributes: BOLD,
     }),
@@ -80,7 +80,7 @@ export function createWastePanel(
             }),
           ];
         })
-      : [Text({ content: '  No deterministic waste signals detected', fg: COLORS.dimWhite })]),
+      : [Text({ content: '  No deterministic waste findings detected', fg: COLORS.dimWhite })]),
     ...(below > 0 ? [Text({ content: ` ${below} more below`, fg: COLORS.dimWhite })] : []),
     ...(report.warnings.length > 0
       ? [

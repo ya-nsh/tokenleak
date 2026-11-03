@@ -3,7 +3,7 @@ export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
 export { formatCostWithCompleteness } from './cost-completeness';
 export { formatTokenCount, formatUsd } from './format';
 export { getTokenleakCacheDir } from './paths';
-export { redactPromptsForExport, redactWasteReportForExport } from './export-privacy';
+export { redactPromptsForExport, redactSavingsReportForExport } from './export-privacy';
 
 export type {
   DailyUsage,
@@ -49,10 +49,7 @@ export type {
   CommonsProviderModelEntry,
   CommonsExport,
   CommonsInspectReport,
-  WasteCategory,
   WasteRecipe,
-  WasteFinding,
-  WasteReport,
   OptimizationConfidence,
   OptimizationImpact,
   OptimizationEvidence,
@@ -60,9 +57,10 @@ export type {
   RoutingRule,
   RoutingSimulationCandidate,
   RoutingSimulationReport,
-  WasteSignalKind,
-  AgentWasteSignal,
-  AgentWasteReport,
+  SavingsKind,
+  SavingsCategory,
+  SavingsRecommendation,
+  SavingsReport,
   BehaviorDiffDimension,
   BehaviorCohortSelector,
   BehaviorCohortMetrics,
@@ -114,9 +112,6 @@ export {
   buildCommonsExport,
   buildCommonsPromptExport,
   inspectCommonsExport,
-  buildWasteReport,
-  buildAgentWasteReport,
-  buildRoutingSimulationReport,
   buildAgentBehaviorDiffReport,
   buildNutritionReport,
   collectGitOutcomeSignals,
@@ -129,8 +124,6 @@ export {
 } from './aggregation';
 
 export type {
-  BuildRoutingSimulationOptions,
-  RoutingModelPricing,
   PromptCluster,
   ClusterOptions,
   Receipt,
@@ -171,6 +164,17 @@ export {
   mergeCostCompleteness,
 } from './cost-completeness';
 
-export { analyzeEfficiency, describePricingGap, DOWNGRADE_PATHS, getDowngradePath } from './advisor';
-export type { AdvisorRecommendation, AdvisorReport, AdvisorModelPricing } from './advisor';
+export {
+  buildSavingsReport,
+  buildRoutingSimulationReport,
+  describePricingGap,
+  filterBySeverity,
+  DOWNGRADE_PATHS,
+  getDowngradePath,
+} from './savings';
+export type {
+  BuildSavingsReportInput,
+  BuildRoutingSimulationOptions,
+  RoutingModelPricing,
+} from './savings';
 export type { QuotaProvider, QuotaWindow, ProviderQuota, QuotaSnapshot } from './quotas';

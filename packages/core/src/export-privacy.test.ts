@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { redactPromptsForExport, redactWasteReportForExport } from './export-privacy';
-import type { AgentWasteReport, TokenleakOutput, UsageEvent } from './types';
+import { redactPromptsForExport, redactSavingsReportForExport } from './export-privacy';
+import type { SavingsReport, TokenleakOutput, UsageEvent } from './types';
 
 const SECRET = 'here is my API key sk-live-123';
 
@@ -22,33 +22,49 @@ function event(overrides: Partial<UsageEvent> = {}): UsageEvent {
   };
 }
 
-function wasteReport(): AgentWasteReport {
+function savingsReport(): SavingsReport {
   return {
     method: 'x',
     dateRange: { since: '2026-10-01', until: '2026-10-01' },
-    summary: { totalSignals: 2, highSeverity: 0, estimatedSavings: null, analyzedEvents: 2, analyzedSessions: 1 },
-    signals: [
+    summary: {
+      totalRecommendations: 2,
+      highSeverity: 0,
+      currentCost: 0,
+      currentMonthlyCost: 0,
+      estimatedSavings: null,
+      monthlySavings: null,
+      analyzedDays: 1,
+      analyzedEvents: 2,
+      analyzedSessions: 1,
+      pricedTokenShare: 1,
+      unpricedModels: [],
+    },
+    recommendations: [
       {
         kind: 'prompt-repeat',
+        category: 'session',
         title: 'Repeated prompt cluster',
         severity: 'low',
         confidence: 'low',
         estimatedSavings: null,
+        monthlySavings: null,
         evidence: { eventCount: 4, tokens: 10, cost: 0, reason: `4 similar prompts clustered around "${SECRET}".` },
         recipes: [],
       },
       {
         kind: 'context-drag',
-        title: 'High context drag',
+        category: 'session',
+        title: 'Context keeps growing',
         severity: 'medium',
         confidence: 'high',
         estimatedSavings: null,
-        evidence: { eventCount: 1, tokens: 10, cost: 0, reason: 'Input is 10x output.' },
+        monthlySavings: null,
+        evidence: { eventCount: 1, tokens: 10, cost: 0, reason: 'Requests grew from 10K to 300K tokens.' },
         recipes: [],
       },
     ],
     warnings: [],
-  } as unknown as AgentWasteReport;
+  };
 }
 
 function output(): TokenleakOutput {
@@ -76,7 +92,7 @@ function output(): TokenleakOutput {
       },
     ],
     aggregated: {} as TokenleakOutput['aggregated'],
-    optimization: { agentWaste: wasteReport() },
+    optimization: { savings: savingsReport() },
   };
 }
 
@@ -92,17 +108,19 @@ describe('redactPromptsForExport', () => {
     expect('prompt' in redacted.providers[0]!.events![0]!).toBe(false);
   });
 
-  test('says how to get prompts back in waste evidence', () => {
-    const signal = redactPromptsForExport(output()).optimization!.agentWaste!.signals[0]!;
-    expect(signal.evidence.reason).toBe(
+  test('says how to get prompts back in savings evidence', () => {
+    const recommendation = redactPromptsForExport(output()).optimization!.savings!.recommendations[0]!;
+    expect(recommendation.evidence.reason).toBe(
       '4 similar prompts clustered (prompt text omitted from export; pass --include-prompts to keep it).',
     );
   });
 
-  test('leaves non-prompt signals and providers without events untouched', () => {
+  test('leaves non-prompt recommendations and providers without events untouched', () => {
     const original = output();
     const redacted = redactPromptsForExport(original);
-    expect(redacted.optimization!.agentWaste!.signals[1]).toBe(original.optimization!.agentWaste!.signals[1]);
+    expect(redacted.optimization!.savings!.recommendations[1]).toBe(
+      original.optimization!.savings!.recommendations[1],
+    );
     expect(redacted.providers[1]).toBe(original.providers[1]);
   });
 
@@ -119,10 +137,10 @@ describe('redactPromptsForExport', () => {
   });
 });
 
-describe('redactWasteReportForExport', () => {
+describe('redactSavingsReportForExport', () => {
   test('redacts only prompt-repeat evidence', () => {
-    const redacted = redactWasteReportForExport(wasteReport());
-    expect(redacted.signals[0]!.evidence.reason).not.toContain(SECRET);
-    expect(redacted.signals[1]!.evidence.reason).toBe('Input is 10x output.');
+    const redacted = redactSavingsReportForExport(savingsReport());
+    expect(redacted.recommendations[0]!.evidence.reason).not.toContain(SECRET);
+    expect(redacted.recommendations[1]!.evidence.reason).toBe('Requests grew from 10K to 300K tokens.');
   });
 });

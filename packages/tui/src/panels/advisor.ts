@@ -1,5 +1,5 @@
 import { Box, Text } from '@opentui/core';
-import type { AdvisorReport, AdvisorRecommendation, WasteFinding, WasteReport } from '@tokenleak/core';
+import type { SavingsCategory, SavingsRecommendation, SavingsReport } from '@tokenleak/core';
 import { describePricingGap } from '@tokenleak/core';
 import { formatCost, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
@@ -19,11 +19,12 @@ function confidenceLabel(c: 'high' | 'medium' | 'low'): string {
   return `[${c.toUpperCase()}]`;
 }
 
-function typeLabel(type: AdvisorRecommendation['type']): string {
-  if (type === 'model-downgrade') return 'Model Downgrade';
-  if (type === 'cache-optimization') return 'Cache Optimization';
-  return 'Usage Pattern';
-}
+const CATEGORY_LABELS: Record<SavingsCategory, string> = {
+  routing: 'Model Routing',
+  cache: 'Cache',
+  session: 'Session',
+  spend: 'Spend Pattern',
+};
 
 function cleanText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -82,10 +83,15 @@ function titleLine(title: string, badge: string): string {
   return `${prefix}${truncate(title, titleWidth)}  ${badge}`;
 }
 
-function renderRecommendation(rec: AdvisorRecommendation) {
+function formatSavings(value: number | null): string {
+  return value === null ? 'not estimated' : `${formatCost(value)}/mo`;
+}
+
+function renderRecommendation(rec: SavingsRecommendation) {
   const badge = confidenceLabel(rec.confidence);
-  const title = `${typeLabel(rec.type)}: ${cleanText(rec.title)}`;
-  const description = `${cleanText(rec.description)} Saves ${formatCost(rec.monthlySavings)}/mo`;
+  const title = `${CATEGORY_LABELS[rec.category]}: ${cleanText(rec.title)}`;
+  const recipe = rec.recipes[0];
+  const description = `${cleanText(rec.evidence.reason)} Saves ${formatSavings(rec.monthlySavings)}`;
 
   return Box(
     { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
@@ -95,57 +101,12 @@ function renderRecommendation(rec: AdvisorRecommendation) {
       attributes: BOLD,
     }),
     ...indentedTextLines(description, COLORS.dimWhite),
-    Text({
-      content: '',
-      fg: COLORS.dimWhite,
-    }),
-  );
-}
-
-function severityColor(severity: WasteFinding['severity']): string {
-  if (severity === 'high') return COLORS.red;
-  if (severity === 'medium') return COLORS.amber;
-  return COLORS.dimWhite;
-}
-
-function categoryLabel(category: WasteFinding['category']): string {
-  return category.split('-').map((part) => part[0]!.toUpperCase() + part.slice(1)).join(' ');
-}
-
-function formatSavings(value: number | null): string {
-  return value === null ? 'not estimated' : `${formatCost(value)}/mo`;
-}
-
-function renderWasteFinding(finding: WasteFinding) {
-  const recipe = finding.recipes[0];
-  const scope = [finding.provider, finding.model].filter(Boolean).join(' / ');
-  const badge = `[${finding.severity.toUpperCase()}]`;
-  const title = `${categoryLabel(finding.category)}: ${cleanText(finding.title)}`;
-  const savings = `Savings: ${formatSavings(finding.estimatedMonthlySavings)}${scope ? `  Scope: ${scope}` : ''}`;
-  const recipeText = recipe ? `Recipe: ${recipe.title} - ${recipe.detail}` : '';
-
-  return Box(
-    { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({
-      content: titleLine(title, badge),
-      fg: severityColor(finding.severity),
-      attributes: BOLD,
-    }),
-    ...indentedTextLines(`Evidence: ${finding.evidence}`, COLORS.dimWhite),
-    Text({
-      content: `  ${truncate(savings, CONTENT_WIDTH - 2)}`,
-      fg: COLORS.dimWhite,
-    }),
-    ...(recipe ? indentedTextLines(recipeText, COLORS.cyan) : []),
+    ...(recipe ? indentedTextLines(`Recipe: ${recipe.title} - ${recipe.detail}`, COLORS.cyan) : []),
     Text({ content: '', fg: COLORS.dimWhite }),
   );
 }
 
-export function createAdvisorPanel(
-  state: AppState,
-  report: AdvisorReport | null,
-  wasteReport: WasteReport | null,
-) {
+export function createAdvisorPanel(state: AppState, report: SavingsReport | null) {
   if (!report) {
     return Box(
       {
@@ -163,50 +124,35 @@ export function createAdvisorPanel(
     );
   }
 
+  const { summary } = report;
   const recs = report.recommendations;
   const pricingGap = describePricingGap(report);
-  const wasteFindings = wasteReport?.findings ?? [];
-  const items = [
-    ...recs.map((rec) => ({ type: 'recommendation' as const, rec })),
-    ...wasteFindings.map((finding) => ({ type: 'waste' as const, finding })),
-  ];
-  const maxOffset = Math.max(0, items.length - ADVISOR_VISIBLE_ITEMS);
+  const maxOffset = Math.max(0, recs.length - ADVISOR_VISIBLE_ITEMS);
   const offset = Math.min(state.advisorScrollOffset, maxOffset);
-  const visibleItems = items.slice(offset, offset + ADVISOR_VISIBLE_ITEMS);
+  const visibleRecs = recs.slice(offset, offset + ADVISOR_VISIBLE_ITEMS);
+  const monthlySavings = summary.monthlySavings ?? 0;
 
   const summaryRow = Box(
     { flexDirection: 'row', width: '100%', paddingLeft: 1, paddingRight: 1 },
-    Text({
-      content: `Current: ${formatCost(report.totalCurrentMonthlyCost)}/mo`,
-      fg: COLORS.white,
-    }),
+    Text({ content: `Current: ${formatCost(summary.currentMonthlyCost)}/mo`, fg: COLORS.white }),
     Text({ content: '  \u2192  ', fg: COLORS.dimWhite }),
     Text({
-      content: `Projected: ${formatCost(report.totalProjectedMonthlyCost)}/mo`,
+      content: `Projected: ${formatCost(Math.max(0, summary.currentMonthlyCost - monthlySavings))}/mo`,
       fg: COLORS.green,
     }),
     Text({ content: '  |  ', fg: COLORS.dimWhite }),
     Text({
-      content: `Savings: ${formatCost(report.totalMonthlySavings)}/mo`,
+      content: `Savings: ${formatCost(monthlySavings)}/mo`,
       fg: COLORS.amber,
       attributes: BOLD,
     }),
   );
 
-  const visibleRecNodes = visibleItems
-    .filter((item) => item.type === 'recommendation')
-    .map((item) => renderRecommendation(item.rec));
-  const visibleWasteNodes = visibleItems
-    .filter((item) => item.type === 'waste')
-    .map((item) => renderWasteFinding(item.finding));
-  const showSavingsSection = visibleRecNodes.length > 0 || recs.length === 0;
-  const showWasteSection = visibleWasteNodes.length > 0 || wasteFindings.length === 0;
-
   const scrollIndicators: ReturnType<typeof Text>[] = [];
   if (offset > 0) {
     scrollIndicators.push(Text({ content: `  ${offset} more above`, fg: COLORS.dimWhite }));
   }
-  const below = items.length - offset - visibleItems.length;
+  const below = recs.length - offset - visibleRecs.length;
   if (below > 0) {
     scrollIndicators.push(Text({ content: `  ${below} more below`, fg: COLORS.dimWhite }));
   }
@@ -223,29 +169,17 @@ export function createAdvisorPanel(
     summaryRow,
     ...(pricingGap ? [Text({ content: `  ${pricingGap}`, fg: COLORS.amber })] : []),
     Text({ content: '', fg: COLORS.dimWhite }),
-    ...(showSavingsSection ? [Text({ content: ' Savings Recommendations ', fg: COLORS.amber, attributes: BOLD })] : []),
-    ...(visibleRecNodes.length > 0
-      ? visibleRecNodes
-      : recs.length === 0
-        ? [Text({
+    Text({ content: ' Savings Recommendations ', fg: COLORS.amber, attributes: BOLD }),
+    ...(visibleRecs.length > 0
+      ? visibleRecs.map(renderRecommendation)
+      : [
+          Text({
             content: pricingGap
               ? '  No opportunities in the priced share of your usage'
               : '  No optimization opportunities detected',
             fg: COLORS.dimWhite,
-          })]
-        : []),
-    ...(showWasteSection ? [Text({ content: ' Waste Patterns ', fg: COLORS.amber, attributes: BOLD })] : []),
-    ...(showWasteSection && wasteReport && !wasteReport.enoughEvidence
-      ? [Text({
-          content: '  Not enough event-level data for confident waste taxonomy yet.',
-          fg: COLORS.dimWhite,
-        })]
-      : []),
-    ...(visibleWasteNodes.length > 0
-      ? visibleWasteNodes
-      : wasteFindings.length === 0
-        ? [Text({ content: '  No deterministic waste patterns detected', fg: COLORS.dimWhite })]
-        : []),
+          }),
+        ]),
     ...scrollIndicators,
   );
 }

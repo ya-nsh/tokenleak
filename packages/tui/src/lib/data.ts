@@ -1,9 +1,7 @@
 import type {
   AggregatedStats,
   AgentBehaviorDiffReport,
-  AgentWasteReport,
   BehaviorCohortSelector,
-  AdvisorReport,
   CompareOutput,
   DailyUsage,
   DateRange,
@@ -17,26 +15,24 @@ import type {
   ReceiptLine,
   ReplayReport,
   RoutingSimulationReport,
+  SavingsReport,
   TokenleakOutput,
   UsageEvent,
-  WasteReport,
 } from '@tokenleak/core';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import {
   aggregate,
-  analyzeEfficiency,
   buildAgentBehaviorDiffReport,
-  buildAgentWasteReport,
   buildExplainReport,
   buildFocusReport,
   buildMoreStats,
   buildNutritionReport,
   buildReceipt,
   buildRoutingSimulationReport,
+  buildSavingsReport,
   buildDailyCostCompleteness,
   buildReplayReport,
-  buildWasteReport,
   collectGitOutcomeSignals,
   compareRanges,
   dayOfWeekBreakdown,
@@ -462,67 +458,6 @@ export function getScopedWindowData(state: AppState): ScopedWindowData | null {
   return scoped;
 }
 
-/** Lazily compute and cache the AdvisorReport (window-dependent) */
-export function ensureAdvisorReport(state: AppState): AdvisorReport | null {
-  if (!state.data || state.data.windows.length === 0) return null;
-  if (state.cachedAdvisorReport) return state.cachedAdvisorReport;
-
-  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
-  if (!windowStats) return null;
-
-  const scoped = getScopedWindowData(state);
-  if (!scoped) return null;
-
-  const output: TokenleakOutput = {
-    schemaVersion: SCHEMA_VERSION,
-    generated: new Date().toISOString(),
-    dateRange: scoped.windowRange,
-    providers: scoped.scopedProviders,
-    aggregated: windowStats,
-  };
-
-  const report = analyzeEfficiency(output, buildPricingTable(scoped.events.map((event) => event.model)));
-  state.cachedAdvisorReport = report;
-  return report;
-}
-
-/** Lazily compute and cache Waste taxonomy findings for the Advisor view */
-export function ensureWasteReport(state: AppState): WasteReport | null {
-  if (!state.data || state.data.windows.length === 0) return null;
-  if (state.cachedWasteReport) return state.cachedWasteReport;
-
-  const windowStats = state.data.windows[state.selectedWindowIndex]?.stats;
-  if (!windowStats) return null;
-
-  const scoped = getScopedWindowData(state);
-  if (!scoped) return null;
-
-  const output: TokenleakOutput = {
-    schemaVersion: SCHEMA_VERSION,
-    generated: new Date().toISOString(),
-    dateRange: scoped.windowRange,
-    providers: scoped.scopedProviders,
-    aggregated: windowStats,
-    more: ensureMoreStats(state),
-  };
-
-  const report = buildWasteReport(output);
-  state.cachedWasteReport = report;
-  return report;
-}
-
-export function ensureAgentWasteReport(state: AppState): AgentWasteReport | null {
-  if (!state.data || state.data.windows.length === 0) return null;
-  if (state.cachedAgentWasteReport) return state.cachedAgentWasteReport;
-
-  const scoped = getScopedWindowData(state);
-  if (!scoped) return null;
-
-  const report = buildAgentWasteReport(scoped.scopedProviders, scoped.events, scoped.windowRange);
-  state.cachedAgentWasteReport = report;
-  return report;
-}
-
 export function ensureRoutingSimulationReport(state: AppState): RoutingSimulationReport | null {
   if (!state.data || state.data.windows.length === 0) return null;
   if (state.cachedRoutingSimulationReport) return state.cachedRoutingSimulationReport;
@@ -534,6 +469,26 @@ export function ensureRoutingSimulationReport(state: AppState): RoutingSimulatio
     strategy: 'conservative',
   });
   state.cachedRoutingSimulationReport = report;
+  return report;
+}
+
+/** Lazily compute and cache the savings report behind the Advisor and Waste views (window-dependent). */
+export function ensureSavingsReport(state: AppState): SavingsReport | null {
+  if (!state.data || state.data.windows.length === 0) return null;
+  if (state.cachedSavingsReport) return state.cachedSavingsReport;
+
+  const scoped = getScopedWindowData(state);
+  const routing = ensureRoutingSimulationReport(state);
+  if (!scoped || !routing) return null;
+
+  const report = buildSavingsReport({
+    providers: scoped.scopedProviders,
+    events: scoped.events,
+    dateRange: scoped.windowRange,
+    pricing: buildPricingTable(scoped.events.map((event) => event.model)),
+    routing,
+  });
+  state.cachedSavingsReport = report;
   return report;
 }
 

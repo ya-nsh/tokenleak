@@ -46,8 +46,8 @@ export const DOWNGRADE_PATHS: Readonly<Record<string, string>> = {
   'gpt-4o': 'gpt-4o-mini',
 
   // OpenAI o-series
-  'o1': 'o1-mini',
-  'o3': 'o3-mini',
+  o1: 'o1-mini',
+  o3: 'o3-mini',
 };
 
 /**

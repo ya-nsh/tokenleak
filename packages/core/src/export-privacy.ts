@@ -1,7 +1,7 @@
 import type {
-  AgentWasteReport,
-  AgentWasteSignal,
   ProviderData,
+  SavingsRecommendation,
+  SavingsReport,
   TokenleakOutput,
   UsageEvent,
 } from './types';
@@ -20,21 +20,21 @@ function redactProvider(provider: ProviderData): ProviderData {
   return { ...provider, events: provider.events.map(withoutPrompt) };
 }
 
-function redactSignal(signal: AgentWasteSignal): AgentWasteSignal {
+function redactRecommendation(recommendation: SavingsRecommendation): SavingsRecommendation {
   // Prompt-repeat evidence quotes the clustered prompt itself.
-  if (signal.kind !== 'prompt-repeat') return signal;
+  if (recommendation.kind !== 'prompt-repeat') return recommendation;
   return {
-    ...signal,
+    ...recommendation,
     evidence: {
-      ...signal.evidence,
-      reason: `${signal.evidence.eventCount} similar prompts clustered (${OMITTED_PROMPT_REASON}).`,
+      ...recommendation.evidence,
+      reason: `${recommendation.evidence.eventCount} similar prompts clustered (${OMITTED_PROMPT_REASON}).`,
     },
   };
 }
 
-/** Strip quoted prompt text from waste evidence before it is exported. */
-export function redactWasteReportForExport(report: AgentWasteReport): AgentWasteReport {
-  return { ...report, signals: report.signals.map(redactSignal) };
+/** Strip quoted prompt text from savings evidence before it is exported. */
+export function redactSavingsReportForExport(report: SavingsReport): SavingsReport {
+  return { ...report, recommendations: report.recommendations.map(redactRecommendation) };
 }
 
 /**
@@ -46,7 +46,7 @@ export function redactWasteReportForExport(report: AgentWasteReport): AgentWaste
  * events can still be grouped by turn.
  */
 export function redactPromptsForExport(output: TokenleakOutput): TokenleakOutput {
-  const agentWaste = output.optimization?.agentWaste;
+  const savings = output.optimization?.savings;
   return {
     ...output,
     providers: output.providers.map(redactProvider),
@@ -54,9 +54,7 @@ export function redactPromptsForExport(output: TokenleakOutput): TokenleakOutput
       ? {
           optimization: {
             ...output.optimization,
-            ...(agentWaste
-              ? { agentWaste: redactWasteReportForExport(agentWaste) }
-              : {}),
+            ...(savings ? { savings: redactSavingsReportForExport(savings) } : {}),
           },
         }
       : {}),

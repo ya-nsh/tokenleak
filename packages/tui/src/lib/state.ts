@@ -1,18 +1,16 @@
 import type {
   QuotaSnapshot,
-  AdvisorReport,
   AgentBehaviorDiffReport,
-  AgentWasteReport,
   FocusReport,
   ExplainReport,
   CompareOutput,
   MoreStats,
   ReplayReport,
-  WasteReport,
   NutritionReport,
   Receipt,
   ReceiptCategory,
   RoutingSimulationReport,
+  SavingsReport,
 } from '@tokenleak/core';
 import type { CursorSetupStatus } from '@tokenleak/registry';
 import type { TuiData } from './data.js';
@@ -111,17 +109,16 @@ export interface AppState {
   behaviorScrollOffset: number;
 
   // lazy caches (null = not yet computed, cleared on refresh)
-  cachedAdvisorReport: AdvisorReport | null;
+  /** The one savings report behind the Advisor and Waste views. */
+  cachedSavingsReport: SavingsReport | null;
   cachedFocusReport: FocusReport | null;
   cachedExplainReport: ExplainReport | null;
   cachedCompareOutput: CompareOutput | null;
   cachedMoreStats: MoreStats | null;
   cachedReplayReport: ReplayReport | null;
-  cachedWasteReport: WasteReport | null;
   cachedNutritionReport: NutritionReport | null;
   cachedReceipt: Receipt | null;
   cachedRoutingSimulationReport: RoutingSimulationReport | null;
-  cachedAgentWasteReport: AgentWasteReport | null;
   cachedBehaviorDiffReport: AgentBehaviorDiffReport | null;
 }
 
@@ -181,17 +178,15 @@ export function createInitialState(): AppState {
     simulatorScrollOffset: 0,
     wasteScrollOffset: 0,
     behaviorScrollOffset: 0,
-    cachedAdvisorReport: null,
+    cachedSavingsReport: null,
     cachedFocusReport: null,
     cachedExplainReport: null,
     cachedCompareOutput: null,
     cachedMoreStats: null,
     cachedReplayReport: null,
-    cachedWasteReport: null,
     cachedNutritionReport: null,
     cachedReceipt: null,
     cachedRoutingSimulationReport: null,
-    cachedAgentWasteReport: null,
     cachedBehaviorDiffReport: null,
   };
 }

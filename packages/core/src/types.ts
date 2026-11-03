@@ -483,37 +483,10 @@ export interface CommonsInspectReport {
   };
 }
 
-export type WasteCategory =
-  | 'premium-short-output'
-  | 'low-cache-hit-rate'
-  | 'wasted-cache-writes'
-  | 'context-drag'
-  | 'burst-spike'
-  | 'model-switch-churn';
-
 export interface WasteRecipe {
   title: string;
   command?: string;
   detail: string;
-}
-
-export interface WasteFinding {
-  category: WasteCategory;
-  severity: 'high' | 'medium' | 'low';
-  title: string;
-  evidence: string;
-  provider?: string;
-  model?: string;
-  projectId?: string;
-  estimatedMonthlySavings: number | null;
-  recipes: WasteRecipe[];
-}
-
-export interface WasteReport {
-  method: string;
-  dateRange: DateRange;
-  enoughEvidence: boolean;
-  findings: WasteFinding[];
 }
 
 export interface NutritionOutcomeSignal {
@@ -629,39 +602,63 @@ export interface RoutingSimulationReport {
   warnings: string[];
 }
 
-export type WasteSignalKind =
-  | 'context-drag'
-  | 'retry-loop'
-  | 'model-churn'
-  | 'premium-for-small-task'
+/** What a savings recommendation is about. */
+export type SavingsKind =
+  /** Cheaper model for events the routing simulator re-priced (short outputs, quick lookups). */
+  | 'model-routing'
   | 'cache-miss-heavy'
   | 'cache-write-waste'
-  | 'burst-with-low-output'
-  | 'long-session-low-yield'
+  | 'context-drag'
   | 'prompt-repeat'
-  | 'outcome-missing';
+  | 'model-churn'
+  | 'long-session-low-yield'
+  | 'cost-concentration'
+  | 'rising-cost'
+  | 'burst-day';
 
-export interface AgentWasteSignal {
-  kind: WasteSignalKind;
+/** Families of {@link SavingsKind}, used to group recommendations in views. */
+export type SavingsCategory = 'routing' | 'cache' | 'session' | 'spend';
+
+export interface SavingsRecommendation {
+  kind: SavingsKind;
+  category: SavingsCategory;
   title: string;
   severity: 'high' | 'medium' | 'low';
   confidence: OptimizationConfidence;
+  /** Dollars this would have saved over the analyzed window; null when it cannot be estimated. */
   estimatedSavings: number | null;
+  /** `estimatedSavings` at the analyzed daily rate over 30 days. */
+  monthlySavings: number | null;
+  /** The usage behind the recommendation; `reason` says what was observed. */
   evidence: OptimizationEvidence;
   recipes: WasteRecipe[];
 }
 
-export interface AgentWasteReport {
+/**
+ * The one savings model behind `--advisor`, `tokenleak waste` and the
+ * routing summary: every detector's findings, ranked by severity and savings.
+ */
+export interface SavingsReport {
   method: string;
   dateRange: DateRange;
   summary: {
-    totalSignals: number;
+    totalRecommendations: number;
     highSeverity: number;
+    /** Priced cost of the analyzed usage over the window. */
+    currentCost: number;
+    currentMonthlyCost: number;
+    /** Sum of the estimable savings, capped at `currentCost`; null when nothing is estimable. */
     estimatedSavings: number | null;
+    monthlySavings: number | null;
+    analyzedDays: number;
     analyzedEvents: number;
     analyzedSessions: number;
+    /** Share of analyzed tokens that had a known price, 0..1 (1 when there are no tokens). */
+    pricedTokenShare: number;
+    /** Models whose tokens could not be priced, most tokens first. */
+    unpricedModels: string[];
   };
-  signals: AgentWasteSignal[];
+  recommendations: SavingsRecommendation[];
   warnings: string[];
 }
 
@@ -756,7 +753,7 @@ export interface TokenleakOutput {
   more?: MoreStats | null;
   optimization?: {
     routingSimulation?: RoutingSimulationReport | null;
-    agentWaste?: AgentWasteReport | null;
+    savings?: SavingsReport | null;
     behaviorDiff?: AgentBehaviorDiffReport | null;
   };
 }

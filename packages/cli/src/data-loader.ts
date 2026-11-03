@@ -2,7 +2,7 @@ import {
   SCHEMA_VERSION,
   aggregate,
   buildAgentBehaviorDiffReport,
-  buildAgentWasteReport,
+  buildSavingsReport,
   mergeProviderData,
   buildCompareOutput,
   buildMoreStats,
@@ -16,6 +16,7 @@ import type {
   CompareOutput,
   DateRange,
   ProviderData,
+  SavingsReport,
   TokenleakOutput,
   UsageEvent,
 } from '@tokenleak/core';
@@ -115,15 +116,30 @@ export function buildDefaultOptimization(
   range: DateRange,
 ): NonNullable<TokenleakOutput['optimization']> {
   const [baseline, comparison] = defaultBehaviorSelectors(providers, events, range);
+  const pricing = buildPricingTable(events.map((event) => event.model));
+  const routingSimulation = buildRoutingSimulationReport(events, range, pricing);
   return {
-    routingSimulation: buildRoutingSimulationReport(
+    routingSimulation,
+    savings: buildSavingsReport({
+      providers,
       events,
-      range,
-      buildPricingTable(events.map((event) => event.model)),
-    ),
-    agentWaste: buildAgentWasteReport(providers, events, range),
+      dateRange: range,
+      pricing,
+      routing: routingSimulation,
+    }),
     behaviorDiff: buildAgentBehaviorDiffReport(events, range, baseline, comparison),
   };
+}
+
+/** The savings report for loaded provider data, priced with the current pricing table. */
+export function buildSavings(providers: ProviderData[], range: DateRange): SavingsReport {
+  const events = providers.flatMap((provider) => provider.events ?? []);
+  return buildSavingsReport({
+    providers,
+    events,
+    dateRange: range,
+    pricing: buildPricingTable(events.map((event) => event.model)),
+  });
 }
 
 function resolveCompareRange(compareStr: string, currentRange: DateRange): DateRange {

@@ -602,7 +602,7 @@ describe('CLI invocation', () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain('tokenleak waste');
-    expect(stdout).toContain('agent waste signals');
+    expect(stdout).toContain('Savings findings with evidence');
   });
 
   test('waste emits a JSON agent waste report', async () => {
@@ -618,6 +618,47 @@ describe('CLI invocation', () => {
       const wasteStdout = await new Response(waste.stdout).text();
       expect(wasteExit).toBe(0);
       expect(JSON.parse(wasteStdout).summary).toBeDefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('waste --severity filters the savings report recommendations', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const waste = Bun.spawn(
+        ['bun', cliPath, 'waste', '--format', 'json', '--provider', 'pi', '--since', '2020-01-01', '--severity', 'low'],
+        { stdout: 'pipe', stderr: 'pipe', env },
+      );
+      expect(await waste.exited).toBe(0);
+      const report = JSON.parse(await new Response(waste.stdout).text());
+      expect(Array.isArray(report.recommendations)).toBe(true);
+      expect(report.recommendations.every((r: { severity: string }) => r.severity === 'low')).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--advisor --format json emits the same savings report as waste', async () => {
+    const { env, cleanup } = createProviderFixtureEnv();
+
+    try {
+      const run = async (args: string[]) => {
+        const proc = Bun.spawn(['bun', cliPath, ...args, '--format', 'json', '--provider', 'pi', '--since', '2020-01-01'], {
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        });
+        expect(await proc.exited).toBe(0);
+        return JSON.parse(await new Response(proc.stdout).text());
+      };
+      const [advisor, waste] = await Promise.all([run(['--advisor']), run(['waste'])]);
+      expect(advisor.summary.analyzedEvents).toBe(waste.summary.analyzedEvents);
+      expect(advisor.recommendations.map((r: { title: string }) => r.title)).toEqual(
+        waste.recommendations.map((r: { title: string }) => r.title),
+      );
+      expect(typeof advisor.summary.currentMonthlyCost).toBe('number');
     } finally {
       cleanup();
     }

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ProviderData, UsageEvent } from '../types';
 import { buildSessionRollups, buildAttributionClusters } from './analytics';
-import { buildAgentWasteReport } from './agent-waste';
+import { buildSavingsReport } from '../savings/savings';
 import { buildReplayReport } from './replay';
 import { buildReceipt } from './receipt-lines';
 import { clusterPrompts } from './prompt-clusters';
@@ -29,7 +29,7 @@ test('session collisions cannot merge providers or misattribute projects', () =>
   expect(clusters).toHaveLength(2);
   expect(clusters.every((c) => c.tokens === 110 && c.cost === 1)).toBe(true);
   expect(buildReplayReport([provider(events)], range.since).summary.totalSessions).toBe(2);
-  expect(buildAgentWasteReport([], events, range).summary.analyzedSessions).toBe(2);
+  expect(buildSavingsReport({ providers: [], events, dateRange: range, pricing: {} }).summary.analyzedSessions).toBe(2);
 });
 
 test('prompt quantities use submissions while preserving all response costs', () => {
@@ -38,7 +38,7 @@ test('prompt quantities use submissions while preserving all response costs', ()
     event({ prompt: 'Implement this feature', promptId: 'p2' })];
   expect(clusterPrompts(events)[0]).toMatchObject({ count: 2, totalCost: 3, totalTokens: 330 });
   expect(buildReceipt(events, range).summary.accountedPrompts).toBe(2);
-  expect(buildAgentWasteReport([], events, range).signals.some((signal) => signal.kind === 'prompt-repeat')).toBe(false);
+  expect(buildSavingsReport({ providers: [], events, dateRange: range, pricing: {} }).recommendations.some((signal) => signal.kind === 'prompt-repeat')).toBe(false);
   expect(clusterPrompts([...events, event({ provider: 'claude-code', prompt: 'Implement this feature', promptId: 'p1' })])[0]!.count).toBe(3);
 });
 
@@ -60,5 +60,5 @@ test('cache creation counts as a miss across totals, replay, and recommendations
   expect(cacheHitRate(data.daily)).toBeCloseTo(0.1);
   expect(buildMoreStats([data], range).cacheEconomics.readCoverage).toBeCloseTo(0.1);
   expect(buildReplayReport([data], range.since).flowBlocks[0]!.cacheHitRateTrend[0]).toBeCloseTo(0.1);
-  expect(buildAgentWasteReport([data], data.events!, range).signals.some((s) => s.kind === 'cache-miss-heavy')).toBe(true);
+  expect(buildSavingsReport({ providers: [data], dateRange: range, pricing: {} }).recommendations.some((s) => s.kind === 'cache-miss-heavy')).toBe(true);
 });
