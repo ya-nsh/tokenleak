@@ -13,6 +13,7 @@ import type {
 import type { IProvider } from '../provider';
 import { collectFiles } from './local-usage';
 import { splitJsonlRecords, type JsonlRecordWarning } from '../parsers/jsonl-splitter';
+import { readCodexConfiguredTier } from './codex-config';
 import { UsageFileCache, isCachedUsageRecord } from '../parsers/usage-cache';
 import { normalizeServiceTier, resolveModelIdentity } from '../models/normalizer';
 import { mergeServiceTiers, localDateOfTimestamp } from '@tokenleak/core';
@@ -868,13 +869,15 @@ export class CodexProvider implements IProvider {
 
   private readonly sessionsDir: string;
   private readonly archivedSessionsDir: string | undefined;
+  private readonly configPath: string | undefined;
 
-  constructor(baseDir?: string, archivedDir?: string) {
+  constructor(baseDir?: string, archivedDir?: string, configPath?: string) {
     const codexHome = process.env['CODEX_HOME'] ?? join(homedir(), '.codex');
     this.sessionsDir = baseDir ?? join(codexHome, 'sessions');
-    // A custom directory stays isolated unless its archive is explicitly supplied.
+    // A custom directory stays isolated unless its archive (or config) is explicitly supplied.
     this.archivedSessionsDir =
       archivedDir ?? (baseDir ? undefined : join(codexHome, 'archived_sessions'));
+    this.configPath = configPath ?? (baseDir ? undefined : join(codexHome, 'config.toml'));
   }
 
   async isAvailable(): Promise<boolean> {
@@ -895,6 +898,8 @@ export class CodexProvider implements IProvider {
       ...(this.archivedSessionsDir ? collectJsonlFiles(this.archivedSessionsDir) : []),
     ];
     const warnings = new Map<string, ProviderWarning>();
+    // Codex logs omit the service tier; fall back to what config.toml requests.
+    const configuredTier = this.configPath ? readCodexConfiguredTier(this.configPath) : undefined;
     const cache = new UsageFileCache<CodexUsageRecord>(
       'codex-v5',
       this.sessionsDir,
@@ -941,7 +946,8 @@ export class CodexProvider implements IProvider {
         for (const usage of parsed.records) {
           const identity = resolveModelIdentity(compactModelDateSuffix(usage.model));
           const normalizedModel = identity.model;
-          const serviceTier = usage.serviceTier ?? identity.serviceTier ?? 'unknown';
+          const recordedTier = usage.serviceTier ?? identity.serviceTier;
+          const serviceTier = recordedTier ?? configuredTier ?? 'unknown';
           const inputTokens = usage.inputTokens;
           const outputTokens = usage.outputTokens;
           const cacheReadTokens = usage.cacheReadTokens;
@@ -978,7 +984,8 @@ export class CodexProvider implements IProvider {
               responseId: usage.responseId,
               serviceTier,
               serviceTierSource:
-                usage.serviceTierSource ?? (identity.serviceTier ? 'model-name' : undefined),
+                usage.serviceTierSource ??
+                (identity.serviceTier ? 'model-name' : !recordedTier && configuredTier ? 'config' : undefined),
               projectId: usage.projectId,
               prompt: usage.prompt,
               promptId: usage.promptId,
@@ -1071,6 +1078,7 @@ export class CodexProvider implements IProvider {
           tokens: event.totalTokens,
           cost: event.cost,
           unpricedTokens: event.unpricedTokens ?? 0,
+          ...(event.serviceTierSource === 'config' ? { configuredTokens: event.totalTokens } : {}),
         },
       ]);
       breakdown.costSource =
