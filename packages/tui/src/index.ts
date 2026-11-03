@@ -1,5 +1,5 @@
 import { refreshQuotas, startQuotaPolling } from './lib/quotas.js';
-import { createQuotasPanel, quotaPanelHeight } from './panels/quotas.js';
+import { createQuotasPanel } from './panels/quotas.js';
 import { Box, Text, createCliRenderer } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
 import type { TokenleakOutput } from '@tokenleak/core';
@@ -50,7 +50,7 @@ import { createStatsRow } from './panels/stats-row.js';
 import { createModelList } from './panels/model-list.js';
 import { buildStatusBar } from './panels/status-bar.js';
 import { createMatrixView } from './panels/bloomberg.js';
-import { ADVISOR_VISIBLE_ITEMS, createAdvisorPanel } from './panels/advisor.js';
+import { advisorVisibleItems, createAdvisorPanel } from './panels/advisor.js';
 import { createFocusPanel } from './panels/focus.js';
 import { createExplainPanel } from './panels/explain.js';
 import { createComparePanel } from './panels/compare.js';
@@ -84,10 +84,11 @@ import {
   resetReplayPanelInteraction,
 } from './lib/replay-interaction.js';
 import type { ReplayPlaybackSpeed } from './lib/state.js';
-import { createNutritionPanel, NUTRITION_VISIBLE_ROWS } from './panels/nutrition.js';
+import { createNutritionPanel, NUTRITION_TABLE_WIDTH, nutritionVisibleRows } from './panels/nutrition.js';
 import { createReceiptsPanel, RECEIPTS_MAX_CONTENT_WIDTH, RECEIPTS_VISIBLE_ROWS } from './panels/receipts.js';
-import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, SIMULATOR_VISIBLE_ROWS } from './panels/simulator.js';
-import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, WASTE_VISIBLE_ROWS } from './panels/waste.js';
+import { createSimulatorPanel, SIMULATOR_MAX_CONTENT_WIDTH, simulatorVisibleRows } from './panels/simulator.js';
+import { createWastePanel, WASTE_MAX_CONTENT_WIDTH, wasteVisibleRows } from './panels/waste.js';
+import { contentRows } from './lib/layout.js';
 import { createBehaviorPanel } from './panels/behavior.js';
 import { buildCursorBanner, getCursorBannerText, createCursorSetupPanel, isEscapeKeySequence } from './panels/cursor-setup.js';
 
@@ -232,6 +233,11 @@ function nutritionWindowKey(state: AppState): string | null {
   return window ? `${window.dateRange.since}..${window.dateRange.until}` : null;
 }
 
+/** Rows the active view may use in this terminal. */
+function viewHeight(state: AppState, renderer: CliRenderer): number {
+  return contentRows(renderer.height, getCursorBannerText(state) !== null);
+}
+
 function buildContent(state: AppState, renderer: CliRenderer) {
   if (state.showCursorSetup) {
     const { panel, labelInput, tokenInput } = createCursorSetupPanel(state, renderer, {
@@ -270,7 +276,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
 
   if (state.selectedView === 'quotas') {
     return createQuotasPanel(
-      state, renderer.width, quotaPanelHeight(renderer.height, getCursorBannerText(state) !== null),
+      state, renderer.width, viewHeight(state, renderer),
     );
   }
 
@@ -308,7 +314,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           ensureSavingsReport(state);
         });
       }
-      return createAdvisorPanel(state, state.cachedSavingsReport);
+      return createAdvisorPanel(state, state.cachedSavingsReport, viewHeight(state, renderer));
     case 'focus':
       if (!hasWindowData) {
         return createFocusPanel(state, null);
@@ -408,7 +414,12 @@ function buildContent(state: AppState, renderer: CliRenderer) {
           }
         });
       }
-      return createNutritionPanel(state, state.cachedNutritionReport);
+      return createNutritionPanel(
+        state,
+        state.cachedNutritionReport,
+        viewHeight(state, renderer),
+        getPanelContentWidth(renderer, NUTRITION_TABLE_WIDTH),
+      );
     case 'wrapped': {
       if (hasWindowData && !state.cachedMoreStats) {
         const key = getSelectedViewTaskKey(state, 'wrapped');
@@ -466,6 +477,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         state.cachedRoutingSimulationReport,
         state.simulatorScrollOffset,
         getPanelContentWidth(renderer, SIMULATOR_MAX_CONTENT_WIDTH),
+        viewHeight(state, renderer),
       );
     case 'waste':
       if (!hasWindowData) {
@@ -481,6 +493,7 @@ function buildContent(state: AppState, renderer: CliRenderer) {
         state.cachedSavingsReport,
         state.wasteScrollOffset,
         getPanelContentWidth(renderer, WASTE_MAX_CONTENT_WIDTH),
+        viewHeight(state, renderer),
       );
     case 'behavior':
       if (!hasWindowData) {
@@ -1204,10 +1217,11 @@ function getScrollableItemCount(state: AppState): number {
   }
 }
 
-function getVisibleCount(view: ViewMode): number {
+/** Items per page for a scrollable view, matching what its panel renders in `height` rows. */
+function getVisibleCount(view: ViewMode, height: number): number {
   switch (view) {
     case 'advisor':
-      return ADVISOR_VISIBLE_ITEMS;
+      return advisorVisibleItems(height);
     case 'focus':
       return 12;
     case 'compare':
@@ -1217,12 +1231,12 @@ function getVisibleCount(view: ViewMode): number {
     case 'replay':
       return REPLAY_VISIBLE_BLOCKS;
     case 'nutrition':
-      return NUTRITION_VISIBLE_ROWS;
+      return nutritionVisibleRows(height);
     case 'receipts':
       return RECEIPTS_VISIBLE_ROWS;
     case 'simulator':
     case 'waste':
-      return view === 'simulator' ? SIMULATOR_VISIBLE_ROWS : WASTE_VISIBLE_ROWS;
+      return view === 'simulator' ? simulatorVisibleRows(height) : wasteVisibleRows(height);
     case 'behavior':
       return 8;
     default:
@@ -1588,7 +1602,7 @@ export async function main(): Promise<void> {
       }
       if (SCROLLABLE_VIEWS.has(state.selectedView)) {
         const itemCount = getScrollableItemCount(state);
-        const visibleCount = getVisibleCount(state.selectedView);
+        const visibleCount = getVisibleCount(state.selectedView, viewHeight(state, renderer));
         const maxOffset = Math.max(0, itemCount - visibleCount);
         const current = getScrollOffset(state);
         if (current < maxOffset) {

@@ -2,8 +2,18 @@ import { Box, Text } from '@opentui/core';
 import type { SavingsRecommendation, SavingsReport } from '@tokenleak/core';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatCost, formatTokens, truncate, wrapText } from '../lib/format.js';
+import { fitItems } from '../lib/layout.js';
 
 export const WASTE_VISIBLE_ROWS = 8;
+/** Each finding is a title, one reason line and a stats line. */
+const WASTE_ROWS_PER_ITEM = 3;
+/** Border, title, two summary lines, blank, both scroll indicators and three warning lines. */
+const WASTE_FIXED_ROWS = 2 + 1 + 2 + 1 + 2 + 3;
+
+/** Findings per page in `height` rows. */
+export function wasteVisibleRows(height: number): number {
+  return fitItems(height, WASTE_FIXED_ROWS, WASTE_ROWS_PER_ITEM, WASTE_VISIBLE_ROWS);
+}
 export const WASTE_MAX_CONTENT_WIDTH = 78;
 
 function severityColor(severity: 'high' | 'medium' | 'low'): string {
@@ -32,36 +42,62 @@ function readableReason(signal: SavingsRecommendation): string {
   return signal.evidence.reason;
 }
 
-function clampOffset(offset: number, itemCount: number): number {
-  return Math.max(0, Math.min(offset, Math.max(0, itemCount - WASTE_VISIBLE_ROWS)));
+function clampOffset(offset: number, itemCount: number, pageSize: number): number {
+  return Math.max(0, Math.min(offset, Math.max(0, itemCount - pageSize)));
 }
 
 export function createWastePanel(
   report: SavingsReport | null,
   scrollOffset: number = 0,
   contentWidth: number = WASTE_MAX_CONTENT_WIDTH,
+  height = Number.POSITIVE_INFINITY,
 ) {
   const width = Math.max(36, contentWidth);
   if (!report) {
     return Box(
-      { flexDirection: 'column', width: '100%', flexGrow: 1, borderStyle: 'single', borderColor: COLORS.dimWhite, paddingLeft: 1 },
+      {
+        flexDirection: 'column',
+        width: '100%',
+        flexGrow: 1,
+        borderStyle: 'single',
+        borderColor: COLORS.dimWhite,
+        paddingLeft: 1,
+      },
       Text({ content: ' Waste Signals ', fg: COLORS.amber, attributes: BOLD }),
       Text({ content: 'No event data available for waste detection', fg: COLORS.dimWhite }),
     );
   }
 
-  const offset = clampOffset(scrollOffset, report.recommendations.length);
-  const signals = report.recommendations.slice(offset, offset + WASTE_VISIBLE_ROWS);
+  const pageSize = wasteVisibleRows(height);
+  const offset = clampOffset(scrollOffset, report.recommendations.length, pageSize);
+  const signals = report.recommendations.slice(offset, offset + pageSize);
   const below = report.recommendations.length - offset - signals.length;
   return Box(
-    { flexDirection: 'column', width: '100%', flexGrow: 1, borderStyle: 'single', borderColor: COLORS.dimWhite, paddingLeft: 1, paddingRight: 1 },
+    {
+      flexDirection: 'column',
+      width: '100%',
+      flexGrow: 1,
+      borderStyle: 'single',
+      borderColor: COLORS.dimWhite,
+      paddingLeft: 1,
+      paddingRight: 1,
+    },
     Text({ content: ' Waste Signals ', fg: COLORS.amber, attributes: BOLD }),
     Text({
-      content: truncate(` Findings ${report.summary.totalRecommendations}  High ${report.summary.highSeverity}  Est. savings ${report.summary.estimatedSavings === null ? '-' : formatCost(report.summary.estimatedSavings)}`, width),
+      content: truncate(
+        ` Findings ${report.summary.totalRecommendations}  High ${report.summary.highSeverity}  Est. savings ${report.summary.estimatedSavings === null ? '-' : formatCost(report.summary.estimatedSavings)}`,
+        width,
+      ),
       fg: COLORS.white,
       attributes: BOLD,
     }),
-    Text({ content: truncate(` Analyzed ${report.summary.analyzedEvents} events / ${report.summary.analyzedSessions} sessions`, width), fg: COLORS.dimWhite }),
+    Text({
+      content: truncate(
+        ` Analyzed ${report.summary.analyzedEvents} events / ${report.summary.analyzedSessions} sessions`,
+        width,
+      ),
+      fg: COLORS.dimWhite,
+    }),
     Text({ content: '', fg: COLORS.dimWhite }),
     ...(offset > 0 ? [Text({ content: ` ${offset} more above`, fg: COLORS.dimWhite })] : []),
     ...(signals.length > 0
@@ -69,13 +105,21 @@ export function createWastePanel(
           const reasonLines = wrapText(readableReason(signal), Math.max(16, width - 4), 1);
           return [
             Text({
-              content: truncate(`  [${signal.severity.toUpperCase()}] ${shortSignalTitle(signal)}  ${signal.estimatedSavings === null ? '-' : formatCost(signal.estimatedSavings)}  confidence: ${signal.confidence}`, width),
+              content: truncate(
+                `  [${signal.severity.toUpperCase()}] ${shortSignalTitle(signal)}  ${signal.estimatedSavings === null ? '-' : formatCost(signal.estimatedSavings)}  confidence: ${signal.confidence}`,
+                width,
+              ),
               fg: severityColor(signal.severity),
               attributes: BOLD,
             }),
-            ...reasonLines.map((line) => Text({ content: truncate(`    ${line}`, width), fg: COLORS.dimWhite })),
+            ...reasonLines.map((line) =>
+              Text({ content: truncate(`    ${line}`, width), fg: COLORS.dimWhite }),
+            ),
             Text({
-              content: truncate(`    ${formatTokens(signal.evidence.tokens)} tok  ${formatCost(signal.evidence.cost)}  ${shortRecipeTitle(signal.recipes[0]?.title)}`, width),
+              content: truncate(
+                `    ${formatTokens(signal.evidence.tokens)} tok  ${formatCost(signal.evidence.cost)}  ${shortRecipeTitle(signal.recipes[0]?.title)}`,
+                width,
+              ),
               fg: COLORS.cyan,
             }),
           ];

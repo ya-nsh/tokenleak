@@ -4,6 +4,7 @@ import { describePricingGap } from '@tokenleak/core';
 import { formatCost, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
+import { fitItems } from '../lib/layout.js';
 
 export const ADVISOR_VISIBLE_ITEMS = 5;
 const CONTENT_WIDTH = 72;
@@ -13,6 +14,13 @@ const MAX_BODY_LINES = 2;
  * line, so five fit a standard terminal. Recipes live in the Waste view.
  */
 export const ADVISOR_LINES_PER_ITEM = 1 + MAX_BODY_LINES + 1;
+/** Border, title, summary, pricing gap, blank, section header and both scroll indicators. */
+const ADVISOR_FIXED_ROWS = 2 + 1 + 1 + 1 + 1 + 1 + 2;
+
+/** Recommendations per page in `height` rows. */
+export function advisorVisibleItems(height: number): number {
+  return fitItems(height, ADVISOR_FIXED_ROWS, ADVISOR_LINES_PER_ITEM, ADVISOR_VISIBLE_ITEMS);
+}
 
 function confidenceColor(c: 'high' | 'medium' | 'low'): string {
   if (c === 'high') return COLORS.green;
@@ -113,7 +121,11 @@ function renderRecommendation(rec: SavingsRecommendation) {
   );
 }
 
-export function createAdvisorPanel(state: AppState, report: SavingsReport | null) {
+export function createAdvisorPanel(
+  state: AppState,
+  report: SavingsReport | null,
+  height = Number.POSITIVE_INFINITY,
+) {
   if (!report) {
     return Box(
       {
@@ -134,9 +146,10 @@ export function createAdvisorPanel(state: AppState, report: SavingsReport | null
   const { summary } = report;
   const recs = report.recommendations;
   const pricingGap = describePricingGap(report);
-  const maxOffset = Math.max(0, recs.length - ADVISOR_VISIBLE_ITEMS);
+  const pageSize = advisorVisibleItems(height);
+  const maxOffset = Math.max(0, recs.length - pageSize);
   const offset = Math.min(state.advisorScrollOffset, maxOffset);
-  const visibleRecs = recs.slice(offset, offset + ADVISOR_VISIBLE_ITEMS);
+  const visibleRecs = recs.slice(offset, offset + pageSize);
   const monthlySavings = summary.monthlySavings ?? 0;
 
   const summaryRow = Box(

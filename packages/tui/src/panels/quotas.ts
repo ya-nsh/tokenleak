@@ -3,11 +3,6 @@ import { quotaLines } from '@tokenleak/renderers';
 import type { AppState } from '../lib/state';
 import { COLORS, BOLD } from '../lib/theme';
 
-/** Content height after the global header, footer and optional Cursor banner. */
-export function quotaPanelHeight(terminalHeight: number, hasCursorBanner: boolean): number {
-  return Math.max(0, terminalHeight - 2 - Number(hasCursorBanner));
-}
-
 /** Account capacity view; remains usable when no historical logs exist. */
 export function createQuotasPanel(state: AppState, width = 80, height = 20) {
   const lines = state.quotaSnapshot

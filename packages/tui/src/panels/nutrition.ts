@@ -1,10 +1,32 @@
 import { Box, Text } from '@opentui/core';
 import type { NutritionRepoSummary, NutritionReport } from '@tokenleak/core';
-import { asciiBar, formatCost, formatTokens, padLeft, padRight, truncate, formatRowCost } from '../lib/format.js';
+import {
+  asciiBar,
+  formatCost,
+  formatTokens,
+  padLeft,
+  padRight,
+  truncate,
+  formatRowCost,
+} from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState } from '../lib/state.js';
+import { fitItems } from '../lib/layout.js';
 
 export const NUTRITION_VISIBLE_ROWS = 5;
+/** Each repo is a data row, two detail rows and a separator. */
+const NUTRITION_ROWS_PER_ITEM = 4;
+/**
+ * Border, title, the seven-row summary (range, totals, per-unit, two notes,
+ * signal headline and detail), blank, the table's top, header and divider,
+ * its bottom, and both scroll indicators. The last repo drops its separator.
+ */
+const NUTRITION_FIXED_ROWS = 2 + 1 + 7 + 1 + 3 + 1 + 2 - 1;
+
+/** Repos per page in `height` rows. */
+export function nutritionVisibleRows(height: number): number {
+  return fitItems(height, NUTRITION_FIXED_ROWS, NUTRITION_ROWS_PER_ITEM, NUTRITION_VISIBLE_ROWS);
+}
 const MAX_REPOS = 30;
 const COLUMNS = [
   { title: '#', width: 3, align: 'right' },
@@ -16,8 +38,39 @@ const COLUMNS = [
   { title: '$/Commit', width: 10, align: 'right' },
   { title: 'ROI Signal', width: 22, align: 'left' },
 ] as const;
-const TABLE_WIDTH = COLUMNS.reduce((sum, column) => sum + column.width, 0) + COLUMNS.length + 1;
-const DETAIL_WIDTH = TABLE_WIDTH - 2;
+/** The table at full column widths, borders included. */
+export const NUTRITION_TABLE_WIDTH =
+  COLUMNS.reduce((sum, column) => sum + column.width, 0) + COLUMNS.length + 1;
+/** Columns that give up width on narrow terminals, in order, down to these minimums. */
+const SHRINKABLE_COLUMNS: ReadonlyArray<{ index: number; minWidth: number }> = [
+  { index: 1, minWidth: 12 }, // Repo: the full path is on the detail row below
+  { index: 7, minWidth: 15 }, // ROI Signal: fits the bar and its label
+];
+
+interface TableLayout {
+  widths: number[];
+  /** Inner width of the full-width detail rows. */
+  detailWidth: number;
+}
+
+/**
+ * Column widths that fit `contentWidth`, so table lines never wrap (a
+ * wrapped line takes two rows and breaks the panel's height budget).
+ */
+function tableLayout(contentWidth: number): TableLayout {
+  const widths: number[] = COLUMNS.map((column) => column.width);
+  let excess = Number.isFinite(contentWidth) ? NUTRITION_TABLE_WIDTH - contentWidth : 0;
+  for (const { index, minWidth } of SHRINKABLE_COLUMNS) {
+    if (excess <= 0) break;
+    const give = Math.min(excess, widths[index]! - minWidth);
+    widths[index]! -= give;
+    excess -= give;
+  }
+  return {
+    widths,
+    detailWidth: widths.reduce((sum, width) => sum + width, 0) + COLUMNS.length - 1,
+  };
+}
 
 function formatNullableNumber(value: number | null, digits: number = 0): string {
   if (value === null) return '-';
@@ -71,34 +124,42 @@ function alignCell(value: string, width: number, align: 'left' | 'right'): strin
   return align === 'right' ? padLeft(fitted, width) : padRight(fitted, width);
 }
 
-function gridLine(left: string, join: string, right: string): string {
-  return `${left}${COLUMNS.map((column) => '─'.repeat(column.width)).join(join)}${right}`;
+function gridLine(layout: TableLayout, left: string, join: string, right: string): string {
+  return `${left}${layout.widths.map((width) => '─'.repeat(width)).join(join)}${right}`;
 }
 
-function gridRow(cells: string[]): string {
+function gridRow(layout: TableLayout, cells: string[]): string {
   const rendered = COLUMNS.map((column, index) =>
-    alignCell(cells[index] ?? '', column.width, column.align),
+    alignCell(cells[index] ?? '', layout.widths[index]!, column.align),
   );
   return `│${rendered.join('│')}│`;
 }
 
-function gridSpan(content: string): string {
-  return `│${padRight(middleTruncate(content, DETAIL_WIDTH), DETAIL_WIDTH)}│`;
+function gridSpan(layout: TableLayout, content: string): string {
+  return `│${padRight(middleTruncate(content, layout.detailWidth), layout.detailWidth)}│`;
 }
 
-function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerCommit: number) {
+function renderRepoRows(
+  layout: TableLayout,
+  repo: NutritionRepoSummary,
+  rank: number,
+  maxCostPerCommit: number,
+) {
   const signal = roiSignal(repo, maxCostPerCommit);
   const label = repo.label;
   const outcome =
     repo.commits > 0 ? `${repo.commits}/${formatTokens(repo.changedLines)}` : 'No signal';
-  const detail = middleTruncate(repoIdentity(repo), DETAIL_WIDTH);
+  const detail = middleTruncate(repoIdentity(repo), layout.detailWidth);
   const providers = repo.providers.join(', ') || '-';
   const models = repo.models.slice(0, 3).join(', ') || '-';
-  const modelDetail = middleTruncate(`providers ${providers}  models ${models}`, DETAIL_WIDTH);
+  const modelDetail = middleTruncate(
+    `providers ${providers}  models ${models}`,
+    layout.detailWidth,
+  );
 
   return [
     Text({
-      content: gridRow([
+      content: gridRow(layout, [
         `${rank}.`,
         label,
         formatTokens(repo.tokens),
@@ -110,9 +171,9 @@ function renderRepoRows(repo: NutritionRepoSummary, rank: number, maxCostPerComm
       ]),
       fg: repo.commits > 0 ? COLORS.white : COLORS.red,
     }),
-    Text({ content: gridSpan(`repo ${detail}`), fg: COLORS.dimWhite }),
-    Text({ content: gridSpan(modelDetail), fg: COLORS.dimWhite }),
-    Text({ content: gridLine('├', '┼', '┤'), fg: COLORS.dimWhite }),
+    Text({ content: gridSpan(layout, `repo ${detail}`), fg: COLORS.dimWhite }),
+    Text({ content: gridSpan(layout, modelDetail), fg: COLORS.dimWhite }),
+    Text({ content: gridLine(layout, '├', '┼', '┤'), fg: COLORS.dimWhite }),
   ];
 }
 
@@ -127,10 +188,17 @@ export interface GitSignalNotice {
  * found" whenever any single repo lacked commits, right under a total of
  * 1,350 commits.
  */
-export function describeGitSignal(totalCommits: number, reposWithoutCommits: number): GitSignalNotice {
+export function describeGitSignal(
+  totalCommits: number,
+  reposWithoutCommits: number,
+): GitSignalNotice {
   const repos = `${reposWithoutCommits} repo${reposWithoutCommits === 1 ? '' : 's'}`;
   if (reposWithoutCommits === 0) {
-    return { tone: 'ok', headline: 'Every repo with AI usage has matching Git commits in this window.', detail: null };
+    return {
+      tone: 'ok',
+      headline: 'Every repo with AI usage has matching Git commits in this window.',
+      detail: null,
+    };
   }
   if (totalCommits > 0) {
     return {
@@ -146,7 +214,12 @@ export function describeGitSignal(totalCommits: number, reposWithoutCommits: num
   };
 }
 
-export function createNutritionPanel(state: AppState, report: NutritionReport | null) {
+export function createNutritionPanel(
+  state: AppState,
+  report: NutritionReport | null,
+  height = Number.POSITIVE_INFINITY,
+  contentWidth = Number.POSITIVE_INFINITY,
+) {
   if (state.nutritionSignalsLoading) {
     return Box(
       {
@@ -189,8 +262,10 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
   }
 
   const repos = report.repos.slice(0, MAX_REPOS);
-  const offset = state.nutritionScrollOffset;
-  const visible = repos.slice(offset, offset + NUTRITION_VISIBLE_ROWS);
+  const layout = tableLayout(contentWidth);
+  const pageSize = nutritionVisibleRows(height);
+  const offset = Math.min(state.nutritionScrollOffset, Math.max(0, repos.length - pageSize));
+  const visible = repos.slice(offset, offset + pageSize);
   const maxCostPerCommit = Math.max(0, ...repos.map((repo) => repo.costPerCommit ?? 0));
   const missingCount = report.missingOutcomeRepos.length;
 
@@ -205,12 +280,16 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
 
   const notice = describeGitSignal(report.totals.commits, missingCount);
   const signalNotice = [
-    Text({ content: notice.headline, fg: notice.tone === 'ok' ? COLORS.green : notice.tone === 'partial' ? COLORS.amber : COLORS.red }),
+    Text({
+      content: notice.headline,
+      fg:
+        notice.tone === 'ok' ? COLORS.green : notice.tone === 'partial' ? COLORS.amber : COLORS.red,
+    }),
     ...(notice.detail ? [Text({ content: notice.detail, fg: COLORS.dimWhite })] : []),
   ];
 
   const tableRows = visible.flatMap((repo, index) =>
-    renderRepoRows(repo, offset + index + 1, maxCostPerCommit),
+    renderRepoRows(layout, repo, offset + index + 1, maxCostPerCommit),
   );
   const trimmedRows = tableRows.length > 0 ? tableRows.slice(0, -1) : tableRows;
 
@@ -251,15 +330,18 @@ export function createNutritionPanel(state: AppState, report: NutritionReport | 
     ),
     Box(
       { flexDirection: 'column', width: '100%', paddingLeft: 1, paddingRight: 1 },
-      Text({ content: gridLine('┌', '┬', '┐'), fg: COLORS.dimWhite }),
+      Text({ content: gridLine(layout, '┌', '┬', '┐'), fg: COLORS.dimWhite }),
       Text({
-        content: gridRow(COLUMNS.map((column) => column.title)),
+        content: gridRow(
+          layout,
+          COLUMNS.map((column) => column.title),
+        ),
         fg: COLORS.amber,
         attributes: BOLD,
       }),
-      Text({ content: gridLine('├', '┼', '┤'), fg: COLORS.dimWhite }),
+      Text({ content: gridLine(layout, '├', '┼', '┤'), fg: COLORS.dimWhite }),
       ...trimmedRows,
-      Text({ content: gridLine('└', '┴', '┘'), fg: COLORS.dimWhite }),
+      Text({ content: gridLine(layout, '└', '┴', '┘'), fg: COLORS.dimWhite }),
     ),
     ...scrollIndicators,
   );
