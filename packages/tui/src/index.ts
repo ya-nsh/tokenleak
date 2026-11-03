@@ -26,6 +26,8 @@ import { createOverview, overviewLayout, tableListRows } from './panels/overview
 import { createPalettePanel } from './panels/palette.js';
 import { PALETTE_OPEN_KEYS, paletteInput } from './lib/palette.js';
 import type { PaletteEntry } from './lib/palette.js';
+import { isFilterActive } from './lib/filter.js';
+import type { UsageFilter } from './lib/filter.js';
 import { buildStatusBar } from './panels/status-bar.js';
 import { createMatrixView } from './panels/bloomberg.js';
 import { advisorVisibleItems, createAdvisorPanel } from './panels/advisor.js';
@@ -1068,7 +1070,54 @@ function paletteEntries(state: AppState): PaletteEntry[] {
     { id: 'action:help', title: 'Keyboard shortcuts', group: 'Help', hint: '?', keywords: 'keys' },
     { id: 'action:quit', title: 'Quit tokenleak', group: 'Action', hint: 'q', keywords: 'exit' },
   ];
-  return [...views, ...periods, ...actions];
+  return [...views, ...periods, ...filterEntries(state), ...actions];
+}
+
+/** Drill-down entries: each provider and model, and clearing the filter. */
+function filterEntries(state: AppState): PaletteEntry[] {
+  const options = state.data?.filterOptions;
+  const entries: PaletteEntry[] = [];
+  if (isFilterActive(state.filter)) {
+    entries.push({ id: 'filter:clear', title: 'Clear filter (show everything)', group: 'Filter', hint: 'x', keywords: 'reset all' });
+  }
+  for (const provider of options?.providers ?? []) {
+    if (state.filter.provider === provider.key) continue;
+    entries.push({ id: `filter:provider:${provider.key}`, title: `Only ${provider.label}`, group: 'Filter', keywords: `provider ${provider.key}` });
+  }
+  for (const model of options?.models ?? []) {
+    if (state.filter.model === model) continue;
+    entries.push({ id: `filter:model:${model}`, title: `Only model ${model}`, group: 'Filter', keywords: 'model' });
+  }
+  return entries;
+}
+
+/** Narrows the whole app to `filter` (empty clears it); the engine rebuilds every window. */
+async function applyFilter(state: AppState, renderer: CliRenderer, filter: UsageFilter): Promise<void> {
+  const previous = state.filter;
+  state.filter = filter;
+  render(state, renderer);
+  try {
+    const data = await dataEngine().call('setFilter', filter);
+    if (state.filter !== filter) return;
+    if (data) {
+      const view = state.selectedView;
+      invalidateAllCaches(state);
+      applyLoadedData(state, data);
+      state.selectedView = view;
+    }
+  } catch (error: unknown) {
+    state.filter = previous;
+    state.loadError = `Filter failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  render(state, renderer);
+}
+
+/** The filter a palette `filter:` command asks for, layered on the current one. */
+function filterForCommand(id: string, current: UsageFilter): UsageFilter {
+  if (id === 'filter:clear') return {};
+  const [, field, ...rest] = id.split(':');
+  const value = rest.join(':');
+  return field === 'provider' ? { ...current, provider: value } : { ...current, model: value };
 }
 
 function selectWindow(state: AppState, index: number): void {
@@ -1080,6 +1129,10 @@ function selectWindow(state: AppState, index: number): void {
 
 /** Runs the palette entry `id`; the palette is already closed. */
 function runPaletteCommand(id: string, state: AppState, renderer: CliRenderer): void {
+  if (id.startsWith('filter:')) {
+    void applyFilter(state, renderer, filterForCommand(id, state.filter));
+    return;
+  }
   const [kind, value] = id.split(':') as [string, string];
   if (kind === 'view') {
     handleViewSwitch(value as ViewMode);
@@ -1515,6 +1568,17 @@ export async function main(): Promise<void> {
     if (PALETTE_OPEN_KEYS.has(sequence) && !state.showHelp) {
       state.palette = { query: '', selected: 0 };
       render(state, renderer);
+      return true;
+    }
+
+    // f on the Overview searches drill-downs; x clears one from anywhere.
+    if (sequence === 'f' && state.selectedView === 'overview' && !state.showHelp) {
+      state.palette = { query: 'only ', selected: 0 };
+      render(state, renderer);
+      return true;
+    }
+    if (sequence === 'x' && isFilterActive(state.filter) && !state.showHelp) {
+      void applyFilter(state, renderer, {});
       return true;
     }
 

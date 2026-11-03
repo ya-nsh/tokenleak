@@ -100,6 +100,14 @@ export interface TuiData {
   dateRange: DateRange;
   mergedDaily: DailyUsage[];
   cursorSetupStatus: CursorSetupStatus;
+  /** What a drill-down can narrow to, from the unfiltered data; set by the engine. */
+  filterOptions?: FilterOptions;
+}
+
+export interface FilterOptions {
+  providers: { key: string; label: string }[];
+  /** Models by all-time cost, most expensive first. */
+  models: string[];
 }
 
 export interface ScopedWindowData {
@@ -404,7 +412,7 @@ function flattenProviderEvents(providers: ProviderData[]): UsageEvent[] {
   return events;
 }
 
-function sumDailyTotals(
+export function sumDailyTotals(
   daily: ProviderData['daily'],
 ): Pick<ProviderData, 'totalTokens' | 'totalCost' | 'costCompleteness'> {
   const costCompleteness = buildDailyCostCompleteness(daily);

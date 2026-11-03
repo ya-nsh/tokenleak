@@ -143,4 +143,23 @@ describe('EngineCore', () => {
     }
     await engine.stopLiveSite();
   });
+
+  test('a filter narrows reports and survives a reload; clearing restores everything', async () => {
+    const engine = await loadedEngine();
+    const unfiltered = await engine.report({ kind: 'more', window: ALL_WINDOW });
+    const filtered = await engine.setFilter({ provider: 'codex' });
+    expect(filtered?.providers.map((p) => p.provider)).toEqual(['codex']);
+    expect(filtered?.filterOptions?.providers.map((p) => p.key).sort()).toEqual(['claude-code', 'codex']);
+    const receipt = await engine.report({ kind: 'receipt', window: ALL_WINDOW });
+    expect(receipt?.lines.length).toBeGreaterThan(0);
+    const cached = await engine.loadCached();
+    expect(cached?.providers.map((p) => p.provider)).toEqual(['codex']);
+    const cleared = await engine.setFilter({});
+    expect(cleared?.providers).toHaveLength(2);
+    expect(await engine.report({ kind: 'more', window: ALL_WINDOW })).toEqual(unfiltered);
+  });
+
+  test('setFilter before any load returns null', async () => {
+    expect(await new EngineCore().setFilter({ provider: 'codex' })).toBeNull();
+  });
 });

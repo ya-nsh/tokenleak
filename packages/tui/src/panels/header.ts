@@ -1,6 +1,6 @@
 import { Box, Text } from '@opentui/core';
 import type { CliRenderer } from '@opentui/core';
-import { formatCostWithCompleteness } from '../lib/format.js';
+import { formatCostWithCompleteness, truncate } from '../lib/format.js';
 import { COLORS, BOLD } from '../lib/theme.js';
 import type { AppState, ViewMode } from '../lib/state.js';
 import { WINDOW_LABELS } from '../lib/state.js';
@@ -195,6 +195,8 @@ export function buildSubTabBar(
   const quota = quotaWidgetText(state);
   const quotaText =
     quota.length <= quotaBudget ? quota : quotaBudget >= QUOTA_HINT.length ? QUOTA_HINT : '';
+  // An active drill-down outranks the quota widget: everything on screen depends on it.
+  const chip = filterChipText(state, quotaBudget);
 
   return Box(
     {
@@ -210,6 +212,23 @@ export function buildSubTabBar(
       ...tabs,
       ...(hint ? [Text({ content: hint, fg: COLORS.dimWhite })] : []),
     ),
-    Text({ content: quotaText, fg: state.quotaSnapshot ? COLORS.amber : COLORS.dimWhite }),
+    chip
+      ? Text({ content: chip, fg: COLORS.magenta, attributes: BOLD })
+      : Text({ content: quotaText, fg: state.quotaSnapshot ? COLORS.amber : COLORS.dimWhite }),
   );
+}
+
+const FILTER_CLEAR_HINT = '  x:clear';
+
+/** "◆ Claude Code › claude-opus-5-5  x:clear", shortened to `budget`; empty without a filter. */
+export function filterChipText(state: AppState, budget: number): string {
+  const { provider, model } = state.filter;
+  if (!provider && !model) return '';
+  const providerLabel = provider
+    ? (state.data?.filterOptions?.providers.find((option) => option.key === provider)?.label ?? provider)
+    : null;
+  const label = [providerLabel, model].filter(Boolean).join(' › ');
+  const room = budget - FILTER_CLEAR_HINT.length - 2;
+  if (room < 4) return budget >= 2 ? '◆' : '';
+  return `◆ ${truncate(label, room)}${FILTER_CLEAR_HINT}`;
 }
