@@ -164,15 +164,36 @@ export interface LiveSiteLaunch {
   open: boolean;
 }
 
-function waitForShutdownSignal(): Promise<void> {
-  return new Promise((resolve) => {
-    const onSignal = (): void => {
+export interface ShutdownListener {
+  /** Resolves on the first SIGINT or SIGTERM. */
+  stopped: Promise<void>;
+  /** Remove the handlers, e.g. when the server failed to start. */
+  dispose(): void;
+}
+
+const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
+
+/**
+ * Handle Ctrl+C and SIGTERM. Call this before the server starts: once the
+ * URL is printed someone may press Ctrl+C at once, and a signal that arrives
+ * before a handler is active kills the process without stopping the server.
+ */
+export function listenForShutdown(): ShutdownListener {
+  let onSignal: () => void = () => {};
+  const stopped = new Promise<void>((resolve) => {
+    onSignal = (): void => {
+      for (const signal of SHUTDOWN_SIGNALS) process.removeListener(signal, onSignal);
       process.stderr.write('\nShutting down server...\n');
       resolve();
     };
-    process.once('SIGINT', onSignal);
-    process.once('SIGTERM', onSignal);
   });
+  for (const signal of SHUTDOWN_SIGNALS) process.on(signal, onSignal);
+  return {
+    stopped,
+    dispose: () => {
+      for (const signal of SHUTDOWN_SIGNALS) process.removeListener(signal, onSignal);
+    },
+  };
 }
 
 /** Serve `content` until Ctrl+C, then exit. */
@@ -180,7 +201,14 @@ export async function runLiveSite(
   content: LiveSiteContent,
   launch: LiveSiteLaunch,
 ): Promise<never> {
-  const site = await startLiveSite(content, launch.port !== undefined ? { port: launch.port } : {});
+  const shutdown = listenForShutdown();
+  let site: Awaited<ReturnType<typeof startLiveSite>>;
+  try {
+    site = await startLiveSite(content, launch.port !== undefined ? { port: launch.port } : {});
+  } catch (err: unknown) {
+    shutdown.dispose();
+    throw err;
+  }
   const routes = site.routes();
   const ordered = [launch.landing, ...routes.filter((route) => route !== launch.landing)];
   const labelWidth = Math.max(...routes.map((route) => ROUTE_LABELS[route].length));
@@ -199,7 +227,7 @@ export async function runLiveSite(
   }
 
   process.stderr.write('Press Ctrl+C to stop the server.\n');
-  await waitForShutdownSignal();
+  await shutdown.stopped;
   site.stop();
   // The server has stopped; its sockets may linger, so exit explicitly.
   process.exit(0);
