@@ -234,14 +234,26 @@ describe('UsageFileCache.readAppendable', () => {
     expect(starts).toEqual([null, null, null]);
   });
 
-  test('reparses from the start when the file is replaced by a new inode', async () => {
-    writeFileSync(file, line(1));
+  test('reparses from the start when the file is replaced', async () => {
+    writeFileSync(file, line(1) + line(2));
     const starts: (number | null)[] = [];
     await loadLines(starts);
     rmSync(file);
-    writeFileSync(file, line(1) + line(2));
-    expect((await loadLines(starts)).records.map((record) => record.n)).toEqual([1, 2]);
+    // Filesystems such as ext4 often hand the new file the old inode number,
+    // so a replacement is only detectable by content: change the prefix.
+    writeFileSync(file, line(5) + line(2) + line(3));
+    expect((await loadLines(starts)).records.map((record) => record.n)).toEqual([5, 2, 3]);
     expect(starts).toEqual([null, null]);
+  });
+
+  test('a replacement with an identical prefix resumes and still matches a full parse', async () => {
+    writeFileSync(file, line(1));
+    await loadLines([]);
+    rmSync(file);
+    writeFileSync(file, line(1) + line(2));
+    const result = await loadLines([]);
+    expect(result.records.map((record) => record.n)).toEqual([1, 2]);
+    expect(result).toEqual(await uncachedLines());
   });
 
   test('ignores resume data whose parser state no longer validates', async () => {
