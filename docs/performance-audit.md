@@ -120,7 +120,12 @@ stamp, its extracted records and warnings, and optional resume data. An
 unchanged file costs one row lookup, and a save writes only changed rows. A
 growing session therefore no longer rewrites the whole cache, which was about
 70 MB for Claude Code on the audit machine. JSON snapshots from earlier
-versions are deleted on the next save.
+versions are deleted on a later save, once they have gone a week without a
+write. Other parser versions' rows in the store, and `tui-data-v*.json`
+snapshots from other TUI versions, follow the same one-week rule. Deleting them
+immediately made two installed versions (a global release beside a local
+build) wipe each other's caches. Whichever ran next then reparsed every log,
+which took 9.3 s to first data instead of 0.3 s on the audit machine.
 
 Claude Code transcripts are also read incrementally. A parse records the byte
 offset after its last newline-terminated line, the parser state at that point
