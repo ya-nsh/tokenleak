@@ -556,11 +556,20 @@ Latest OpenTUI screenshots from the current dashboard build:
 | `j` / `k` | Scroll up/down in scrollable views |
 | `[` / `]` | Matrix page navigation (in Matrix view) |
 | `h` / `l` | Previous/next day (in Explain view) |
+| `/`, `:` or `Ctrl+K` | Open the command palette |
+| `f` | Search provider and model filters (in Overview) |
+| `x` | Clear the active filter |
 | `s` | Toggle sort mode (in Overview) |
 | `r` | Refresh data |
 | `c` | Open Cursor setup when the dashboard shows a Cursor auth/sync banner |
 | `?` | Help overlay |
 | `q` | Quit |
+
+#### Command palette and filters
+
+Press `/` to open the command palette. Type part of a name to jump to any view or period, or to run an action such as an export. The palette also lists a drill-down for each provider and model you have used. Choosing one, for example **Only Claude Code** or **Only model claude-opus-5-5**, narrows every view to that slice. The header then shows the active filter, and `x` clears it. On the Overview, `f` opens the palette with only the filters listed.
+
+![Command palette listing provider and model filters](./docs/tui-palette.png)
 
 When Cursor needs setup, re-authentication, or a cache retry, the TUI shows a contextual banner. Press `c` to open the built-in Cursor setup flow, paste a session token, validate it, and sync usage CSVs without leaving the dashboard.
 

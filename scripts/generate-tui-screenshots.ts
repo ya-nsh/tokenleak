@@ -14,6 +14,7 @@ import {
   ensureCompareOutput,
   ensureMoreStats,
 } from '../packages/tui/dist/lib/data.js';
+import { filterOptionsOf } from '../packages/tui/dist/lib/engine-core.js';
 import { createInitialState } from '../packages/tui/dist/lib/state.js';
 import type { AppState, ViewMode } from '../packages/tui/dist/lib/state.js';
 import { COLORS } from '../packages/tui/dist/lib/theme.js';
@@ -26,6 +27,8 @@ const CELL_WIDTH = 8.6;
 const CELL_HEIGHT = 18;
 const INNER_PADDING = 26;
 const TITLEBAR_HEIGHT = 34;
+/** Palette query that lists the drill-down filters. */
+const DRILLDOWN_PALETTE_QUERY = 'only ';
 
 interface ViewCapture {
   mode: ViewMode;
@@ -57,6 +60,15 @@ const VIEW_CAPTURES: ViewCapture[] = [
     },
   },
   { mode: 'wrapped', output: 'tui-wrapped.png', title: 'Wrapped' },
+  {
+    mode: 'overview',
+    output: 'tui-palette.png',
+    title: 'Command palette',
+    configure: (state) => {
+      // Same query `f` opens on the Overview: the provider/model drill-downs.
+      state.palette = { query: DRILLDOWN_PALETTE_QUERY, selected: 0 };
+    },
+  },
 ];
 
 /** Builds every report a capture shows up front, so no view waits on the engine. */
@@ -202,10 +214,13 @@ async function captureView(renderer: CliRenderer, state: AppState, _title: strin
 async function main(): Promise<void> {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  const data = await loadAllData();
-  if (data.providers.length === 0) {
+  const loaded = await loadAllData();
+  if (loaded.providers.length === 0) {
     throw new Error('No provider data found. Generate some Tokenleak data before capturing screenshots.');
   }
+  // The engine attaches drill-down options in the app; do the same here so the
+  // palette lists the provider and model filters.
+  const data = { ...loaded, filterOptions: filterOptionsOf(loaded) };
 
   const { renderer } = await createTestRenderer({
     width: SCREEN_WIDTH,
