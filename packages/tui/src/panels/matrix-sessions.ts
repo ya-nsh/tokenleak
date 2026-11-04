@@ -1,7 +1,8 @@
 import { Box, Text } from '@opentui/core';
 import type { SessionMetrics, ProjectDrilldownEntry } from '@tokenleak/core';
 import { COLORS, BOLD } from '../lib/theme.js';
-import { formatTokens, formatCost, padRight, padLeft, truncate } from '../lib/format.js';
+import { formatTokens, formatCost, padRight, rightColumn, truncate } from '../lib/format.js';
+import { projectDisplayName } from '../lib/project-names.js';
 
 /** Stat row helper */
 function statRow(label: string, value: string, valueColor: string = COLORS.green) {
@@ -57,7 +58,7 @@ export function createTopProjectsPanel(projects: ProjectDrilldownEntry[]) {
     for (let i = 0; i < top8.length; i++) {
       const p = top8[i]!;
       const rank = `${i + 1}.`;
-      const name = truncate(p.directory ?? p.projectId, 20);
+      const name = truncate(projectDisplayName(p), 20);
       const isTop = i === 0;
 
       children.push(
@@ -69,8 +70,8 @@ export function createTopProjectsPanel(projects: ProjectDrilldownEntry[]) {
             fg: isTop ? COLORS.amber : COLORS.green,
             attributes: isTop ? BOLD : undefined,
           }),
-          Text({ content: padLeft(formatTokens(p.totalTokens), 8), fg: COLORS.green }),
-          Text({ content: padLeft(formatCost(p.cost), 10), fg: COLORS.amber }),
+          Text({ content: rightColumn(formatTokens(p.totalTokens), 8), fg: COLORS.green }),
+          Text({ content: rightColumn(formatCost(p.cost), 10), fg: COLORS.amber }),
         ),
       );
     }
