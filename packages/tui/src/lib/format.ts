@@ -53,6 +53,36 @@ export function padLeft(s: string, width: number): string {
   return s.length >= width ? s.slice(0, width) : ' '.repeat(width - s.length) + s;
 }
 
+/** Cells kept free before every right-aligned table column. */
+const COLUMN_GAP = 1;
+
+/**
+ * Right-aligns `value` in a column `width` cells wide, always leaving a gap
+ * before it so it cannot run into the column to its left. A value wider than
+ * the column is kept whole: the row gets longer rather than losing digits.
+ */
+export function rightColumn(value: string, width: number): string {
+  return ' '.repeat(COLUMN_GAP) + value.padStart(Math.max(width - COLUMN_GAP, 0));
+}
+
+/** Below these magnitudes a ratio keeps two decimals, one decimal, or none. */
+const RATIO_TWO_DECIMALS_BELOW = 10;
+const RATIO_ONE_DECIMAL_BELOW = 100;
+const RATIO_WHOLE_BELOW = 1_000;
+const RATIO_THOUSAND = 1_000;
+const RATIO_ONE_DECIMAL_THOUSANDS_BELOW = 10_000;
+
+/** A ratio such as output/input in at most five cells: 0.48, 12.3, 682, 1.2k, 45k. */
+export function formatRatio(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  const abs = Math.abs(value);
+  if (abs < RATIO_TWO_DECIMALS_BELOW) return value.toFixed(2);
+  if (abs < RATIO_ONE_DECIMAL_BELOW) return value.toFixed(1);
+  if (abs < RATIO_WHOLE_BELOW) return value.toFixed(0);
+  const thousands = value / RATIO_THOUSAND;
+  return `${thousands.toFixed(abs < RATIO_ONE_DECIMAL_THOUSANDS_BELOW ? 1 : 0)}k`;
+}
+
 /** Truncate a string to maxLen, adding ellipsis if needed */
 export function truncate(s: string, maxLen: number): string {
   if (maxLen <= 0) return '';
