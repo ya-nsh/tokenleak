@@ -1,7 +1,8 @@
 import { Box, Text } from '@opentui/core';
 import type { ModelEfficiencyMetrics, AttributionCluster, SessionDrilldownEntry, CacheRoiMetrics } from '@tokenleak/core';
 import { COLORS, BOLD } from '../lib/theme.js';
-import { padRight, padLeft, truncate, formatTokens, formatCost } from '../lib/format.js';
+import { padRight, padLeft, truncate, formatTokens, formatCost, formatRatio, rightColumn } from '../lib/format.js';
+import { sessionDisplayName } from '../lib/project-names.js';
 
 /** Model efficiency panel — ranked by composite score */
 export function createModelEfficiencyPanel(efficiency: ModelEfficiencyMetrics | null | undefined) {
@@ -15,10 +16,10 @@ export function createModelEfficiencyPanel(efficiency: ModelEfficiencyMetrics | 
         { flexDirection: 'row', width: '100%' },
         Text({ content: padRight('#', 3), fg: COLORS.amber, attributes: BOLD }),
         Text({ content: padRight('Model', 22), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('Score', 7), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('$/M', 8), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('O/I', 6), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('Cache', 7), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('Score', 7), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('$/M', 8), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('O/I', 6), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('Cache', 7), fg: COLORS.amber, attributes: BOLD }),
       ),
     );
     children.push(
@@ -29,8 +30,8 @@ export function createModelEfficiencyPanel(efficiency: ModelEfficiencyMetrics | 
     for (let i = 0; i < top8.length; i++) {
       const r = top8[i]!;
       const isTop = i === 0;
-      const costPerM = `$${r.costPer1MTotal.toFixed(1)}`;
-      const oi = r.outputInputRatio.toFixed(2);
+      const costPerM = formatCost(r.costPer1MTotal);
+      const oi = formatRatio(r.outputInputRatio);
       const cache = `${(r.cacheCoverage * 100).toFixed(0)}%`;
 
       children.push(
@@ -42,10 +43,10 @@ export function createModelEfficiencyPanel(efficiency: ModelEfficiencyMetrics | 
             fg: isTop ? COLORS.amber : COLORS.green,
             attributes: isTop ? BOLD : undefined,
           }),
-          Text({ content: padLeft(r.score.toFixed(2), 7), fg: COLORS.cyan, attributes: BOLD }),
-          Text({ content: padLeft(costPerM, 8), fg: COLORS.amber }),
-          Text({ content: padLeft(oi, 6), fg: COLORS.green }),
-          Text({ content: padLeft(cache, 7), fg: COLORS.magenta }),
+          Text({ content: rightColumn(r.score.toFixed(2), 7), fg: COLORS.cyan, attributes: BOLD }),
+          Text({ content: rightColumn(costPerM, 8), fg: COLORS.amber }),
+          Text({ content: rightColumn(oi, 6), fg: COLORS.green }),
+          Text({ content: rightColumn(cache, 7), fg: COLORS.magenta }),
         ),
       );
     }
@@ -138,9 +139,9 @@ export function createTopSessionsPanel(sessions: SessionDrilldownEntry[] | null 
         { flexDirection: 'row', width: '100%' },
         Text({ content: padRight('#', 3), fg: COLORS.amber, attributes: BOLD }),
         Text({ content: padRight('Session', 20), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('Tokens', 9), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('Cost', 9), fg: COLORS.amber, attributes: BOLD }),
-        Text({ content: padLeft('Dur', 9), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('Tokens', 9), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('Cost', 9), fg: COLORS.amber, attributes: BOLD }),
+        Text({ content: rightColumn('Dur', 9), fg: COLORS.amber, attributes: BOLD }),
       ),
     );
     children.push(
@@ -150,7 +151,7 @@ export function createTopSessionsPanel(sessions: SessionDrilldownEntry[] | null 
     const sorted = [...sessions].sort((a, b) => b.totalTokens - a.totalTokens).slice(0, 6);
     for (let i = 0; i < sorted.length; i++) {
       const s = sorted[i]!;
-      const name = s.directory ?? s.label;
+      const name = sessionDisplayName(s);
       const isTop = i === 0;
 
       children.push(
@@ -162,9 +163,9 @@ export function createTopSessionsPanel(sessions: SessionDrilldownEntry[] | null 
             fg: isTop ? COLORS.amber : COLORS.green,
             attributes: isTop ? BOLD : undefined,
           }),
-          Text({ content: padLeft(formatTokens(s.totalTokens), 9), fg: COLORS.green }),
-          Text({ content: padLeft(formatCost(s.cost), 9), fg: COLORS.amber }),
-          Text({ content: padLeft(formatDuration(s.durationMs), 9), fg: COLORS.cyan }),
+          Text({ content: rightColumn(formatTokens(s.totalTokens), 9), fg: COLORS.green }),
+          Text({ content: rightColumn(formatCost(s.cost), 9), fg: COLORS.amber }),
+          Text({ content: rightColumn(formatDuration(s.durationMs), 9), fg: COLORS.cyan }),
         ),
       );
     }
