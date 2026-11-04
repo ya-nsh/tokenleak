@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
+import { SUPERSEDED_CACHE_MAX_IDLE_MS } from '@tokenleak/core';
 import { UsageFileCache, pruneRetiredJsonCaches } from './usage-cache';
 
 const HEX = 'a'.repeat(64);
@@ -34,10 +35,12 @@ function touch(name: string, ageMs: number): void {
 }
 
 describe('pruneRetiredJsonCaches', () => {
-  test('removes every pre-SQLite JSON cache and old temp files', () => {
-    touch(`claude-code-v6-${HEX}.json`, 0);
-    touch(`codex-v4-${OTHER_HEX}.json`, 0);
-    touch(`${OTHER_HEX}.json`, 0);
+  const IDLE = SUPERSEDED_CACHE_MAX_IDLE_MS + 60_000;
+
+  test('removes pre-SQLite JSON caches idle for over a week and old temp files', () => {
+    touch(`claude-code-v6-${HEX}.json`, IDLE);
+    touch(`codex-v4-${OTHER_HEX}.json`, IDLE);
+    touch(`${OTHER_HEX}.json`, IDLE);
     touch(`claude-code-v6-${HEX}.json.1234.tmp`, 2 * 60 * 60 * 1_000);
 
     const removed = pruneRetiredJsonCaches(cacheDir).sort();
@@ -51,6 +54,14 @@ describe('pruneRetiredJsonCaches', () => {
       ].sort(),
     );
     expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  test('keeps JSON caches an older install wrote recently', () => {
+    // An older release beside this build still reads and writes these.
+    touch(`claude-code-v7-${HEX}.json`, 0);
+    touch(`codex-v5-${OTHER_HEX}.json`, 6 * DAY_MS);
+    expect(pruneRetiredJsonCaches(cacheDir)).toEqual([]);
+    expect(readdirSync(cacheDir).sort()).toEqual([`claude-code-v7-${HEX}.json`, `codex-v5-${OTHER_HEX}.json`]);
   });
 
   test('keeps the store, recent temps and unrelated files', () => {
@@ -86,11 +97,25 @@ describe('store pruning', () => {
     await cache.save();
   };
 
-  test('drops other parser versions of the same provider but keeps other providers', async () => {
+  const ageVersion = (family: string, version: string, ageMs: number) => {
+    const db = new Database(join(cacheDir, 'usage.sqlite'));
+    db.query('UPDATE caches SET last_used = ? WHERE family = ? AND version = ?').run(Date.now() - ageMs, family, version);
+    db.close();
+  };
+
+  test('drops other parser versions idle for over a week but keeps other providers', async () => {
     await fill('claude-code-v1', dir);
     await fill('codex-v1', dir);
+    ageVersion('claude-code', '1', SUPERSEDED_CACHE_MAX_IDLE_MS + 60_000);
     await fill('claude-code-v2', dir);
     expect(cacheKeys()).toEqual(['claude-code@2', 'codex@1']);
+  });
+
+  test('keeps another parser version that an installed release still uses', async () => {
+    await fill('claude-code-v1', dir);
+    ageVersion('claude-code', '1', DAY_MS);
+    await fill('claude-code-v2', dir);
+    expect(cacheKeys()).toEqual(['claude-code@1', 'claude-code@2']);
   });
 
   test('drops roots of the same provider unused for 30 days', async () => {
