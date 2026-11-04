@@ -4,7 +4,13 @@ import type { Achievement } from '@tokenleak/renderers';
 import { COLORS, BOLD } from '../lib/theme.js';
 import { formatTokens, formatCostWithCompleteness, padRight, padLeft, asciiBar } from '../lib/format.js';
 
-const ACHIEVEMENT_ICONS: Record<string, string> = {
+/**
+ * One emoji per achievement icon. Each is a single code point that is an emoji
+ * by default, so every terminal gives it two cells. Text-default symbols with a
+ * U+FE0F selector (such as ⛰️ or ☀️) get one cell in some terminals and two in
+ * others, which shifts the rest of the row.
+ */
+export const ACHIEVEMENT_ICONS: Readonly<Record<string, string>> = {
   fire: '\u{1F525}',
   star: '\u2B50',
   circle: '\u26AA',
@@ -12,11 +18,11 @@ const ACHIEVEMENT_ICONS: Record<string, string> = {
   bolt: '\u26A1',
   trophy: '\u{1F3C6}',
   target: '\u{1F3AF}',
-  mountain: '\u26F0\uFE0F',
+  mountain: '\u{1F5FB}',
   palette: '\u{1F3A8}',
   calendar: '\u{1F4C5}',
   moon: '\u{1F319}',
-  sun: '\u2600\uFE0F',
+  sun: '\u{1F31E}',
   rocket: '\u{1F680}',
 };
 
