@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Database } from 'bun:sqlite';
 import { chmodSync, closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { MAX_JSONL_RECORD_BYTES, getTokenleakCacheDir } from '@tokenleak/core';
+import { MAX_JSONL_RECORD_BYTES, SUPERSEDED_CACHE_MAX_IDLE_MS, getTokenleakCacheDir } from '@tokenleak/core';
 import type { JsonlRecordWarning } from './jsonl-splitter';
 
 export interface ParsedFile<T> {
@@ -440,13 +440,21 @@ export class UsageFileCache<T> {
           `INSERT INTO caches (cache_key, family, version, last_used) VALUES (?, ?, ?, ?)
            ON CONFLICT (cache_key) DO UPDATE SET last_used = excluded.last_used`,
         ).run(this.cacheKey, this.family, this.version, now);
-        // Other parser versions of this provider, and roots unused for 30 days.
+        // Other parser versions of this provider once no installed version has
+        // used them for a week, and roots unused for 30 days.
         const stale = db
           .query(
             `SELECT cache_key FROM caches
-             WHERE family = ? AND cache_key != ? AND (version IS NOT ? OR last_used < ?)`,
+             WHERE family = ? AND cache_key != ?
+               AND ((version IS NOT ? AND last_used < ?) OR last_used < ?)`,
           )
-          .values(this.family, this.cacheKey, this.version, now - UNUSED_CACHE_MAX_AGE_MS) as [string][];
+          .values(
+            this.family,
+            this.cacheKey,
+            this.version,
+            now - SUPERSEDED_CACHE_MAX_IDLE_MS,
+            now - UNUSED_CACHE_MAX_AGE_MS,
+          ) as [string][];
         for (const [key] of stale) {
           db.query('DELETE FROM entries WHERE cache_key = ?').run(key);
           db.query('DELETE FROM caches WHERE cache_key = ?').run(key);
@@ -469,6 +477,10 @@ function stripResume<T, S>(parsed: AppendableParse<T, S>): ParsedFile<T> {
 /**
  * Remove the per-root JSON caches that predate the SQLite store, and temp
  * files from their crashed writes. Best effort only.
+ *
+ * Releases before the SQLite store still read and write those JSON caches, so
+ * one is removed only after a week without writes: running an older install
+ * next to this one must not leave it to reparse every log from scratch.
  */
 export function pruneRetiredJsonCaches(directory: string, now: number = Date.now()): string[] {
   const removed: string[] = [];
@@ -480,13 +492,17 @@ export function pruneRetiredJsonCaches(directory: string, now: number = Date.now
   }
   for (const name of names) {
     const path = join(directory, name);
-    let stale = RETIRED_JSON_CACHE.test(name);
-    if (!stale && name.endsWith('.tmp')) {
-      try {
-        stale = now - statSync(path).mtimeMs > TEMP_FILE_MAX_AGE_MS;
-      } catch {
-        continue;
-      }
+    const maxIdleMs = RETIRED_JSON_CACHE.test(name)
+      ? SUPERSEDED_CACHE_MAX_IDLE_MS
+      : name.endsWith('.tmp')
+        ? TEMP_FILE_MAX_AGE_MS
+        : null;
+    if (maxIdleMs === null) continue;
+    let stale: boolean;
+    try {
+      stale = now - statSync(path).mtimeMs > maxIdleMs;
+    } catch {
+      continue;
     }
     if (!stale) continue;
     try {

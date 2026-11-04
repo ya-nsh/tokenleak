@@ -19,7 +19,7 @@ import type {
   TokenleakOutput,
   UsageEvent,
 } from '@tokenleak/core';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import {
   aggregate,
@@ -38,6 +38,7 @@ import {
   dayOfWeekBreakdown,
   getTodayLocal,
   getTokenleakCacheDir,
+  SUPERSEDED_CACHE_MAX_IDLE_MS,
   mergeProviderData,
   SCHEMA_VERSION,
   shiftDateStringLocal,
@@ -210,8 +211,13 @@ export function readCachedTuiData(): TuiData | null {
   }
 }
 
-/** Delete snapshots written by older TUI versions next to the current one. */
-export function removeSupersededTuiCaches(currentPath: string): string[] {
+/**
+ * Delete snapshots written by other TUI versions next to the current one, once
+ * they have gone a week without a write. A version that still runs (an older
+ * global install beside a local build, say) keeps its snapshot, so neither
+ * version starts cold because the other ran last.
+ */
+export function removeSupersededTuiCaches(currentPath: string, now: number = Date.now()): string[] {
   const removed: string[] = [];
   const directory = dirname(currentPath);
   const current = basename(currentPath);
@@ -223,8 +229,10 @@ export function removeSupersededTuiCaches(currentPath: string): string[] {
   }
   for (const name of names) {
     if (name === current || !TUI_CACHE_FILE_PATTERN.test(name)) continue;
+    const path = join(directory, name);
     try {
-      rmSync(join(directory, name), { force: true });
+      if (now - statSync(path).mtimeMs <= SUPERSEDED_CACHE_MAX_IDLE_MS) continue;
+      rmSync(path, { force: true });
       removed.push(name);
     } catch {
       // Best effort only.

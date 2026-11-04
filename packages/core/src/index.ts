@@ -2,7 +2,7 @@ export const VERSION = '2.4.0';
 export { mergeServiceTiers, formatModelWithTier } from './service-tiers';
 export { formatCostWithCompleteness } from './cost-completeness';
 export { formatTokenCount, formatUsd } from './format';
-export { getTokenleakCacheDir } from './paths';
+export { getTokenleakCacheDir, SUPERSEDED_CACHE_MAX_IDLE_MS } from './paths';
 export { redactPromptsForExport, redactSavingsReportForExport } from './export-privacy';
 
 export type {
