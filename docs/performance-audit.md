@@ -180,3 +180,32 @@ With the database already in the page cache, looking up and decoding every
 Claude Code row costs about the same in both layouts (120–150 ms). On a first
 read, the columnar store read and decoded in 160 ms instead of 355 ms, because
 there is a third as much data to read from disk.
+
+## Status line snapshot
+
+`tokenleak statusline` used to load 60 days of usage from every provider on each
+call, about 0.5 s with a warm cache and over 3 s on a machine under memory
+pressure. Status bars call it on every prompt.
+
+It now serves a snapshot from `~/.cache/tokenleak/statusline/<key>.json`, where
+the key covers the provider selection and every environment variable that
+moves log locations or the time zone:
+
+- A snapshot under 5 s old is printed as is.
+- An older one is printed at once, and a detached `tokenleak statusline` with
+  `TOKENLEAK_STATUSLINE_REFRESH_TOKEN` set recomputes it. An `O_EXCL` lock file
+  allows one refresh at a time. A lock older than 2 minutes is taken over, so a
+  refresh that crashes or fails is retried after that delay.
+- A snapshot from another local day, from the future, or older than 10
+  minutes is not served. The line is computed in the foreground and stored.
+
+Snapshots are written to a temp file and renamed, with mode `0600`.
+`TOKENLEAK_STATUSLINE_CACHE=0` turns the snapshot off.
+
+Measured on 632 Claude Code transcripts and 131 Codex sessions, 12 interleaved
+runs each:
+
+| | median | min | max |
+|---|---|---|---|
+| Computed on every call | 0.553 s | 0.512 s | 1.241 s |
+| Served from the snapshot | 0.071 s | 0.069 s | 0.103 s |

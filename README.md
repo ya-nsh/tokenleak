@@ -248,7 +248,7 @@ tokenleak behavior-diff --provider claude-code,codex --days 30
 $42.10 today (120M) · $836 7d · 14d streak
 ```
 
-It reads only the cached logs (no network, no Cursor sync), so it is fast enough to refresh on every prompt. Use it as your Claude Code status line in `~/.claude/settings.json`:
+It prints the last computed line at once, in well under 100 ms, so it can run on every prompt. When that line is more than 5 seconds old, a detached background process recomputes it from the cached logs (no network, no Cursor sync) for the next call. The line can therefore be one refresh behind. It is never served across midnight, and a line older than 10 minutes is recomputed before printing. `--format json` includes `updatedAt`, when the numbers were computed. Set `TOKENLEAK_STATUSLINE_CACHE=0` to compute on every call instead. Use it as your Claude Code status line in `~/.claude/settings.json`:
 
 ```json
 { "statusLine": { "type": "command", "command": "tokenleak statusline" } }
