@@ -24,6 +24,7 @@ import { statuslineCommand } from './commands/statusline.js';
 import { wasteCommand } from './commands/waste.js';
 import { handleError } from './errors.js';
 import { finishCommand } from './exit.js';
+import { guardOutputStreams } from './output-streams.js';
 import { assertNoStrayPositional } from './flag-validation.js';
 import { extractGlobalFlags, setVerbose } from './output-mode.js';
 import { shouldStartTui } from './tui-launch.js';
@@ -107,6 +108,8 @@ export async function runDefaultCommand(
  * code instead of calling process.exit(), so piped output is never cut off.
  */
 async function dispatchCli(): Promise<void> {
+  // A reader that stops early (`tokenleak --format json | head`) must not crash the CLI.
+  guardOutputStreams();
   const globals = extractGlobalFlags(process.argv.slice(2));
   if (globals.verbose) setVerbose(true);
   const argv = normalizeCliArgv(globals.argv);
