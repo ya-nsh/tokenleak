@@ -152,3 +152,31 @@ loads 2 s apart while one session kept writing:
 
 Resumed, warm and uncached parses were deep-equal on 25 real transcripts
 truncated mid-line, then completed by appending.
+
+### Columnar payloads
+
+Each row's payload is now stored column-wise (`format: 2`). Every key is written
+once per file. A value that every record of the file shares, such as the
+session and project IDs of a Claude Code transcript, is written once. The
+remaining values become one array per record, with `null` for a missing key.
+Records that cannot round-trip exactly this way (a stored `null`, a non-finite
+number, a non-object, a `__proto__` key) keep the older row layout, which is
+still read.
+
+The layout is part of the cache key, so an older install beside this one keeps
+its own rows. On first read, a row stored under the older key is used if its
+stamp still matches (or resumed if the file only grew) and is rewritten under
+the new key, so upgrading does not reparse every log. The older key's rows
+follow the one-week rule above.
+
+Measured on 632 Claude Code transcripts (155k records) and 131 Codex sessions:
+
+| | Claude Code payloads | Codex payloads | `statusline` peak RSS | `statusline` wall (median of 12, interleaved) |
+|---|---|---|---|---|
+| Row layout | 80.3 MB | 2.9 MB | 344 MB | 0.51 s |
+| Columnar | 29.7 MB | 1.1 MB | 292 MB | 0.49 s |
+
+With the database already in the page cache, looking up and decoding every
+Claude Code row costs about the same in both layouts (120–150 ms). On a first
+read, the columnar store read and decoded in 160 ms instead of 355 ms, because
+there is a third as much data to read from disk.

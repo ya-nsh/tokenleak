@@ -4,6 +4,7 @@ import { chmodSync, closeSync, mkdirSync, openSync, readSync, readdirSync, rmSyn
 import { join, resolve } from 'node:path';
 import { MAX_JSONL_RECORD_BYTES, SUPERSEDED_CACHE_MAX_IDLE_MS, getTokenleakCacheDir } from '@tokenleak/core';
 import type { JsonlRecordWarning } from './jsonl-splitter';
+import { COLUMNAR_PAYLOAD_FORMAT, decodePayload, encodePayload } from './usage-payload';
 
 export interface ParsedFile<T> {
   records: T[];
@@ -37,15 +38,6 @@ export interface AppendableParser<T, S> {
   isState(value: unknown): value is S;
 }
 
-interface StoredPayload<T> extends ParsedFile<T> {
-  /**
-   * Prompt text keyed by promptId. Every assistant message in a turn carries
-   * the same prompt, so storing it once per file shrinks the Claude Code
-   * cache several-fold.
-   */
-  prompts?: Record<string, string>;
-}
-
 interface StoredResume {
   dev: string;
   ino: string;
@@ -57,6 +49,14 @@ interface StoredResume {
   /** Hashes of the bytes at the start of the file and just before `offset`. */
   head: string;
   tail: string;
+}
+
+/** A stored row, and whether it was found under the pre-columnar cache key. */
+interface StoredRow {
+  stamp: string;
+  payload: string;
+  resume: string | null;
+  legacy: boolean;
 }
 
 interface PendingEntry {
@@ -92,44 +92,8 @@ function parseNamespace(namespace: string): { family: string; version: string | 
   return match ? { family: match[1]!, version: match[2]! } : { family: namespace, version: null };
 }
 
-type PromptCarrier = { prompt?: unknown; promptId?: unknown };
-
-/** Move repeated prompt text into a per-file table. Returns new records. */
-function packPrompts<T>(records: T[]): { records: T[]; prompts?: Record<string, string> } {
-  const prompts: Record<string, string> = {};
-  let packed = false;
-  const out = records.map((record) => {
-    const carrier = record as PromptCarrier;
-    if (typeof carrier.prompt !== 'string' || typeof carrier.promptId !== 'string') return record;
-    const existing = prompts[carrier.promptId];
-    if (existing !== undefined && existing !== carrier.prompt) return record;
-    prompts[carrier.promptId] = carrier.prompt;
-    packed = true;
-    const copy = { ...(record as Record<string, unknown>) };
-    delete copy['prompt'];
-    return copy as T;
-  });
-  return packed ? { records: out, prompts } : { records };
-}
-
-function unpackPrompts<T>(records: T[], prompts: Record<string, string> | undefined): T[] {
-  if (!prompts) return records;
-  return records.map((record) => {
-    const carrier = record as PromptCarrier;
-    if (carrier.prompt !== undefined || typeof carrier.promptId !== 'string') return record;
-    const prompt = prompts[carrier.promptId];
-    return prompt === undefined ? record : ({ ...(record as Record<string, unknown>), prompt } as T);
-  });
-}
-
-function isPromptTable(value: unknown): value is Record<string, string> {
-  return (
-    value === undefined ||
-    (typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      Object.values(value).every((prompt) => typeof prompt === 'string'))
-  );
+function hashIdentity(parts: unknown[]): string {
+  return createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 }
 
 function identify(file: string): FileIdentity {
@@ -267,6 +231,12 @@ function openStore(directory: string): Database | null {
 export class UsageFileCache<T> {
   private readonly db: Database | null;
   private readonly cacheKey: string;
+  /**
+   * Where releases before the columnar payload stored this cache. Its rows
+   * are read through once, so upgrading does not reparse every log, and are
+   * left for those releases until a week after their last use.
+   */
+  private readonly legacyCacheKey: string;
   private readonly directory: string;
   private readonly family: string;
   private readonly version: string | null;
@@ -280,54 +250,53 @@ export class UsageFileCache<T> {
   ) {
     this.directory =
       process.env['TOKENLEAK_USAGE_CACHE_DIR'] ?? join(getTokenleakCacheDir(), 'usage');
-    // Parser versions and the record-size policy are part of the cache identity.
-    this.cacheKey = createHash('sha256')
-      .update(
-        JSON.stringify([
-          namespace,
-          resolve(root),
-          process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'] ?? MAX_JSONL_RECORD_BYTES,
-        ]),
-      )
-      .digest('hex');
+    // Parser versions, the record-size policy and the payload layout are part of the cache identity.
+    const identity = [
+      namespace,
+      resolve(root),
+      process.env['TOKENLEAK_MAX_JSONL_RECORD_BYTES'] ?? MAX_JSONL_RECORD_BYTES,
+    ];
+    this.cacheKey = hashIdentity([...identity, `payload-v${COLUMNAR_PAYLOAD_FORMAT}`]);
+    this.legacyCacheKey = hashIdentity(identity);
     ({ family: this.family, version: this.version } = parseNamespace(namespace));
     this.db = process.env['TOKENLEAK_USAGE_CACHE'] === '0' ? null : openStore(this.directory);
   }
 
-  private lookup(file: string): { stamp: string; payload: string; resume: string | null } | null {
+  private lookup(file: string): StoredRow | null {
     if (!this.db) return null;
     try {
-      return (
-        (this.db
-          .query('SELECT stamp, payload, resume FROM entries WHERE cache_key = ? AND file = ?')
-          .get(this.cacheKey, file) as { stamp: string; payload: string; resume: string | null } | null) ??
-        null
-      );
+      const query = this.db.query('SELECT stamp, payload, resume FROM entries WHERE cache_key = ? AND file = ?');
+      type Row = Omit<StoredRow, 'legacy'>;
+      const current = query.get(this.cacheKey, file) as Row | null;
+      if (current) return { ...current, legacy: false };
+      const legacy = query.get(this.legacyCacheKey, file) as Row | null;
+      return legacy ? { ...legacy, legacy: true } : null;
     } catch {
       return null;
     }
   }
 
   private decodePayload(file: string, raw: string): ParsedFile<T> | null {
-    try {
-      const payload = JSON.parse(raw) as StoredPayload<unknown>;
-      if (
-        Array.isArray(payload.records) &&
-        isPromptTable(payload.prompts) &&
-        payload.records.every(this.validateRecord) &&
-        Array.isArray(payload.warnings) &&
-        payload.warnings.every((warning) => isWarningFor(file, warning))
-      ) {
-        return { records: unpackPrompts(payload.records as T[], payload.prompts), warnings: payload.warnings };
-      }
-    } catch {
-      // Invalid payloads are reparsed from the source.
+    const payload = decodePayload(raw);
+    if (
+      payload &&
+      payload.records.every(this.validateRecord) &&
+      payload.warnings.every((warning) => isWarningFor(file, warning))
+    ) {
+      return { records: payload.records as T[], warnings: payload.warnings as JsonlRecordWarning[] };
     }
+    // Invalid payloads are reparsed from the source.
     return null;
   }
 
   private encodePayload(result: ParsedFile<T>): string {
-    return JSON.stringify({ warnings: result.warnings, ...packPrompts(result.records) });
+    return encodePayload(result.records, result.warnings);
+  }
+
+  /** A still-valid row from the pre-columnar key is rewritten under the current one. */
+  private migrate(file: string, row: StoredRow, cached: ParsedFile<T>): void {
+    if (!row.legacy) return;
+    this.pending.set(file, { stamp: row.stamp, payload: this.encodePayload(cached), resume: row.resume });
   }
 
   async read(file: string, parse: () => Promise<ParsedFile<T>>): Promise<ParsedFile<T>> {
@@ -337,7 +306,10 @@ export class UsageFileCache<T> {
     const row = this.lookup(file);
     if (row?.stamp === before.stamp) {
       const cached = this.decodePayload(file, row.payload);
-      if (cached) return cached;
+      if (cached) {
+        this.migrate(file, row, cached);
+        return cached;
+      }
     }
     const result = await parse();
     // A live session can grow during a read. Never cache an inconsistent snapshot.
@@ -360,7 +332,10 @@ export class UsageFileCache<T> {
     const row = this.lookup(file);
     if (row?.stamp === before.stamp) {
       const cached = this.decodePayload(file, row.payload);
-      if (cached) return cached;
+      if (cached) {
+        this.migrate(file, row, cached);
+        return cached;
+      }
     }
 
     let base: ParsedFile<T> | null = null;
@@ -440,19 +415,24 @@ export class UsageFileCache<T> {
           `INSERT INTO caches (cache_key, family, version, last_used) VALUES (?, ?, ?, ?)
            ON CONFLICT (cache_key) DO UPDATE SET last_used = excluded.last_used`,
         ).run(this.cacheKey, this.family, this.version, now);
-        // Other parser versions of this provider once no installed version has
-        // used them for a week, and roots unused for 30 days.
+        // Other parser versions and payload layouts of this provider once no
+        // installed release has used them for a week, and roots unused for 30 days.
+        const supersededBefore = now - SUPERSEDED_CACHE_MAX_IDLE_MS;
         const stale = db
           .query(
             `SELECT cache_key FROM caches
              WHERE family = ? AND cache_key != ?
-               AND ((version IS NOT ? AND last_used < ?) OR last_used < ?)`,
+               AND ((version IS NOT ? AND last_used < ?)
+                 OR (cache_key = ? AND last_used < ?)
+                 OR last_used < ?)`,
           )
           .values(
             this.family,
             this.cacheKey,
             this.version,
-            now - SUPERSEDED_CACHE_MAX_IDLE_MS,
+            supersededBefore,
+            this.legacyCacheKey,
+            supersededBefore,
             now - UNUSED_CACHE_MAX_AGE_MS,
           ) as [string][];
         for (const [key] of stale) {
