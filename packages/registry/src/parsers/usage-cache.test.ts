@@ -9,10 +9,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { MAX_JSONL_RECORD_BYTES, SUPERSEDED_CACHE_MAX_IDLE_MS } from '@tokenleak/core';
 import { Database } from 'bun:sqlite';
 import { UsageFileCache } from './usage-cache';
 import { parseAppendableJsonl } from './appendable-jsonl';
+import { COLUMNAR_PAYLOAD_FORMAT, decodePayload } from './usage-payload';
 import type { AppendableParser } from './usage-cache';
 
 let dir: string;
@@ -283,5 +286,105 @@ describe('UsageFileCache.readAppendable', () => {
     });
     await cache.save();
     expect(storedFiles()).toEqual([]);
+  });
+});
+
+describe('payload layout migration', () => {
+  /** The key releases before columnar payloads derived for `namespace` at `dir`. */
+  const legacyKey = (namespace: string) =>
+    createHash('sha256').update(JSON.stringify([namespace, resolve(dir), MAX_JSONL_RECORD_BYTES])).digest('hex');
+  const openDb = () => new Database(join(dir, 'cache', 'usage.sqlite'));
+  type Entry = { cache_key: string; payload: string; resume: string | null };
+  const entries = (): Entry[] => {
+    const db = openDb();
+    try {
+      return db.query('SELECT cache_key, payload, resume FROM entries ORDER BY cache_key').all() as Entry[];
+    } finally {
+      db.close();
+    }
+  };
+  /** Turn the stored row into what an older release wrote: row layout under its key. */
+  const writeAsOlderRelease = (namespace: string, lastUsed = Date.now()) => {
+    const db = openDb();
+    try {
+      const { payload } = db.query('SELECT payload FROM entries').get() as { payload: string };
+      const decoded = decodePayload(payload)!;
+      const key = legacyKey(namespace);
+      db.query('UPDATE entries SET cache_key = ?, payload = ?').run(
+        key,
+        JSON.stringify({ warnings: decoded.warnings, records: decoded.records }),
+      );
+      db.query('DELETE FROM caches').run();
+      db.query("INSERT INTO caches (cache_key, family, version, last_used) VALUES (?, 'test', '1', ?)").run(key, lastUsed);
+      return key;
+    } finally {
+      db.close();
+    }
+  };
+
+  test('new rows use the columnar layout under a key of their own', async () => {
+    await load();
+    const [entry] = entries();
+    expect(JSON.parse(entry!.payload).format).toBe(COLUMNAR_PAYLOAD_FORMAT);
+    expect(entry!.cache_key).not.toBe(legacyKey('test-v1'));
+  });
+
+  test("reads an older release's row without reparsing and rewrites it as columns", async () => {
+    const first = await load();
+    const key = writeAsOlderRelease('test-v1');
+
+    expect(await load()).toEqual(first);
+    expect(calls).toBe(1);
+    const stored = entries();
+    expect(stored).toHaveLength(2);
+    const current = stored.find((entry) => entry.cache_key !== key)!;
+    expect(JSON.parse(current.payload).format).toBe(COLUMNAR_PAYLOAD_FORMAT);
+    // The older release keeps reading its own row unchanged.
+    const legacy = stored.find((entry) => entry.cache_key === key)!;
+    expect(JSON.parse(legacy.payload).format).toBeUndefined();
+
+    // Once migrated, the current row alone serves the file.
+    const db = openDb();
+    db.query('DELETE FROM entries WHERE cache_key = ?').run(key);
+    db.close();
+    expect(await load()).toEqual(first);
+    expect(calls).toBe(1);
+  });
+
+  test("an older release's row that no longer validates is reparsed", async () => {
+    await load();
+    writeAsOlderRelease('test-v1');
+    const db = openDb();
+    db.query('UPDATE entries SET payload = ?').run(JSON.stringify({ warnings: [], records: [{ text: 1 }] }));
+    db.close();
+    expect((await load()).records).toEqual([{ text: 'first' }]);
+    expect(calls).toBe(2);
+  });
+
+  test("resumes an appended file from an older release's resume point", async () => {
+    writeFileSync(file, line(1) + line(2));
+    const starts: (number | null)[] = [];
+    await loadLines(starts);
+    writeAsOlderRelease('lines-v1');
+    appendFileSync(file, line(3));
+
+    const resumed = await loadLines(starts);
+    expect(starts).toEqual([null, line(1).length * 2]);
+    expect(resumed).toEqual(await uncachedLines());
+  });
+
+  test("keeps an older release's rows while it is in use and drops them a week after", async () => {
+    await load();
+    const key = writeAsOlderRelease('test-v1', Date.now() - 6 * 24 * 60 * 60 * 1_000);
+    await load();
+    expect(entries().map((entry) => entry.cache_key)).toContain(key);
+
+    const db = openDb();
+    db.query('UPDATE caches SET last_used = ? WHERE cache_key = ?').run(Date.now() - SUPERSEDED_CACHE_MAX_IDLE_MS - 60_000, key);
+    db.close();
+    await load();
+    expect(entries().map((entry) => entry.cache_key)).not.toContain(key);
+    expect(entries()).toHaveLength(1);
+    expect(calls).toBe(1);
   });
 });
